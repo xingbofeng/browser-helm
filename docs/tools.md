@@ -66,17 +66,12 @@ bh_a11y_resolve_ref
 bh_a11y_refresh_refs
 ```
 
-### Element inspection/actions
+### Element inspection / low-risk actions
 
 ```txt
 bh_element_inspect
 bh_element_get_computed_style
-bh_element_click
 bh_element_focus
-bh_element_clear
-bh_element_type_text
-bh_element_set_value
-bh_element_press_key
 ```
 
 ### Navigation / viewport
@@ -86,8 +81,6 @@ bh_nav_open_url
 bh_nav_reload
 bh_nav_back
 bh_nav_forward
-bh_viewport_scroll
-bh_viewport_scroll_to_element
 ```
 
 ### Form tools
@@ -96,12 +89,9 @@ bh_viewport_scroll_to_element
 bh_form_list
 bh_form_inspect
 bh_form_read_fields
-bh_form_fill_field
-bh_form_verify
 bh_form_find_missing_required
 bh_form_find_validation_errors
 bh_form_find_disabled_submit_reason
-bh_form_submit_with_approval
 ```
 
 ### Debug tools
@@ -109,22 +99,38 @@ bh_form_submit_with_approval
 ```txt
 bh_debug_collect_page_health
 bh_debug_get_console_errors
-bh_debug_get_console_logs
 bh_debug_get_network_failures
-bh_debug_get_network_summary
 bh_debug_explain_error
-bh_debug_inspect_selected_element
 ```
 
 ### Policy tools / internal capabilities
 
 ```txt
-bh_policy_classify_risk
-bh_policy_request_approval
 bh_policy_mask_secrets
 ```
 
-## 3. 完整版工具清单
+## 3. v1.1 扩展工具
+
+```txt
+bh_element_click
+bh_element_clear
+bh_element_type_text
+bh_element_set_value
+bh_element_press_key
+bh_viewport_scroll
+bh_viewport_scroll_to_element
+bh_form_fill_field
+bh_form_fill_many
+bh_form_verify
+bh_form_submit_with_approval
+bh_debug_get_console_logs
+bh_debug_get_network_summary
+bh_debug_inspect_selected_element
+bh_policy_classify_risk
+bh_policy_request_approval
+```
+
+## 4. 完整版工具清单
 
 ### Agent control
 

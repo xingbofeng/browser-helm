@@ -21,6 +21,12 @@
 BrowserHelm = local-first browser agent cockpit + a11y-first page tools + inspectable memory + safe workflow replay.
 ```
 
+当前阶段更聚焦的产品表达是：
+
+```txt
+BrowserHelm：先看懂页面，再安全执行。
+```
+
 ## 核心原则
 
 - **Local-first**：核心 Agent loop、memory、trace、settings、tool execution 默认在本地浏览器扩展内完成。
@@ -33,29 +39,37 @@ BrowserHelm = local-first browser agent cockpit + a11y-first page tools + inspec
 
 ## v1.0 产品目标
 
-v1.0 不追求“全能浏览器 Agent”，而是交付第一个可发布产品：**Frontend Debug + Form Agent**。
+v1.0 不追求“全能浏览器 Agent”，而是交付第一个可发布产品：**Page Inspector + Form Doctor**。
 
 它要解决：
 
 - 页面为什么报错？
-- 接口为什么失败？
 - 表单为什么不能提交？
 - 哪些必填项缺失？
 - 哪个按钮为什么 disabled？
-- Agent 填了哪些字段，提交前能不能确认？
+- 当前页面的 console / network 有没有明显异常？
 
 v1.0 必须包含：
 
 - Chrome extension side panel。
 - BYOK OpenAI-compatible ModelClient。
 - 自研 AgentLoop / ToolRegistry / DecisionParser / TraceRecorder。
-- A11y snapshot、stable ref_id、click/type/set_field。
-- Form list/read/fill/verify/submit-with-approval。
-- Console/network/page health debug tools。
-- Cockpit UI：chat、timeline、tool inspector、observation panel、form panel、debug panel、approval dialog、settings。
+- Mode system：Ask / Debug / Form / Act。
+- TaskClassifier / ToolSelector / RecoveryPolicy。
+- Evidence / Confidence / Goal / SuccessCriteria。
+- Mode-based lightweight plan。
+- Human-readable DebugReport。
+- HITL / Policy / Approval Runtime：高风险动作必须被阻断并进入 approval flow。
+- A11y snapshot、stable ref_id、低风险 inspect / focus。
+- Form list/inspect/read/find missing required/find validation errors/find disabled submit reason。
+- Read-only page health summary：console errors、network failures、基础页面状态。
+- Cockpit UI：chat、timeline、tool inspector、observation panel、approval dialog、settings。
 
 v1.0 明确不包含：
 
+- 表单自动填写与批量填写。
+- submit-with-approval。
+- FormPanel / DebugPanel / TraceViewer detail。
 - 长期 memory / workflow replay。
 - DevTools CDP response body deep inspector。
 - Vision / screenshot-first agent。
@@ -79,16 +93,21 @@ v1.0 明确不包含：
 
 ## Roadmap
 
-- `v0.1` Agent Kernel Prototype：纯前端 loop、model client、tool registry、trace。
-- `v0.2` A11y Page Tools Prototype：真实页面观察、stable ref、click/type/scroll/nav。
-- `v0.3` Cockpit UI Prototype：side panel、timeline、tool inspector、approval、settings。
-- `v1.0` Frontend Debug + Form Agent：第一个可发布版本。
-- `v1.1` Memory + Workflow Replay：scratchpad、domain memory、workflow replay。
-- `v1.2` DevTools/CDP Deep Tools：debugger、network detail、response body、performance。
-- `v1.3` Vision/Screenshot Agent：视觉理解、遮挡、布局、坐标 fallback。
-- `v1.4` Advanced Browser Tools：tabs、iframe、shadow DOM、files、PDF、clipboard。
-- `v1.5` Domain Adapters：GitHub、Gmail、Notion、Linear、Jira、Stripe、Vercel、Supabase。
-- `v2.0` Full Browser Agent Platform：eval、trace replay、adapter/workflow ecosystem、optional sync/team。
+- `v0.1` Agent Kernel Prototype：纯前端 loop、model client、tool registry、trace、versioning、raw model output trace。
+- `v0.2` Page Observation + Ref Prototype：真实页面观察、visible text、页面状态、stable ref map、domain awareness、prompt injection fixture。
+- `v0.3` Structured Page Data Prototype：结构化页面数据总层，承接四类 tab data contract。
+- `v0.31` Interactive Elements Prototype：交互元素、role/name/state、visible/disabled/checked/selected。
+- `v0.32` Form Fields Prototype：表单字段、label/type/required/value/validation、submit 关联。
+- `v0.33` Safe Action Readiness Prototype：动作前检查、risk、staleRefs、requiresObserve、基础 approval request。
+- `v0.4` Complete Cockpit UI Prototype：完整 side panel UI，产品化页面观察、Ref、交互元素、表单字段、Trace、Settings、Approval。
+- `v1.0` Page Inspector + Form Doctor：第一个可发布版本，先做只读诊断，包含 TaskClassifier、ToolSelector、RecoveryPolicy、mode-based plan、Evidence/Confidence、Goal/SuccessCriteria。
+- `v1.1` Assisted Form Fill + Frontend Debug：表单填写、verify、submit approval、FormPanel、DebugPanel、TraceViewer。
+- `v1.2` Memory + Workflow Replay：scratchpad、domain memory、workflow replay。
+- `v1.3` DevTools/CDP Deep Tools：debugger、network detail、response body、performance。
+- `v1.4` Vision/Screenshot Agent：视觉理解、遮挡、布局、坐标 fallback。
+- `v1.5` Advanced Browser Tools：tabs、iframe、shadow DOM、files、PDF、clipboard。
+- `v1.6` Domain Adapters：GitHub、Gmail、Notion、Linear、Jira、Stripe、Vercel、Supabase。
+- `v2.0` Full Browser Agent Platform：eval、prompt injection eval、trace replay、skill/MCP ecosystem、tool sandbox、adapter/workflow ecosystem、agent-as-tool、多 agent、optional sync/team。
 
 ## 文档入口
 
@@ -99,5 +118,6 @@ v1.0 明确不包含：
 - `docs/research.md`：Sarathi、WebBrain、BrowserBee、BrowserKing、onUI、SDK 取舍。
 - `docs/decisions.md`：关键 ADR。
 - `docs/roadmap/`：每个版本一个需求文档，使用统一 11 模块模板。
-- `docs/specs/`：AgentDecision、Observation、ToolSpec、ToolResult、TraceEvent、Approval、Memory。
+- `docs/roadmap/final-version-structure.md`：最终架构和版本边界总览。
+- `docs/specs/`：AgentDecision、Observation、ToolSpec、ToolResult、TraceEvent、Approval、Memory、Finding、Goal、Plan、Capabilities、RunMetadata。
 - `docs/design/`：只放设计图。

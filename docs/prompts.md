@@ -159,7 +159,7 @@ a11y ref > injected ref > role/name > label/placeholder/text > selector > coordi
 
 ### `form-debug-mode-prompt.ts`
 
-v1.0 模式 prompt：
+v1.x 模式 prompt：
 
 - 优先读取 forms 和 debug signals。
 - 表单提交前 verify。
