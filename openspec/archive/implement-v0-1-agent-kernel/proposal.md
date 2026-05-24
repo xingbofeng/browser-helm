@@ -77,3 +77,28 @@ BrowserHelm 目前缺少可运行、可测试的 agent runtime 地基。模型�
 | 摘要策略过宽导致上下文仍过大 | 中 | 高 | 强制 `ContextPolicy` 限制，并只允许 compactor 注入上下文。 |
 | 多份 spec 契约漂移（run metadata/trace/goal） | 中 | 中 | 先统一 canonical 字段，再进入实现。 |
 | trace 泄露敏感信息 | 低 | 高 | trace 写入前统一 masking，禁止 API key 落盘。 |
+
+---
+
+## Archive Information
+
+**Archived:** 2026-05-24 13:02
+**Duration:** 0 days
+**Outcome:** Successfully implemented
+
+### Files Modified
+- `src/agent/**`
+- `src/tools/**`
+- `src/shared/schemas/**`
+- `src/storage/**`
+- `tests/node/**`
+- `scripts/run-agent-dev.ts`
+
+### Specs Updated
+- `openspec/specs/agent-kernel/spec.md`
+
+### Verification
+- `npm run typecheck`
+- `npm run lint`
+- `npm test`
+- `npm run test:e2e`
