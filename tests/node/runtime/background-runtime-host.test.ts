@@ -9,6 +9,7 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
     const host = new BackgroundRuntimeHost({
       startRun: async () => ({ runId: 'run_1' }),
       getSnapshot: () => ({ runId: 'run_1', mode: 'act', status: 'observed' }),
+      cancelRun: async () => ({ runId: 'run_1', status: 'cancelled' }),
       executeTool: async (input) => {
         calls.push(`${input.runId}:${input.tool}`);
         return {
@@ -64,5 +65,41 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
       }
     });
     expect(calls).toEqual(['run_1:bh_iframe_click', 'run_1:denied']);
+  });
+
+  it('routes cancel run messages through the runtime boundary', async () => {
+    const calls: string[] = [];
+    const host = new BackgroundRuntimeHost({
+      startRun: async () => ({ runId: 'run_1' }),
+      getSnapshot: () => ({ runId: 'run_1', mode: 'ask', status: 'cancelled' }),
+      cancelRun: async (runId) => {
+        calls.push(runId);
+        return { runId, status: 'cancelled' };
+      },
+      executeTool: async () => ({
+        ok: true,
+        code: 'OK',
+        summary: 'ok'
+      }),
+      decideApproval: async () => ({
+        ok: true,
+        code: 'OK',
+        summary: 'ok'
+      })
+    });
+
+    await expect(
+      host.handleMessage({
+        type: RUNTIME_MESSAGES.CANCEL_RUN,
+        runId: 'run_1'
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        runId: 'run_1',
+        status: 'cancelled'
+      }
+    });
+    expect(calls).toEqual(['run_1']);
   });
 });

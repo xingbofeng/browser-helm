@@ -1,5 +1,7 @@
 import type { BrowserContext, Worker } from '@playwright/test';
 
+import { CONTENT_RPC_MESSAGES } from '../../../src/shared/constants/event-names';
+
 export class ExtensionShellPage {
   constructor(
     private readonly context: BrowserContext,
@@ -8,13 +10,13 @@ export class ExtensionShellPage {
 
   async observeActiveTab(): Promise<unknown> {
     const worker = await this.worker();
-    const result = await worker.evaluate<unknown>(async () => {
+    const result = await worker.evaluate<unknown, typeof CONTENT_RPC_MESSAGES>(async (messages) => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) {
         throw new Error('No active tab');
       }
-      return chrome.tabs.sendMessage(tab.id, { type: 'BH_PAGE_OBSERVE' });
-    });
+      return chrome.tabs.sendMessage(tab.id, { type: messages.PAGE_OBSERVE });
+    }, CONTENT_RPC_MESSAGES);
     return result;
   }
 
@@ -31,28 +33,31 @@ export class ExtensionShellPage {
 
   async snapshotActiveTab(): Promise<unknown> {
     const worker = await this.worker();
-    const result = await worker.evaluate<unknown>(async () => {
+    const result = await worker.evaluate<unknown, typeof CONTENT_RPC_MESSAGES>(async (messages) => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) {
         throw new Error('No active tab');
       }
-      return chrome.tabs.sendMessage(tab.id, { type: 'BH_A11Y_SNAPSHOT' });
-    });
+      return chrome.tabs.sendMessage(tab.id, { type: messages.A11Y_SNAPSHOT });
+    }, CONTENT_RPC_MESSAGES);
     return result;
   }
 
   async resolveActiveTabRef(refId: string): Promise<unknown> {
     const worker = await this.worker();
-    const result = await worker.evaluate<unknown, string>(async (id) => {
+    const result = await worker.evaluate<
+      unknown,
+      { refId: string; messages: typeof CONTENT_RPC_MESSAGES }
+    >(async ({ refId: id, messages }) => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) {
         throw new Error('No active tab');
       }
       return chrome.tabs.sendMessage(tab.id, {
-        type: 'BH_A11Y_RESOLVE_REF',
+        type: messages.A11Y_RESOLVE_REF,
         refId: id
       });
-    }, refId);
+    }, { refId, messages: CONTENT_RPC_MESSAGES });
     return result;
   }
 

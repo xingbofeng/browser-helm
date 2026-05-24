@@ -7,6 +7,7 @@ import { bhFormInspect } from '../../../../src/tools/form/bh-form-inspect';
 import { bhFormList } from '../../../../src/tools/form/bh-form-list';
 import { bhFormReadFields } from '../../../../src/tools/form/bh-form-read-fields';
 import type { ContentRpcClient } from '../../../../src/page/messaging/content-rpc-client';
+import { CONTENT_RPC_MESSAGES } from '../../../../src/shared/constants/event-names';
 import { ToolRegistry } from '../../../../src/tools/core/tool-registry';
 import { ToolRouter } from '../../../../src/tools/core/tool-router';
 
@@ -122,7 +123,7 @@ describe('v0.32 form read-only tools', () => {
 function formRpc(): ContentRpcClient {
   return {
     async request(message) {
-      expect(message.type).toBe('BH_PAGE_OBSERVE');
+      expect(message.type).toBe(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
       return {
         ok: true,
         observation: {

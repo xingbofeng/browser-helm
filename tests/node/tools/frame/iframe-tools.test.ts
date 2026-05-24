@@ -6,12 +6,15 @@ import { bhIframeRead } from '../../../../src/tools/frame/bh-iframe-read';
 import { bhIframeType } from '../../../../src/tools/frame/bh-iframe-type';
 import { ToolRegistry } from '../../../../src/tools/core/tool-registry';
 import { ToolRouter } from '../../../../src/tools/core/tool-router';
+import { CONTENT_RPC_MESSAGES } from '../../../../src/shared/constants/event-names';
+import { IFRAME_ACTION_TOKEN } from '../../../../src/shared/constants/runtime-auth';
+import { TOOL_NAMES } from '../../../../src/shared/constants/tool-names';
 
 describe('iframe tools', () => {
   it('reads iframe target refs in debug and act modes', async () => {
     const rpc = rpcClient(async (message) => {
       expect(message).toMatchObject({
-        type: 'BH_IFRAME_READ',
+        type: CONTENT_RPC_MESSAGES.IFRAME_READ,
         frameId: 7,
         refId: 'ref_102'
       });
@@ -32,18 +35,18 @@ describe('iframe tools', () => {
     const router = new ToolRouter(registry);
 
     expect(router.listToolContracts('debug').map((tool) => tool.name)).toContain(
-      'bh_iframe_read'
+      TOOL_NAMES.IFRAME_READ
     );
     expect(router.listToolContracts('act').map((tool) => tool.name)).toContain(
-      'bh_iframe_read'
+      TOOL_NAMES.IFRAME_READ
     );
     expect(router.listToolContracts('ask').map((tool) => tool.name)).not.toContain(
-      'bh_iframe_read'
+      TOOL_NAMES.IFRAME_READ
     );
 
     const result = await router.execute(
       {
-        tool: 'bh_iframe_read',
+        tool: TOOL_NAMES.IFRAME_READ,
         args: {
           refId: 'frame_7:ref_102'
         }
@@ -93,7 +96,7 @@ describe('iframe tools', () => {
     const tool = bhIframeClick(
       rpcClient(async (message) => {
         calls.push(message.type);
-        if (message.type === 'BH_IFRAME_READ') {
+        if (message.type === CONTENT_RPC_MESSAGES.IFRAME_READ) {
           return {
             ok: true,
             ref: {
@@ -107,10 +110,10 @@ describe('iframe tools', () => {
           };
         }
         expect(message).toMatchObject({
-          type: 'BH_IFRAME_CLICK',
+          type: CONTENT_RPC_MESSAGES.IFRAME_CLICK,
           frameId: 7,
           refId: 'ref_200',
-          actionToken: 'BH_RUNTIME_AUTHORIZED_IFRAME_ACTION'
+          actionToken: IFRAME_ACTION_TOKEN
         });
         return {
           ok: true,
@@ -132,7 +135,10 @@ describe('iframe tools', () => {
       { runId: 'run_1', stepId: 'step_1', runMode: 'act' }
     );
 
-    expect(calls).toEqual(['BH_IFRAME_READ', 'BH_IFRAME_CLICK']);
+    expect(calls).toEqual([
+      CONTENT_RPC_MESSAGES.IFRAME_READ,
+      CONTENT_RPC_MESSAGES.IFRAME_CLICK
+    ]);
     expect(result).toMatchObject({
       ok: true,
       code: 'OK',
@@ -165,7 +171,7 @@ describe('iframe tools', () => {
       { runId: 'run_1', stepId: 'step_1', runMode: 'act' }
     );
 
-    expect(calls).toEqual(['BH_IFRAME_READ']);
+    expect(calls).toEqual([CONTENT_RPC_MESSAGES.IFRAME_READ]);
     expect(result).toMatchObject({
       ok: false,
       code: 'ELEMENT_DISABLED',
@@ -218,7 +224,7 @@ describe('iframe tools', () => {
           actionToken: 'actionToken' in message ? message.actionToken : undefined,
           preview: 'valuePreview' in message ? message.valuePreview : undefined
         });
-        if (message.type === 'BH_IFRAME_READ') {
+        if (message.type === CONTENT_RPC_MESSAGES.IFRAME_READ) {
           return {
             ok: true,
             ref: {
@@ -258,10 +264,13 @@ describe('iframe tools', () => {
       { runId: 'run_1', stepId: 'step_1', runMode: 'act' }
     );
 
-    expect(calls.map((call) => call.type)).toEqual(['BH_IFRAME_READ', 'BH_IFRAME_TYPE']);
+    expect(calls.map((call) => call.type)).toEqual([
+      CONTENT_RPC_MESSAGES.IFRAME_READ,
+      CONTENT_RPC_MESSAGES.IFRAME_TYPE
+    ]);
     expect(calls[1]).toMatchObject({
       text: 'hello@example.com',
-      actionToken: 'BH_RUNTIME_AUTHORIZED_IFRAME_ACTION',
+      actionToken: IFRAME_ACTION_TOKEN,
       preview: {
         masked: false,
         preview: 'hello@example.com'
@@ -347,7 +356,7 @@ describe('iframe tools', () => {
       { runId: 'run_1', stepId: 'step_1', runMode: 'act' }
     );
 
-    expect(calls).toEqual(['BH_IFRAME_READ']);
+    expect(calls).toEqual([CONTENT_RPC_MESSAGES.IFRAME_READ]);
     expect(JSON.stringify(result)).not.toContain('super-secret');
     expect(result).toMatchObject({
       ok: false,

@@ -12,6 +12,7 @@ import { traceEventSchema } from '../../shared/schemas/trace.schema';
 import type { ApprovalRequest } from '../../shared/schemas/approval.schema';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { TRACE_EVENT_NAMES } from '../../shared/constants/event-names';
+import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { PolicyEngine } from '../policy/policy-engine';
 import { approvalRequiredResult } from '../../tools/core/tool-result-factory';
 import {
@@ -400,7 +401,7 @@ export class AgentLoop {
         toolResult
       });
 
-      if (toolCall.tool === 'bh_agent_finish' && toolResult.ok) {
+      if (toolCall.tool === TOOL_NAMES.AGENT_FINISH && toolResult.ok) {
         controller.markFinished();
         const endedAt = Date.now();
         appendTrace(this.deps.traceRecorder, {
@@ -440,7 +441,10 @@ export class AgentLoop {
         };
       }
 
-      if (toolCall.tool === 'bh_agent_ask_user' && toolResult.code === ERROR_CODES.ASK_USER_REQUIRED) {
+      if (
+        toolCall.tool === TOOL_NAMES.AGENT_ASK_USER &&
+        toolResult.code === ERROR_CODES.ASK_USER_REQUIRED
+      ) {
         controller.pause(ERROR_CODES.ASK_USER_REQUIRED);
         const endedAt = Date.now();
         appendTrace(this.deps.traceRecorder, {

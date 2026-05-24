@@ -4,17 +4,18 @@ import {
   contentRpcRequestSchema,
   contentRpcSuccessSchema
 } from '../../../../src/page/messaging/content-rpc.schema';
+import { CONTENT_RPC_MESSAGES } from '../../../../src/shared/constants/event-names';
 
 describe('content RPC schema', () => {
   it('accepts iframe read requests', () => {
     expect(
       contentRpcRequestSchema.parse({
-        type: 'BH_IFRAME_READ',
+        type: CONTENT_RPC_MESSAGES.IFRAME_READ,
         frameId: 7,
         refId: 'ref_102'
       })
     ).toMatchObject({
-      type: 'BH_IFRAME_READ',
+      type: CONTENT_RPC_MESSAGES.IFRAME_READ,
       frameId: 7,
       refId: 'ref_102'
     });
@@ -23,19 +24,19 @@ describe('content RPC schema', () => {
   it('accepts iframe click requests', () => {
     expect(
       contentRpcRequestSchema.parse({
-        type: 'BH_IFRAME_CLICK',
+        type: CONTENT_RPC_MESSAGES.IFRAME_CLICK,
         frameId: 7,
         refId: 'ref_200'
       })
     ).toMatchObject({
-      type: 'BH_IFRAME_CLICK'
+      type: CONTENT_RPC_MESSAGES.IFRAME_CLICK
     });
   });
 
   it('accepts iframe type requests with masked value preview', () => {
     expect(
       contentRpcRequestSchema.parse({
-        type: 'BH_IFRAME_TYPE',
+        type: CONTENT_RPC_MESSAGES.IFRAME_TYPE,
         frameId: 7,
         refId: 'ref_103',
         text: 'secret',
@@ -46,7 +47,7 @@ describe('content RPC schema', () => {
         }
       })
     ).toMatchObject({
-      type: 'BH_IFRAME_TYPE',
+      type: CONTENT_RPC_MESSAGES.IFRAME_TYPE,
       valuePreview: {
         masked: true
       }

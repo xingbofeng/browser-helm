@@ -1,5 +1,6 @@
 import type { BrowserContext, Page } from '@playwright/test';
 
+import { RUNTIME_MESSAGES } from '../../../src/shared/constants/event-names';
 import type { RunMode } from '../../../src/shared/schemas/tool.schema';
 import type { RunSnapshot } from '../../../src/runtime/runtime-messages';
 
@@ -24,7 +25,7 @@ export class SidePanelPage {
     mode: RunMode;
   }): Promise<RunSnapshot> {
     const page = await this.open(input.tabId);
-    return await page.evaluate(async (runInput) => {
+    return await page.evaluate(async ({ runtimeMessages, ...runInput }) => {
       type RuntimeSuccess<T> = { ok: true; data: T };
       type RuntimeFailure = { ok: false; message: string };
       const isSuccess = <T>(value: unknown): value is RuntimeSuccess<T> =>
@@ -41,7 +42,7 @@ export class SidePanelPage {
           : fallback;
 
       const started: unknown = await chrome.runtime.sendMessage({
-        type: 'BH_RUNTIME_START_RUN',
+        type: runtimeMessages.START_RUN,
         input: runInput
       });
       if (!isSuccess<{ runId: string }>(started)) {
@@ -49,14 +50,14 @@ export class SidePanelPage {
       }
 
       const snapshot: unknown = await chrome.runtime.sendMessage({
-        type: 'BH_RUNTIME_GET_SNAPSHOT',
+        type: runtimeMessages.GET_SNAPSHOT,
         runId: started.data.runId
       });
       if (!isSuccess<RunSnapshot>(snapshot)) {
         throw new Error(failureMessage(snapshot, 'Unable to read run snapshot'));
       }
       return snapshot.data;
-    }, input);
+    }, { ...input, runtimeMessages: RUNTIME_MESSAGES });
   }
 
   async executeTool(input: {
@@ -65,7 +66,7 @@ export class SidePanelPage {
     args: Record<string, unknown>;
   }): Promise<unknown> {
     const page = this.pageObject;
-    return await page.evaluate(async (toolInput) => {
+    return await page.evaluate(async ({ runtimeMessages, ...toolInput }) => {
       type RuntimeSuccess<T> = { ok: true; data: T };
       type RuntimeFailure = { ok: false; message: string };
       const isSuccess = <T>(value: unknown): value is RuntimeSuccess<T> =>
@@ -82,22 +83,22 @@ export class SidePanelPage {
           : fallback;
 
       const result: unknown = await chrome.runtime.sendMessage({
-        type: 'BH_RUNTIME_EXECUTE_TOOL',
+        type: runtimeMessages.EXECUTE_TOOL,
         input: toolInput
       });
       if (!isSuccess<unknown>(result)) {
         throw new Error(failureMessage(result, 'Unable to execute tool'));
       }
       return result.data;
-    }, input);
+    }, { ...input, runtimeMessages: RUNTIME_MESSAGES });
   }
 
   async snapshot(runId: string): Promise<RunSnapshot> {
     const page = this.pageObject;
-    return await page.evaluate(async (targetRunId) => {
+    return await page.evaluate(async ({ runId: targetRunId, runtimeMessages }) => {
       type RuntimeSuccess<T> = { ok: true; data: T };
       const result: unknown = await chrome.runtime.sendMessage({
-        type: 'BH_RUNTIME_GET_SNAPSHOT',
+        type: runtimeMessages.GET_SNAPSHOT,
         runId: targetRunId
       });
       if (
@@ -109,7 +110,7 @@ export class SidePanelPage {
         throw new Error('Unable to read run snapshot');
       }
       return (result as RuntimeSuccess<RunSnapshot>).data;
-    }, runId);
+    }, { runId, runtimeMessages: RUNTIME_MESSAGES });
   }
 
   async decideApproval(input: {
@@ -119,10 +120,10 @@ export class SidePanelPage {
     reason?: string;
   }): Promise<unknown> {
     const page = this.pageObject;
-    return await page.evaluate(async (decisionInput) => {
+    return await page.evaluate(async ({ runtimeMessages, ...decisionInput }) => {
       type RuntimeSuccess<T> = { ok: true; data: T };
       const result: unknown = await chrome.runtime.sendMessage({
-        type: 'BH_RUNTIME_DECIDE_APPROVAL',
+        type: runtimeMessages.DECIDE_APPROVAL,
         input: decisionInput
       });
       if (
@@ -134,7 +135,7 @@ export class SidePanelPage {
         throw new Error('Unable to decide approval');
       }
       return (result as RuntimeSuccess<unknown>).data;
-    }, input);
+    }, { ...input, runtimeMessages: RUNTIME_MESSAGES });
   }
 
   get pageObject(): Page {

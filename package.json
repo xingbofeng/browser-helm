@@ -23,6 +23,7 @@
     "aria-query": "latest",
     "dexie": "latest",
     "dom-accessibility-api": "latest",
+    "lucide-react": "^1.16.0",
     "react": "latest",
     "react-dom": "latest",
     "wxt": "latest",

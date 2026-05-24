@@ -8,7 +8,7 @@ import { RunManager } from './run-manager';
 
 type RuntimeRunManager = Pick<
   RunManager,
-  'startRun' | 'getSnapshot' | 'executeTool' | 'decideApproval'
+  'startRun' | 'getSnapshot' | 'cancelRun' | 'executeTool' | 'decideApproval'
 >;
 
 export class BackgroundRuntimeHost {
@@ -34,6 +34,11 @@ export class BackgroundRuntimeHost {
         return {
           ok: true,
           data: this.runManager.getSnapshot(parsed.data.runId)
+        };
+      case RUNTIME_MESSAGES.CANCEL_RUN:
+        return {
+          ok: true,
+          data: await this.runManager.cancelRun(parsed.data.runId)
         };
       case RUNTIME_MESSAGES.EXECUTE_TOOL:
         return {

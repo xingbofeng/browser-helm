@@ -6,6 +6,8 @@ import { bhA11ySnapshot } from '../../../../src/tools/a11y/bh-a11y-snapshot';
 import { bhPageObserve } from '../../../../src/tools/page/bh-page-observe';
 import { bhFrameList } from '../../../../src/tools/frame/bh-frame-list';
 import type { ContentRpcClient } from '../../../../src/page/messaging/content-rpc-client';
+import { CONTENT_RPC_MESSAGES } from '../../../../src/shared/constants/event-names';
+import { TOOL_NAMES } from '../../../../src/shared/constants/tool-names';
 import { ToolRegistry } from '../../../../src/tools/core/tool-registry';
 import { ToolRouter } from '../../../../src/tools/core/tool-router';
 
@@ -13,7 +15,7 @@ describe('real page tools', () => {
   it('routes bh_page_observe through ToolRouter and exposes summary context', async () => {
     const rpc: ContentRpcClient = {
       async request(message) {
-        expect(message.type).toBe('BH_PAGE_OBSERVE');
+        expect(message.type).toBe(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
         return {
           ok: true,
           observation: {
@@ -35,7 +37,7 @@ describe('real page tools', () => {
     const router = new ToolRouter(registry);
 
     const result = await router.execute(
-      { tool: 'bh_page_observe', args: {} },
+      { tool: TOOL_NAMES.PAGE_OBSERVE, args: {} },
       { runId: 'run-1', stepId: 'step-1' }
     );
 
@@ -87,7 +89,7 @@ describe('real page tools', () => {
   it('lists page frames with urls for iframe debugging', async () => {
     const rpc: ContentRpcClient = {
       async request(message) {
-        expect(message.type).toBe('BH_FRAME_LIST');
+        expect(message.type).toBe(CONTENT_RPC_MESSAGES.FRAME_LIST);
         return {
           ok: true,
           frames: [

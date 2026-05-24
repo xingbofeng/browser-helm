@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import { RunManager } from '../../../src/background/runtime/run-manager';
 import type { ContentRpcClient } from '../../../src/page/messaging/content-rpc-client';
+import { ERROR_CODES } from '../../../src/shared/constants/error-codes';
+import { CONTENT_RPC_MESSAGES, TRACE_EVENT_NAMES } from '../../../src/shared/constants/event-names';
+import { TOOL_NAMES } from '../../../src/shared/constants/tool-names';
 
 describe('RunManager', () => {
   it('starts a run by observing the target tab through registered page tools', async () => {
     const rpc: ContentRpcClient = {
       async request(message) {
-        expect(message.type).toBe('BH_PAGE_OBSERVE');
+        expect(message.type).toBe(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
         return {
           ok: true,
           observation: {
@@ -75,9 +78,9 @@ describe('RunManager', () => {
         }
       },
       toolResult: {
-        tool: 'bh_page_observe',
+        tool: TOOL_NAMES.PAGE_OBSERVE,
         ok: true,
-        code: 'OK'
+        code: ERROR_CODES.OK
       }
     });
   });
@@ -89,7 +92,7 @@ describe('RunManager', () => {
         async request() {
           return {
             ok: false,
-            code: 'CONTENT_SCRIPT_UNAVAILABLE',
+            code: ERROR_CODES.CONTENT_SCRIPT_UNAVAILABLE,
             message: 'Cannot access this page'
           };
         }
@@ -102,13 +105,13 @@ describe('RunManager', () => {
       status: 'error',
       mode: 'ask',
       error: {
-        code: 'CONTENT_SCRIPT_UNAVAILABLE',
+        code: ERROR_CODES.CONTENT_SCRIPT_UNAVAILABLE,
         message: 'Cannot access this page'
       },
       toolResult: {
-        tool: 'bh_page_observe',
+        tool: TOOL_NAMES.PAGE_OBSERVE,
         ok: false,
-        code: 'CONTENT_SCRIPT_UNAVAILABLE'
+        code: ERROR_CODES.CONTENT_SCRIPT_UNAVAILABLE
       }
     });
   });
@@ -119,10 +122,10 @@ describe('RunManager', () => {
       getActiveTabId: async () => 42,
       createContentRpcClient: () => rpcClient(async (message) => {
         calls.push(message.type);
-        if (message.type === 'BH_PAGE_OBSERVE') {
+        if (message.type === CONTENT_RPC_MESSAGES.PAGE_OBSERVE) {
           return observationResponse();
         }
-        if (message.type === 'BH_IFRAME_READ') {
+        if (message.type === CONTENT_RPC_MESSAGES.IFRAME_READ) {
           return {
             ok: true,
             ref: {
@@ -153,25 +156,29 @@ describe('RunManager', () => {
     const started = await manager.startRun({ task: '点击 iframe', mode: 'act' });
     const result = await manager.executeTool({
       runId: started.runId,
-      tool: 'bh_iframe_click',
+      tool: TOOL_NAMES.IFRAME_CLICK,
       args: {
         refId: 'frame_7:ref_200'
       }
     });
 
-    expect(calls).toEqual(['BH_PAGE_OBSERVE', 'BH_IFRAME_READ', 'BH_IFRAME_CLICK']);
+    expect(calls).toEqual([
+      CONTENT_RPC_MESSAGES.PAGE_OBSERVE,
+      CONTENT_RPC_MESSAGES.IFRAME_READ,
+      CONTENT_RPC_MESSAGES.IFRAME_CLICK
+    ]);
     expect(result).toMatchObject({
       ok: true,
-      code: 'OK',
+      code: ERROR_CODES.OK,
       changedPage: true,
       requiresObserve: true
     });
     expect(manager.getSnapshot(started.runId)).toMatchObject({
       status: 'observed',
       toolResult: {
-        tool: 'bh_iframe_click',
+        tool: TOOL_NAMES.IFRAME_CLICK,
         ok: true,
-        code: 'OK',
+        code: ERROR_CODES.OK,
         changedPage: true,
         requiresObserve: true
       }
@@ -183,10 +190,10 @@ describe('RunManager', () => {
     const manager = new RunManager({
       getActiveTabId: async () => 42,
       createContentRpcClient: () => rpcClient(async (message) => {
-        if (message.type === 'BH_PAGE_OBSERVE') {
+        if (message.type === CONTENT_RPC_MESSAGES.PAGE_OBSERVE) {
           return observationResponse();
         }
-        if (message.type === 'BH_IFRAME_CLICK') {
+        if (message.type === CONTENT_RPC_MESSAGES.IFRAME_CLICK) {
           clicked = true;
         }
         return {
@@ -199,7 +206,7 @@ describe('RunManager', () => {
             visible: true,
             disabled: false
           },
-          changedPage: message.type === 'BH_IFRAME_CLICK'
+          changedPage: message.type === CONTENT_RPC_MESSAGES.IFRAME_CLICK
         };
       })
     });
@@ -207,7 +214,7 @@ describe('RunManager', () => {
     const started = await manager.startRun({ task: '删除账号', mode: 'act' });
     const approvalRequired = await manager.executeTool({
       runId: started.runId,
-      tool: 'bh_iframe_click',
+      tool: TOOL_NAMES.IFRAME_CLICK,
       args: {
         refId: 'frame_7:ref_201'
       }
@@ -222,28 +229,28 @@ describe('RunManager', () => {
 
     expect(approvalRequired).toMatchObject({
       ok: false,
-      code: 'APPROVAL_REQUIRED',
+      code: ERROR_CODES.APPROVAL_REQUIRED,
       requiresApproval: true
     });
     expect(manager.getSnapshot(started.runId)).toMatchObject({
       status: 'failed',
       toolResult: {
-        tool: 'bh_iframe_click',
+        tool: TOOL_NAMES.IFRAME_CLICK,
         ok: false,
-        code: 'USER_DENIED_APPROVAL',
+        code: ERROR_CODES.USER_DENIED_APPROVAL,
         changedPage: false,
         requiresObserve: false
       }
     });
     expect(denied).toMatchObject({
       ok: false,
-      code: 'USER_DENIED_APPROVAL'
+      code: ERROR_CODES.USER_DENIED_APPROVAL
     });
     expect(clicked).toBe(false);
     expect(manager.getSnapshot(started.runId).trace).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: 'approval_required' }),
-        expect.objectContaining({ type: 'state_changed' })
+        expect.objectContaining({ type: TRACE_EVENT_NAMES.APPROVAL_REQUIRED }),
+        expect.objectContaining({ type: TRACE_EVENT_NAMES.STATE_CHANGED })
       ])
     );
   });
@@ -252,7 +259,7 @@ describe('RunManager', () => {
     const manager = new RunManager({
       getActiveTabId: async () => 42,
       createContentRpcClient: () => rpcClient(async (message) => {
-        if (message.type === 'BH_PAGE_OBSERVE') {
+        if (message.type === CONTENT_RPC_MESSAGES.PAGE_OBSERVE) {
           return observationResponse();
         }
         return {
@@ -272,7 +279,7 @@ describe('RunManager', () => {
     const started = await manager.startRun({ task: '输入密码', mode: 'act' });
     await manager.executeTool({
       runId: started.runId,
-      tool: 'bh_iframe_type',
+      tool: TOOL_NAMES.IFRAME_TYPE,
       args: {
         refId: 'frame_7:ref_202',
         text: 'super-secret',
@@ -301,7 +308,7 @@ describe('RunManager', () => {
     const manager = new RunManager({
       getActiveTabId: async () => 42,
       createContentRpcClient: () => rpcClient(async (message) => {
-        if (message.type === 'BH_PAGE_OBSERVE') {
+        if (message.type === CONTENT_RPC_MESSAGES.PAGE_OBSERVE) {
           return observationResponse();
         }
         return {
@@ -321,7 +328,7 @@ describe('RunManager', () => {
     const started = await manager.startRun({ task: '删除账号', mode: 'act' });
     await manager.executeTool({
       runId: started.runId,
-      tool: 'bh_iframe_click',
+      tool: TOOL_NAMES.IFRAME_CLICK,
       args: {
         refId: 'frame_7:ref_201'
       }
@@ -336,19 +343,69 @@ describe('RunManager', () => {
 
     expect(approved).toMatchObject({
       ok: true,
-      code: 'OK'
+      code: ERROR_CODES.OK
     });
     expect(manager.getSnapshot(started.runId)).toMatchObject({
       status: 'observed',
       pendingApproval: undefined,
       toolResult: {
-        tool: 'bh_iframe_click',
+        tool: TOOL_NAMES.IFRAME_CLICK,
         ok: true,
-        code: 'OK',
+        code: ERROR_CODES.OK,
         changedPage: false,
         requiresObserve: false
       }
     });
+  });
+
+  it('cancels a run and prevents later tool execution', async () => {
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.PAGE_OBSERVE) {
+          return observationResponse();
+        }
+        return {
+          ok: true,
+          ref: {
+            refId: 'ref_200',
+            role: 'button',
+            name: '提交',
+            tagName: 'button',
+            visible: true,
+            disabled: false
+          },
+          changedPage: true
+        };
+      })
+    });
+
+    const started = await manager.startRun({ task: '观察页面', mode: 'act' });
+    const cancelled = await manager.cancelRun(started.runId);
+    const result = await manager.executeTool({
+      runId: started.runId,
+      tool: TOOL_NAMES.IFRAME_CLICK,
+      args: {
+        refId: 'frame_7:ref_200'
+      }
+    });
+
+    expect(cancelled).toEqual({
+      runId: started.runId,
+      status: 'cancelled'
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.RUN_CANCELLED
+    });
+    expect(manager.getSnapshot(started.runId)).toMatchObject({
+      status: 'cancelled'
+    });
+    expect(manager.getSnapshot(started.runId).trace).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: TRACE_EVENT_NAMES.RUN_CANCELLED })
+      ])
+    );
   });
 });
 

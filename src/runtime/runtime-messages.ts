@@ -5,6 +5,7 @@ import { runModeSchema, type RunMode } from '../shared/schemas/tool.schema';
 import { RUNTIME_MESSAGES } from '../shared/constants/event-names';
 import type { ApprovalRequest } from '../shared/schemas/approval.schema';
 import type { ToolResult } from '../shared/schemas/tool-result.schema';
+import type { ProviderSettings } from '../storage/interfaces/settings-store';
 
 export const startRunInputSchema = z.object({
   task: z.string().min(1),
@@ -32,6 +33,10 @@ export const runtimeRequestSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal(RUNTIME_MESSAGES.GET_SNAPSHOT),
+    runId: z.string().min(1)
+  }),
+  z.object({
+    type: z.literal(RUNTIME_MESSAGES.CANCEL_RUN),
     runId: z.string().min(1)
   }),
   z.object({
@@ -101,6 +106,7 @@ export type RunSnapshot = {
     | 'empty'
     | 'error'
     | 'failed'
+    | 'cancelled'
     | 'not_found'
     | 'waiting_for_approval';
   observation?: RuntimeObservationSnapshot;
@@ -116,6 +122,7 @@ export type RunSnapshot = {
 };
 
 export type RuntimeToolExecutionResult = ToolResult;
+export type RuntimeProviderSettings = ProviderSettings;
 
 export type RuntimeEvent = {
   runId: string;

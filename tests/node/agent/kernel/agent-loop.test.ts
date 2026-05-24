@@ -9,6 +9,9 @@ import { ToolRegistry } from '../../../../src/tools/core/tool-registry';
 import { ToolRouter } from '../../../../src/tools/core/tool-router';
 import { bhAgentAskUser } from '../../../../src/tools/agent/bh-agent-ask-user';
 import { bhAgentFinish } from '../../../../src/tools/agent/bh-agent-finish';
+import { ERROR_CODES } from '../../../../src/shared/constants/error-codes';
+import { TRACE_EVENT_NAMES } from '../../../../src/shared/constants/event-names';
+import { TOOL_NAMES } from '../../../../src/shared/constants/tool-names';
 import { z } from 'zod';
 
 describe('agent-loop', () => {
@@ -56,7 +59,7 @@ describe('agent-loop', () => {
       }),
       execute: async () => ({
         ok: false,
-        code: 'APPROVAL_REQUIRED',
+        code: ERROR_CODES.APPROVAL_REQUIRED,
         summary: 'Need explicit approval',
         requiresApproval: true,
         approval: {
@@ -86,11 +89,15 @@ describe('agent-loop', () => {
     });
 
     expect(result.status).toBe('waiting_for_approval');
-    expect(result.trace.some((event) => event.type === 'approval_required')).toBe(true);
+    expect(
+      result.trace.some((event) => event.type === TRACE_EVENT_NAMES.APPROVAL_REQUIRED)
+    ).toBe(true);
 
-    const turnFinished = result.trace.find((event) => event.type === 'turn_finished');
+    const turnFinished = result.trace.find(
+      (event) => event.type === TRACE_EVENT_NAMES.TURN_FINISHED
+    );
     expect(turnFinished).toBeDefined();
-    if (!turnFinished || turnFinished.type !== 'turn_finished') {
+    if (!turnFinished || turnFinished.type !== TRACE_EVENT_NAMES.TURN_FINISHED) {
       throw new Error('expected turn_finished event');
     }
     expect(turnFinished.payload.status).toBe('waiting_for_approval');
@@ -136,7 +143,7 @@ describe('agent-loop', () => {
   it('records explicit run mode and only exposes mode-available tools to the model', async () => {
     const registry = new ToolRegistry();
     registry.register({
-      name: 'bh_page_observe',
+      name: TOOL_NAMES.PAGE_OBSERVE,
       title: 'Observe',
       description: 'Observe page',
       modes: ['ask'],
@@ -217,7 +224,7 @@ describe('agent-loop', () => {
     const runStarted = result.trace.find((event) => event.type === 'run_started');
 
     expect(systemPrompt).toContain('Current run mode: form');
-    expect(systemPrompt).toContain('bh_page_observe');
+    expect(systemPrompt).toContain(TOOL_NAMES.PAGE_OBSERVE);
     expect(systemPrompt).toContain('bh_form_read_fields');
     expect(systemPrompt).not.toContain('bh_debug_only');
     expect(runStarted).toBeDefined();
@@ -353,7 +360,7 @@ describe('agent-loop', () => {
     const toolStarted = result.trace.find((event) => event.type === 'tool_started');
     const toolResult = result.trace.find((event) => event.type === 'tool_result');
     const approvalRequired = result.trace.find(
-      (event) => event.type === 'approval_required'
+      (event) => event.type === TRACE_EVENT_NAMES.APPROVAL_REQUIRED
     );
 
     expect(result.status).toBe('waiting_for_approval');
@@ -368,14 +375,14 @@ describe('agent-loop', () => {
     if (!toolResult || toolResult.type !== 'tool_result') {
       throw new Error('expected tool_result event');
     }
-    expect(toolResult.payload.result.code).toBe('APPROVAL_REQUIRED');
+    expect(toolResult.payload.result.code).toBe(ERROR_CODES.APPROVAL_REQUIRED);
     expect(approvalRequired).toBeDefined();
   });
 
   it('redacts sensitive iframe type text from trace and approval previews', async () => {
     const registry = new ToolRegistry();
     registry.register({
-      name: 'bh_iframe_type',
+      name: TOOL_NAMES.IFRAME_TYPE,
       title: 'Type In Iframe Target',
       description: 'Types into iframe',
       modes: ['act'],
@@ -402,7 +409,7 @@ describe('agent-loop', () => {
       }),
       execute: async () => ({
         ok: false,
-        code: 'APPROVAL_REQUIRED',
+        code: ERROR_CODES.APPROVAL_REQUIRED,
         summary: 'Need approval',
         requiresApproval: true,
         approval: {
@@ -416,7 +423,7 @@ describe('agent-loop', () => {
       modelClient: new MockModelClient([
         JSON.stringify({
           type: 'tool_call',
-          tool: 'bh_iframe_type',
+          tool: TOOL_NAMES.IFRAME_TYPE,
           args: {
             refId: 'frame_7:ref_201',
             text: 'super-secret',
@@ -520,7 +527,7 @@ describe('agent-loop', () => {
       modelClient: new MockModelClient([
         JSON.stringify({
           type: 'tool_call',
-          tool: 'bh_agent_finish',
+          tool: TOOL_NAMES.AGENT_FINISH,
           args: {
             message: 'Finished through internal tool'
           }
@@ -539,7 +546,8 @@ describe('agent-loop', () => {
 
     expect(result.status).toBe('finished');
     expect(result.message).toBe('Finished through internal tool');
-    expect(result.trace.some((event) => event.type === 'run_finished')).toBe(true);
+    expect(result.trace.some((event) => event.type === TRACE_EVENT_NAMES.RUN_FINISHED))
+      .toBe(true);
   });
 
   it('treats bh_agent_ask_user tool_call as a paused run', async () => {
@@ -550,7 +558,7 @@ describe('agent-loop', () => {
       modelClient: new MockModelClient([
         JSON.stringify({
           type: 'tool_call',
-          tool: 'bh_agent_ask_user',
+          tool: TOOL_NAMES.AGENT_ASK_USER,
           args: {
             question: 'Need input?'
           }

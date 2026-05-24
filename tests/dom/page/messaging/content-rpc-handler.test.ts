@@ -3,6 +3,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { ContentRpcHandler } from '../../../../src/page/messaging/content-rpc-handler';
+import { CONTENT_RPC_MESSAGES } from '../../../../src/shared/constants/event-names';
+import { ERROR_CODES } from '../../../../src/shared/constants/error-codes';
 import { IFRAME_ACTION_TOKEN } from '../../../../src/shared/constants/runtime-auth';
 
 describe('content-rpc-handler iframe actions', () => {
@@ -17,7 +19,7 @@ describe('content-rpc-handler iframe actions', () => {
       clicked = true;
     });
     const handler = new ContentRpcHandler(document);
-    const snapshot = handler.handle({ type: 'BH_A11Y_SNAPSHOT' });
+    const snapshot = handler.handle({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
     if (!snapshot.ok || !('snapshot' in snapshot)) {
       throw new Error('expected snapshot');
     }
@@ -28,8 +30,13 @@ describe('content-rpc-handler iframe actions', () => {
       (element) => element.tagName === 'input'
     )?.refId;
 
-    expect(handler.handle({ type: 'BH_IFRAME_READ', frameId: 4, refId: buttonRef }))
-      .toMatchObject({
+    expect(
+      handler.handle({
+        type: CONTENT_RPC_MESSAGES.IFRAME_READ,
+        frameId: 4,
+        refId: buttonRef
+      })
+    ).toMatchObject({
         ok: true,
         ref: {
           refId: buttonRef,
@@ -38,7 +45,7 @@ describe('content-rpc-handler iframe actions', () => {
       });
     expect(
       handler.handle({
-        type: 'BH_IFRAME_CLICK',
+        type: CONTENT_RPC_MESSAGES.IFRAME_CLICK,
         frameId: 4,
         refId: buttonRef,
         actionToken: IFRAME_ACTION_TOKEN
@@ -50,7 +57,7 @@ describe('content-rpc-handler iframe actions', () => {
     expect(clicked).toBe(true);
     expect(
       handler.handle({
-        type: 'BH_IFRAME_TYPE',
+        type: CONTENT_RPC_MESSAGES.IFRAME_TYPE,
         frameId: 4,
         refId: inputRef,
         text: 'hello@example.com',
@@ -79,7 +86,7 @@ describe('content-rpc-handler iframe actions', () => {
       clicked = true;
     });
     const handler = new ContentRpcHandler(document);
-    const snapshot = handler.handle({ type: 'BH_A11Y_SNAPSHOT' });
+    const snapshot = handler.handle({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
     if (!snapshot.ok || !('snapshot' in snapshot)) {
       throw new Error('expected snapshot');
     }
@@ -91,16 +98,20 @@ describe('content-rpc-handler iframe actions', () => {
     )?.refId;
 
     expect(
-      handler.handle({ type: 'BH_IFRAME_CLICK', frameId: 4, refId: buttonRef })
+      handler.handle({
+        type: CONTENT_RPC_MESSAGES.IFRAME_CLICK,
+        frameId: 4,
+        refId: buttonRef
+      })
     ).toMatchObject({
       ok: false,
-      code: 'IFRAME_ACTION_UNAUTHORIZED'
+      code: ERROR_CODES.IFRAME_ACTION_UNAUTHORIZED
     });
     expect(clicked).toBe(false);
 
     expect(
       handler.handle({
-        type: 'BH_IFRAME_TYPE',
+        type: CONTENT_RPC_MESSAGES.IFRAME_TYPE,
         frameId: 4,
         refId: inputRef,
         text: 'hello@example.com',
@@ -111,7 +122,7 @@ describe('content-rpc-handler iframe actions', () => {
       })
     ).toMatchObject({
       ok: false,
-      code: 'IFRAME_ACTION_UNAUTHORIZED'
+      code: ERROR_CODES.IFRAME_ACTION_UNAUTHORIZED
     });
     expect((document.getElementById('email') as HTMLInputElement).value).toBe('');
   });

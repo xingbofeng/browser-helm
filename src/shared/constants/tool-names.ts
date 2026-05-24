@@ -1,0 +1,25 @@
+export const TOOL_NAMES = {
+  A11Y_FIND_INTERACTIVE: 'bh_a11y_find_interactive',
+  A11Y_REFRESH_REFS: 'bh_a11y_refresh_refs',
+  A11Y_RESOLVE_REF: 'bh_a11y_resolve_ref',
+  A11Y_SNAPSHOT: 'bh_a11y_snapshot',
+  ACTION_CHECK_READINESS: 'bh_action_check_readiness',
+  AGENT_ASK_USER: 'bh_agent_ask_user',
+  AGENT_FAIL: 'bh_agent_fail',
+  AGENT_FINISH: 'bh_agent_finish',
+  ELEMENT_INSPECT: 'bh_element_inspect',
+  ELEMENT_READ_STATE: 'bh_element_read_state',
+  FORM_FIND_DISABLED_SUBMIT_REASON: 'bh_form_find_disabled_submit_reason',
+  FORM_FIND_MISSING_REQUIRED: 'bh_form_find_missing_required',
+  FORM_FIND_VALIDATION_ERRORS: 'bh_form_find_validation_errors',
+  FORM_INSPECT: 'bh_form_inspect',
+  FORM_LIST: 'bh_form_list',
+  FORM_READ_FIELDS: 'bh_form_read_fields',
+  FRAME_LIST: 'bh_frame_list',
+  IFRAME_CLICK: 'bh_iframe_click',
+  IFRAME_READ: 'bh_iframe_read',
+  IFRAME_TYPE: 'bh_iframe_type',
+  PAGE_OBSERVE: 'bh_page_observe'
+} as const;
+
+export type ToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];

@@ -1,5 +1,7 @@
 import { expect } from '@playwright/test';
 
+import { ERROR_CODES } from '../../../src/shared/constants/error-codes';
+import { TOOL_NAMES } from '../../../src/shared/constants/tool-names';
 import { PageObservationPanel } from '../components/side-panel/page-observation-panel';
 import { E2EFlowContext } from './e2e-flow-context';
 
@@ -138,7 +140,7 @@ export class PageObservationFlow {
 
     const read = await sidePanel.executeTool({
       runId: snapshot.runId,
-      tool: 'bh_iframe_read',
+      tool: TOOL_NAMES.IFRAME_READ,
       args: {
         refId: `frame_${emailRef.frameId}:${emailRef.innerRefId}`
       }
@@ -154,7 +156,7 @@ export class PageObservationFlow {
 
     const click = await sidePanel.executeTool({
       runId: snapshot.runId,
-      tool: 'bh_iframe_click',
+      tool: TOOL_NAMES.IFRAME_CLICK,
       args: {
         refId: `frame_${detailsRef.frameId}:${detailsRef.innerRefId}`
       }
@@ -171,7 +173,7 @@ export class PageObservationFlow {
 
     const type = await sidePanel.executeTool({
       runId: snapshot.runId,
-      tool: 'bh_iframe_type',
+      tool: TOOL_NAMES.IFRAME_TYPE,
       args: {
         refId: `frame_${emailRef.frameId}:${emailRef.innerRefId}`,
         text: 'hello@example.com',
@@ -192,21 +194,21 @@ export class PageObservationFlow {
 
     await sidePanel.executeTool({
       runId: snapshot.runId,
-      tool: 'bh_iframe_click',
+      tool: TOOL_NAMES.IFRAME_CLICK,
       args: {
         refId: `frame_${navigateRef.frameId}:${navigateRef.innerRefId}`
       }
     });
     const stale = await sidePanel.executeTool({
       runId: snapshot.runId,
-      tool: 'bh_iframe_read',
+      tool: TOOL_NAMES.IFRAME_READ,
       args: {
         refId: `frame_${emailRef.frameId}:${emailRef.innerRefId}`
       }
     });
     expect(stale).toMatchObject({
       ok: false,
-      code: 'REF_STALE',
+      code: ERROR_CODES.REF_STALE,
       requiresObserve: true
     });
   }
@@ -230,7 +232,7 @@ export class PageObservationFlow {
 
     const approvalRequired = await sidePanel.executeTool({
       runId: snapshot.runId,
-      tool: 'bh_iframe_click',
+      tool: TOOL_NAMES.IFRAME_CLICK,
       args: {
         refId: `frame_${deleteRef.frameId}:${deleteRef.innerRefId}`
       }
@@ -245,19 +247,19 @@ export class PageObservationFlow {
 
     expect(approvalRequired).toMatchObject({
       ok: false,
-      code: 'APPROVAL_REQUIRED',
+      code: ERROR_CODES.APPROVAL_REQUIRED,
       requiresApproval: true
     });
     expect(waiting).toMatchObject({
       status: 'waiting_for_approval',
       pendingApproval: {
-        tool: 'bh_iframe_click',
+        tool: TOOL_NAMES.IFRAME_CLICK,
         risk: 'high'
       }
     });
     expect(denied).toMatchObject({
       ok: false,
-      code: 'USER_DENIED_APPROVAL',
+      code: ERROR_CODES.USER_DENIED_APPROVAL,
       changedPage: false
     });
     await expect(fixture.page.frameLocator('iframe').locator('body')).not.toHaveAttribute(

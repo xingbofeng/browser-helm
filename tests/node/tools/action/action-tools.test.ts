@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ContentRpcClient } from '../../../../src/page/messaging/content-rpc-client';
+import { CONTENT_RPC_MESSAGES } from '../../../../src/shared/constants/event-names';
+import { TOOL_NAMES } from '../../../../src/shared/constants/tool-names';
 import { bhActionCheckReadiness } from '../../../../src/tools/action/bh-action-check-readiness';
 import { ToolRegistry } from '../../../../src/tools/core/tool-registry';
 import { ToolRouter } from '../../../../src/tools/core/tool-router';
@@ -19,7 +21,7 @@ describe('action readiness tool', () => {
   it('checks action readiness in debug and act modes without changing the page', async () => {
     const rpc = rpcClient(async (message) => {
       expect(message).toMatchObject({
-        type: 'BH_A11Y_RESOLVE_REF',
+        type: CONTENT_RPC_MESSAGES.A11Y_RESOLVE_REF,
         refId: 'ref_button'
       });
       return {
@@ -32,18 +34,18 @@ describe('action readiness tool', () => {
     const router = new ToolRouter(registry);
 
     expect(router.listToolContracts('debug').map((tool) => tool.name)).toContain(
-      'bh_action_check_readiness'
+      TOOL_NAMES.ACTION_CHECK_READINESS
     );
     expect(router.listToolContracts('act').map((tool) => tool.name)).toContain(
-      'bh_action_check_readiness'
+      TOOL_NAMES.ACTION_CHECK_READINESS
     );
     expect(router.listToolContracts('ask').map((tool) => tool.name)).not.toContain(
-      'bh_action_check_readiness'
+      TOOL_NAMES.ACTION_CHECK_READINESS
     );
 
     const result = await router.execute(
       {
-        tool: 'bh_action_check_readiness',
+        tool: TOOL_NAMES.ACTION_CHECK_READINESS,
         args: {
           kind: 'click',
           refId: 'ref_button',

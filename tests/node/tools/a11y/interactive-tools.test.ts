@@ -4,6 +4,8 @@ import { bhA11yFindInteractive } from '../../../../src/tools/a11y/bh-a11y-find-i
 import { bhElementInspect } from '../../../../src/tools/element/bh-element-inspect';
 import { bhElementReadState } from '../../../../src/tools/element/bh-element-read-state';
 import type { ContentRpcClient } from '../../../../src/page/messaging/content-rpc-client';
+import { CONTENT_RPC_MESSAGES } from '../../../../src/shared/constants/event-names';
+import { TOOL_NAMES } from '../../../../src/shared/constants/tool-names';
 import { ToolRegistry } from '../../../../src/tools/core/tool-registry';
 import { ToolRouter } from '../../../../src/tools/core/tool-router';
 
@@ -23,7 +25,7 @@ const interactiveRef = {
 describe('v0.31 interactive read-only tools', () => {
   it('finds interactive elements from the current a11y snapshot in debug/form modes', async () => {
     const rpc = rpcClient(async (message) => {
-      expect(message.type).toBe('BH_A11Y_SNAPSHOT');
+      expect(message.type).toBe(CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT);
       return {
         ok: true,
         snapshot: {
@@ -40,17 +42,17 @@ describe('v0.31 interactive read-only tools', () => {
     const router = new ToolRouter(registry);
 
     expect(router.listToolContracts('debug').map((tool) => tool.name)).toContain(
-      'bh_a11y_find_interactive'
+      TOOL_NAMES.A11Y_FIND_INTERACTIVE
     );
     expect(router.listToolContracts('form').map((tool) => tool.name)).toContain(
-      'bh_a11y_find_interactive'
+      TOOL_NAMES.A11Y_FIND_INTERACTIVE
     );
     expect(router.listToolContracts('ask').map((tool) => tool.name)).not.toContain(
-      'bh_a11y_find_interactive'
+      TOOL_NAMES.A11Y_FIND_INTERACTIVE
     );
 
     const result = await router.execute(
-      { tool: 'bh_a11y_find_interactive', args: {} },
+      { tool: TOOL_NAMES.A11Y_FIND_INTERACTIVE, args: {} },
       { runId: 'run_1', stepId: 'step_1', runMode: 'debug' }
     );
 
@@ -91,7 +93,7 @@ describe('v0.31 interactive read-only tools', () => {
   it('inspects and reads state for a valid ref', async () => {
     const rpc = rpcClient(async (message) => {
       expect(message).toMatchObject({
-        type: 'BH_A11Y_RESOLVE_REF',
+        type: CONTENT_RPC_MESSAGES.A11Y_RESOLVE_REF,
         refId: 'ref_button'
       });
       return {

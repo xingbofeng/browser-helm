@@ -3,6 +3,7 @@ import { ChromeContentRpcClient } from '../../page/messaging/content-rpc-client'
 import { buildStructuredPageData } from '../../page/structured/structured-page-data';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { TRACE_EVENT_NAMES } from '../../shared/constants/event-names';
+import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import type { Observation } from '../../shared/schemas/observation.schema';
 import type { ToolResult } from '../../shared/schemas/tool-result.schema';
 import { ApprovalManager } from '../../runtime/approval/approval-manager';
@@ -75,7 +76,7 @@ export class RunManager {
     });
     const router = this.createToolRouter(tabId);
     const result = await router.execute(
-      { tool: 'bh_page_observe', args: {} },
+      { tool: TOOL_NAMES.PAGE_OBSERVE, args: {} },
       { runId, stepId: `${runId}:observe`, runMode: mode }
     );
     this.snapshots.set(runId, this.snapshotFromToolResult(runId, mode, result));
@@ -85,6 +86,18 @@ export class RunManager {
   async executeTool(input: ExecuteToolInput): Promise<ToolResult> {
     const record = this.records.get(input.runId);
     const redactedArgs = redactToolArgs(input.tool, input.args);
+    if (this.getSnapshot(input.runId).status === 'cancelled') {
+      return {
+        ok: false,
+        code: ERROR_CODES.RUN_CANCELLED,
+        summary: 'Run was cancelled by the user',
+        changedPage: false,
+        requiresObserve: false,
+        error: {
+          message: 'Run was cancelled by the user'
+        }
+      };
+    }
     if (!record?.tabId) {
       const result = userDeniedApprovalResult('Run is not available for tool execution');
       this.snapshots.set(input.runId, {
@@ -228,6 +241,29 @@ export class RunManager {
     return Promise.resolve(result);
   }
 
+  cancelRun(runId: string): Promise<{ runId: string; status: 'cancelled' }> {
+    const current = this.getSnapshot(runId);
+    const record = this.records.get(runId);
+    record?.trace.push({
+      runId,
+      type: TRACE_EVENT_NAMES.RUN_CANCELLED,
+      payload: {
+        reason: 'user_cancelled'
+      }
+    });
+    const snapshot: RunSnapshot = {
+      ...current,
+      status: 'cancelled',
+      pendingApproval: undefined,
+      trace: record?.trace ?? current.trace
+    };
+    this.snapshots.set(runId, snapshot);
+    return Promise.resolve({
+      runId,
+      status: 'cancelled'
+    });
+  }
+
   getSnapshot(runId: string): RunSnapshot {
     return (
       this.snapshots.get(runId) ?? {
@@ -267,7 +303,7 @@ export class RunManager {
     result: ToolResult
   ): RunSnapshot {
     const toolResult = {
-      tool: 'bh_page_observe',
+      tool: TOOL_NAMES.PAGE_OBSERVE,
       ok: result.ok,
       code: result.code,
       summary: result.summary

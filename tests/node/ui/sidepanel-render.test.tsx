@@ -2,6 +2,7 @@ import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { SidePanelView } from '../../../src/entrypoints/sidepanel/app';
+import { TOOL_NAMES } from '../../../src/shared/constants/tool-names';
 
 describe('side panel MVP', () => {
   it('renders page observation and ref mapping from runtime snapshot data', () => {
@@ -95,7 +96,7 @@ describe('side panel MVP', () => {
             }
           },
           toolResult: {
-            tool: 'bh_page_observe',
+            tool: TOOL_NAMES.PAGE_OBSERVE,
             ok: true,
             code: 'OK',
             summary: 'Observed 127.0.0.1'
@@ -152,7 +153,7 @@ describe('side panel MVP', () => {
           },
           refs: [],
           toolResult: {
-            tool: 'bh_page_observe',
+            tool: TOOL_NAMES.PAGE_OBSERVE,
             ok: true,
             code: 'OK',
             summary: 'Observed 127.0.0.1'
