@@ -11,6 +11,11 @@ export const RUNTIME_MESSAGES = {
   GET_SNAPSHOT: 'BH_RUNTIME_GET_SNAPSHOT'
 } as const;
 
+export const SIDE_PANEL_MESSAGES = {
+  TARGET_PORT: 'BH_SIDE_PANEL_TARGET_PORT',
+  TARGET_TAB_CHANGED: 'BH_SIDE_PANEL_TARGET_TAB_CHANGED'
+} as const;
+
 export const TRACE_EVENT_NAMES = {
   RUN_STARTED: 'run_started',
   RUN_FINISHED: 'run_finished',
@@ -35,5 +40,7 @@ export type ContentRpcMessageName =
   (typeof CONTENT_RPC_MESSAGES)[keyof typeof CONTENT_RPC_MESSAGES];
 export type RuntimeMessageName =
   (typeof RUNTIME_MESSAGES)[keyof typeof RUNTIME_MESSAGES];
+export type SidePanelMessageName =
+  (typeof SIDE_PANEL_MESSAGES)[keyof typeof SIDE_PANEL_MESSAGES];
 export type TraceEventName =
   (typeof TRACE_EVENT_NAMES)[keyof typeof TRACE_EVENT_NAMES];

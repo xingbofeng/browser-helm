@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ExtensionRuntimePort } from '../../runtime/extension-runtime-port';
 import type { RuntimePort } from '../../runtime/runtime-port';
 import type { RunSnapshot } from '../../runtime/runtime-messages';
+import { SIDE_PANEL_MESSAGES } from '../../shared/constants/event-names';
 import type { StructuredPageData } from '../../shared/schemas/structured-page-data.schema';
 import type { RunMode } from '../../shared/schemas/tool.schema';
 import './app.css';
@@ -84,25 +85,30 @@ export function App() {
       }, 250);
     };
     const scheduleRefreshForTab = (tabId: number) => {
-      const pinnedTabId = readTabIdFromUrl();
-      if (pinnedTabId && pinnedTabId !== tabId) {
+      if (isPinnedTarget() && readTabIdFromUrl() !== tabId) {
         return;
+      }
+      if (isActiveTarget()) {
+        writeTabIdToUrl(tabId);
       }
       scheduleRefresh();
     };
 
-    const onActivated = () => {
-      if (!hasPinnedTabId()) {
+    const onActivated = (activeInfo: { tabId: number }) => {
+      if (isActiveTarget()) {
+        writeTabIdToUrl(activeInfo.tabId);
         scheduleRefresh();
       }
     };
     const onUpdated = (tabId: number, changeInfo: chrome.tabs.OnUpdatedInfo, tab: chrome.tabs.Tab) => {
-      const pinnedTabId = readTabIdFromUrl();
-      const shouldRefreshPinnedTab = pinnedTabId === tabId;
-      const shouldRefreshActiveTab = !pinnedTabId && tab.active;
+      const shouldRefreshPinnedTab = isPinnedTarget() && readTabIdFromUrl() === tabId;
+      const shouldRefreshActiveTab = isActiveTarget() && tab.active;
       const changedEnough = Boolean(changeInfo.url) || changeInfo.status === 'complete';
 
       if (changedEnough && (shouldRefreshPinnedTab || shouldRefreshActiveTab)) {
+        if (shouldRefreshActiveTab) {
+          writeTabIdToUrl(tabId);
+        }
         scheduleRefresh();
       }
     };
@@ -114,6 +120,17 @@ export function App() {
     chrome.tabs.onUpdated.addListener(onUpdated);
     chrome.webNavigation?.onDOMContentLoaded?.addListener(onFrameNavigation);
     chrome.webNavigation?.onCompleted?.addListener(onFrameNavigation);
+    const port = globalThis.chrome?.runtime?.connect?.({
+      name: SIDE_PANEL_MESSAGES.TARGET_PORT
+    });
+    const onTargetMessage = (message: unknown) => {
+      const tabId = readTargetTabChangedTabId(message);
+      if (tabId && isActiveTarget()) {
+        writeTabIdToUrl(tabId);
+        scheduleRefresh();
+      }
+    };
+    port?.onMessage.addListener(onTargetMessage);
 
     return () => {
       if (debounceTimer) {
@@ -124,6 +141,8 @@ export function App() {
       chrome.tabs.onUpdated.removeListener(onUpdated);
       chrome.webNavigation?.onDOMContentLoaded?.removeListener(onFrameNavigation);
       chrome.webNavigation?.onCompleted?.removeListener(onFrameNavigation);
+      port?.onMessage.removeListener(onTargetMessage);
+      port?.disconnect();
     };
   }, [runWithTask, mode]);
 
@@ -570,13 +589,56 @@ function readTabIdFromUrl(): number | undefined {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
-function hasPinnedTabId(): boolean {
-  return Boolean(readTabIdFromUrl());
+function readTargetModeFromUrl(): 'active' | 'pinned' {
+  if (typeof window === 'undefined') {
+    return 'active';
+  }
+  return resolveTargetModeFromSearch(window.location.search);
+}
+
+export function resolveTargetModeFromSearch(search: string): 'active' | 'pinned' {
+  const params = new URLSearchParams(search);
+  if (params.get('target') === 'active') {
+    return 'active';
+  }
+  return params.has('tabId') ? 'pinned' : 'active';
+}
+
+export function readTargetTabChangedTabId(message: unknown): number | undefined {
+  if (typeof message !== 'object' || message === null) {
+    return undefined;
+  }
+  const record = message as Record<string, unknown>;
+  return record.type === SIDE_PANEL_MESSAGES.TARGET_TAB_CHANGED &&
+    Number.isInteger(record.tabId) &&
+    Number(record.tabId) > 0
+    ? Number(record.tabId)
+    : undefined;
+}
+
+function isActiveTarget(): boolean {
+  return readTargetModeFromUrl() === 'active';
+}
+
+function isPinnedTarget(): boolean {
+  return readTargetModeFromUrl() === 'pinned' && Boolean(readTabIdFromUrl());
+}
+
+function writeTabIdToUrl(tabId: number): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  const url = new URL(window.location.href);
+  if (url.searchParams.get('tabId') === String(tabId)) {
+    return;
+  }
+  url.searchParams.set('tabId', String(tabId));
+  window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
 async function resolveTargetTabId(): Promise<number | undefined> {
   const pinnedTabId = readTabIdFromUrl();
-  if (pinnedTabId) {
+  if (readTargetModeFromUrl() === 'pinned' && pinnedTabId) {
     return pinnedTabId;
   }
 

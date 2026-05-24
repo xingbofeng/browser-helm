@@ -239,3 +239,74 @@
 **待确认**：
 - [ ] v0.33 是否新增动作类 iframe 工具，并要求显式 action readiness + approval。
 - [ ] 是否给 side panel Debug/Form UI 增加 frame list 可视化，而不只暴露给 Agent 工具。
+
+## [Gmail 原生 side panel 目标 Tab 绑定修复] - 2026-05-25
+
+**目标**：修复真实 Chrome Gmail 页面中，原生 BrowserHelm side panel 执行 `bh_page_observe` 稳定报 `CONTENT_SCRIPT_UNAVAILABLE: Could not establish connection. Receiving end does not exist.` 的问题。
+
+**设计决策**：选择在 background 侧为当前 active tab 调用 `chrome.sidePanel.setOptions({ tabId, path: "sidepanel.html?target=active&tabId=<tabId>", enabled: true })`，让原生 side panel 显式携带当前目标 tabId。原因：Chrome 插件实测 Gmail DOM 可读，BrowserHelm 图标也有站点访问权限；失败更符合 native side panel 未携带稳定目标、运行时只能靠 `chrome.tabs.query({ active, currentWindow })` 推断目标导致的错绑。
+
+**偏差说明**：未用 Chrome 插件直接打开 `chrome-extension://.../sidepanel.html?tabId=...` 做对照。原因：Chrome 插件安全策略阻止访问 extension URL；改用真实 Chrome open tabs、Gmail DOM 可读性和当前代码路径综合定位。
+
+**权衡分析**：
+- 方案一：继续让 side panel 自己查询 active tab。优点是代码少；缺点是在原生 side panel、扩展页和多窗口上下文中目标不稳定。
+- 方案二：background 在 tab 激活/更新时把 tabId 写入 per-tab side panel path。优点是目标确定，和 E2E/debug tab 的验证路径一致；缺点是依赖 Chrome sidePanel per-tab options。
+- 选择方案二，因为它最小化改变且直接消除 native side panel 的目标推断。
+
+**验证记录**：
+- `@chrome` 真实 Chrome：确认 Gmail tab `https://mail.google.com/mail/u/0/#inbox` 可被 Chrome 插件读取，标题为 `收件箱 (422) - counterxing@gmail.com - Gmail`。
+- `npx vitest run tests/node/runtime/side-panel-target.test.ts`：passed。
+- `npm run typecheck`：passed。
+- `npm run lint`：passed。
+- `npm run build`：passed。
+
+**待确认**：
+- [ ] 重新加载系统 Chrome 中的 BrowserHelm 扩展后，在 Gmail 原生 side panel 复验是否不再报 `CONTENT_SCRIPT_UNAVAILABLE`。
+
+## [原生 side panel Active Tab 切换跟随修复] - 2026-05-25
+
+**目标**：修复原生 BrowserHelm side panel 从 active tab 1 切到 active tab 2 后，仍沿用旧初始化目标，除非手动刷新才恢复的问题。
+
+**设计决策**：选择把 background 生成的原生 side panel path 标记为 `target=active&tabId=<tabId>`，side panel 看到 `target=active` 时在 `tabs.onActivated` / `tabs.onUpdated` / frame navigation 后更新 URL 中的 `tabId` 并重新观察当前 active tab。原因：debug tab 需要固定 `tabId`，而原生 side panel 应跟随用户当前 tab；二者必须显式区分。
+
+**偏差说明**：没有让 debug tab 也跟随 active tab。原因：debug tab 是自动化/E2E 的稳定入口，固定目标是既有设计，不能被用户切 tab 影响。
+
+**权衡分析**：
+- 方案一：只在 background 更新 per-tab path。优点是改动少；缺点是已打开的 native panel 文档不一定重新加载，仍可能持有旧 `tabId`。
+- 方案二：background 标记 active 语义，side panel 运行时主动跟随 tab 切换。优点是覆盖已打开 panel 的切换场景；缺点是 side panel URL 会随 active tab 更新。
+- 选择方案二，因为它直接覆盖用户真实复现场景，同时保留 debug tab 的 pinned 语义。
+
+**验证记录**：
+- `npx vitest run tests/node/runtime/side-panel-target.test.ts tests/node/ui/sidepanel-render.test.tsx`：passed。
+- `npm run typecheck`：passed。
+- `npm run lint`：passed。
+- `npm run build`：passed。
+
+**补充修正**：`@chrome` 复测真实 Chrome open tabs 后，发现用户复现场景里原生 side panel 可能仍以裸 `sidepanel.html` 运行；此前 `readTargetModeFromUrl` 会把没有 `target=active` 的 URL 默认判为 pinned，导致 tab 切换事件不触发刷新。已改为：无 query 参数默认 active 跟随；只有 `?tabId=...` 的 debug URL 默认 pinned；`?target=active&tabId=...` 显式 active。
+
+**补充验证**：
+- `npx vitest run tests/node/ui/sidepanel-target-mode.test.tsx tests/node/runtime/side-panel-target.test.ts tests/node/ui/sidepanel-render.test.tsx`：passed。
+- `npm run typecheck`：passed。
+- `npm run lint`：passed。
+- `npm run build`：passed。
+
+**二次定位**：用户继续复现后，进一步判断原生 side panel 已存在文档在重新 active 目标页时并不会重新 mount/init，且 side panel 内部 `chrome.tabs.onActivated` 监听不可靠。改为 side panel 通过 runtime port 连接 background，由 background 在 `tabs.onActivated` / active tab completed 时主动推送 `BH_SIDE_PANEL_TARGET_TAB_CHANGED`，side panel 收到后更新目标 `tabId` 并触发 observe。
+
+**二次验证**：
+- `npx vitest run tests/node/ui/sidepanel-target-mode.test.tsx tests/node/runtime/side-panel-target.test.ts tests/node/ui/sidepanel-render.test.tsx`：passed，覆盖 target mode 与 background target message。
+- `npm run typecheck`：passed。
+- `npm run lint`：passed。
+- `npm run build`：passed。
+
+**最终定位**：用户说明“已经有的页面，点开扩展弹出来时不会初始化”后，确认真正根因是 Chrome 扩展 reload/install 后，manifest `content_scripts` 不会自动注入到已经存在的页面；只有页面刷新或重新导航才会获得 content script listener。因此 background 对旧 tab 调用 `chrome.tabs.sendMessage` 会稳定出现 `Receiving end does not exist`。
+
+**最终修正**：`ChromeContentRpcClient` 在发送页面 RPC 前用 `chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["content-scripts/content.js"] })` 对目标 tab 做一次按需补注入；content script 增加全局安装标记，避免重复执行时注册多个 `onMessage` listener。补注入按 tab 在当前 background 生命周期内去重。
+
+**最终验证**：
+- `npx vitest run tests/node/page/messaging/content-rpc-client.test.ts tests/node/entrypoints/content-config.test.ts tests/node/ui/sidepanel-target-mode.test.tsx tests/node/runtime/side-panel-target.test.ts`：passed。
+- `npm run typecheck`：passed。
+- `npm run lint`：passed。
+- `npm run build`：passed。
+
+**待确认**：
+- [ ] 系统 Chrome 重新加载扩展后，不刷新已存在的 Gmail tab，直接点击 BrowserHelm 扩展图标打开原生 side panel，确认 observe 会自动补注入并成功。

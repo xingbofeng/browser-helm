@@ -14,6 +14,8 @@ export interface ContentRpcClient {
 }
 
 export class ChromeContentRpcClient implements ContentRpcClient {
+  private static readonly ensuredContentScriptTabs = new Set<number>();
+
   private readonly strategies: Map<ContentRpcRequest['type'], ContentRpcStrategy>;
 
   constructor(private readonly tabId: number) {
@@ -36,6 +38,7 @@ export class ChromeContentRpcClient implements ContentRpcClient {
     }
 
     try {
+      await this.ensureContentScript();
       const strategy = this.strategies.get(message.type);
       return strategy
         ? await strategy.execute(message)
@@ -76,6 +79,29 @@ export class ChromeContentRpcClient implements ContentRpcClient {
     return await chrome.tabs.sendMessage(this.tabId, message, {
       frameId
     });
+  }
+
+  private async ensureContentScript(): Promise<void> {
+    if (!globalThis.chrome?.scripting?.executeScript) {
+      return;
+    }
+    if (ChromeContentRpcClient.ensuredContentScriptTabs.has(this.tabId)) {
+      return;
+    }
+
+    try {
+      await chrome.scripting.executeScript({
+        target: {
+          tabId: this.tabId,
+          allFrames: true
+        },
+        files: ['content-scripts/content.js']
+      });
+      ChromeContentRpcClient.ensuredContentScriptTabs.add(this.tabId);
+    } catch {
+      // Some pages cannot be injected. The follow-up sendMessage keeps the
+      // existing CONTENT_SCRIPT_UNAVAILABLE reporting path.
+    }
   }
 }
 

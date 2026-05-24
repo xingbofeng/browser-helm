@@ -1,8 +1,62 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { mergeFrameObservationResponses } from '../../../../src/page/messaging/content-rpc-client';
+import {
+  ChromeContentRpcClient,
+  mergeFrameObservationResponses
+} from '../../../../src/page/messaging/content-rpc-client';
+import { CONTENT_RPC_MESSAGES } from '../../../../src/shared/constants/event-names';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('content RPC frame aggregation', () => {
+  it('injects the content script before messaging existing tabs', async () => {
+    const executeScript = vi.fn(async () => []);
+    const sendMessage = vi.fn(async () => ({
+      ok: true,
+      observation: observation({
+        title: 'Gmail',
+        currentDomain: 'mail.google.com'
+      })
+    }));
+    vi.stubGlobal('chrome', {
+      scripting: {
+        executeScript
+      },
+      tabs: {
+        sendMessage
+      },
+      webNavigation: {
+        getAllFrames: vi.fn(async () => [
+          {
+            frameId: 0,
+            url: 'https://mail.google.com/mail/u/0/#inbox'
+          }
+        ])
+      }
+    });
+
+    const client = new ChromeContentRpcClient(1499184501);
+    const response = await client.request({
+      type: CONTENT_RPC_MESSAGES.PAGE_OBSERVE
+    });
+
+    expect(response.ok).toBe(true);
+    expect(executeScript).toHaveBeenCalledWith({
+      target: {
+        tabId: 1499184501,
+        allFrames: true
+      },
+      files: ['content-scripts/content.js']
+    });
+    expect(sendMessage).toHaveBeenCalledWith(
+      1499184501,
+      { type: CONTENT_RPC_MESSAGES.PAGE_OBSERVE },
+      { frameId: 0 }
+    );
+  });
+
   it('prefixes iframe refs and form fields while keeping top-level page metadata', () => {
     const merged = mergeFrameObservationResponses([
       {
