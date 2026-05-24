@@ -1,8 +1,8 @@
 import { z, ZodError } from 'zod';
 
-import type { ToolResult } from '../../shared/schemas/toolResult.schema';
+import type { ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ToolMode } from '../../shared/schemas/tool.schema';
-import type { ToolRisk } from '../../shared/schemas/toolResult.schema';
+import type { ToolRisk } from '../../shared/schemas/tool-result.schema';
 import type { ToolContext } from './tool-context';
 import {
   TOOL_ARGS_INVALID,

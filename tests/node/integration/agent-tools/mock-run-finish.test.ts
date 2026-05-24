@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { AgentLoop } from '../../../../src/agent/kernel/AgentLoop';
-import { ContextBuilder } from '../../../../src/agent/context/ContextBuilder';
-import { DecisionParser } from '../../../../src/agent/parser/DecisionParser';
-import { MockModelClient } from '../../../../src/agent/model/MockModelClient';
+import { AgentLoop } from '../../../../src/agent/kernel/agent-loop';
+import { ContextBuilder } from '../../../../src/agent/context/context-builder';
+import { DecisionParser } from '../../../../src/agent/parser/decision-parser';
+import { MockModelClient } from '../../../../src/agent/model/mock-model-client';
 import { ToolRouter } from '../../../../src/tools/core/tool-router';
 import { ToolRegistry } from '../../../../src/tools/core/tool-registry';
-import { bhAgentFinish } from '../../../../src/tools/mock/bh_agent_finish';
-import { bhMockPageObserve } from '../../../../src/tools/mock/bh_mock_page_observe';
+import { bhAgentFinish } from '../../../../src/tools/agent/bh-agent-finish';
+import { bhMockPageObserve } from '../../../helpers/tools/bh-mock-page-observe';
 import { InMemoryTraceRecorder } from '../../../../src/storage/memory/in-memory-trace-recorder';
 
 describe('AgentLoop integration - mock run finish', () => {

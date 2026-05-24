@@ -13,7 +13,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:node": "vitest run tests/node",
-    "agent:dev": "tsx scripts/run-agent-dev.ts"
+    "test:e2e": "npm run build && playwright test",
+    "debug:extension": "npm run build && tsx scripts/debug-extension.ts",
+    "debug:extension:watch": "BROWSER_HELM_DEBUG_WATCH=1 npm run debug:extension",
+    "agent:dev": "npm run build && tsx scripts/run-agent-dev.ts"
   },
   "dependencies": {
     "@wxt-dev/module-react": "latest",
@@ -28,12 +31,14 @@
   },
   "devDependencies": {
     "@eslint/js": "latest",
+    "@playwright/test": "^1.60.0",
     "@types/chrome": "latest",
     "@types/node": "^25.9.1",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "eslint": "latest",
     "eslint-plugin-react-hooks": "latest",
+    "happy-dom": "^20.9.0",
     "tsx": "^4.22.3",
     "typescript": "latest",
     "typescript-eslint": "latest",

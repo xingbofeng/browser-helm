@@ -2,6 +2,8 @@ node_modules/
 .wxt/
 .output/
 dist/
+test-results/
+artifacts/
 .env
 .env.*
 !.env.example

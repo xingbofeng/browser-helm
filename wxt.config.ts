@@ -6,6 +6,9 @@ export default defineConfig({
   manifest: {
     name: 'BrowserHelm',
     description: 'Local-first a11y-first browser agent cockpit.',
+    action: {
+      default_title: 'Open BrowserHelm side panel'
+    },
     permissions: ['storage', 'tabs', 'scripting', 'sidePanel'],
     host_permissions: ['<all_urls>']
   }

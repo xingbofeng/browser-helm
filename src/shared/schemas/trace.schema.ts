@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
 import { approvalRequestSchema } from './approval.schema';
-import { agentDecisionSchema } from './agentDecision.schema';
-import { runMetadataSchema } from './runMetadata.schema';
-import { toolResultSchema, toolRiskSchema } from './toolResult.schema';
+import { agentDecisionSchema } from './agent-decision.schema';
+import { runMetadataSchema } from './run-metadata.schema';
+import { toolResultSchema, toolRiskSchema } from './tool-result.schema';
 
 const traceEventBaseSchema = z.object({
   id: z.string().min(1),

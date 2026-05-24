@@ -1,7 +1,7 @@
 import type {
   ToolResult,
   ToolRisk
-} from '../../shared/schemas/toolResult.schema';
+} from '../../shared/schemas/tool-result.schema';
 
 export function successToolResult(
   code: string,

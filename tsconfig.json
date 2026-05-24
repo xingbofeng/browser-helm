@@ -19,5 +19,13 @@
     "skipLibCheck": true,
     "types": ["chrome", "node"]
   },
-  "include": ["src", "tests", "scripts", "wxt.config.ts", "eslint.config.js"]
+  "include": [
+    "src",
+    "tests",
+    "scripts",
+    "wxt.config.ts",
+    "eslint.config.js",
+    "vitest.config.ts",
+    "playwright.config.ts"
+  ]
 }

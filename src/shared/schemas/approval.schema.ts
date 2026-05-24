@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { toolRiskSchema } from './toolResult.schema';
+import { toolRiskSchema } from './tool-result.schema';
 
 export const approvalRequestSchema = z.object({
   id: z.string().min(1),

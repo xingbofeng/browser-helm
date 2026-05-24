@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { AgentLoop } from '../../../../src/agent/kernel/AgentLoop';
-import { ContextBuilder } from '../../../../src/agent/context/ContextBuilder';
-import { DecisionParser } from '../../../../src/agent/parser/DecisionParser';
-import { MockModelClient } from '../../../../src/agent/model/MockModelClient';
+import { AgentLoop } from '../../../../src/agent/kernel/agent-loop';
+import { ContextBuilder } from '../../../../src/agent/context/context-builder';
+import { DecisionParser } from '../../../../src/agent/parser/decision-parser';
+import { MockModelClient } from '../../../../src/agent/model/mock-model-client';
 import { ToolRouter } from '../../../../src/tools/core/tool-router';
 import { ToolRegistry } from '../../../../src/tools/core/tool-registry';
 import { InMemoryTraceRecorder } from '../../../../src/storage/memory/in-memory-trace-recorder';
