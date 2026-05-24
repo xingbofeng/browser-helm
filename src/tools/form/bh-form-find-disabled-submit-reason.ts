@@ -9,6 +9,14 @@ import { disabledSubmitReason, isToolResult, loadFormToolData } from './form-too
 
 const argsSchema = z.object({});
 
+/**
+ * Finds the best available reason a submit control is disabled.
+ *
+ * Use this safe Form-mode diagnostic after form fields are observed. It accepts
+ * no parameters, never fills or submits data, never triggers approval, and
+ * returns a confirmed, inferred, or unknown disabled-submit reason plus the
+ * current submit summary.
+ */
 export function bhFormFindDisabledSubmitReason(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { approvalRequestSchema } from '../../../../src/shared/schemas/approval.schema';
+import {
+  approvalDecisionSchema,
+  approvalRequestSchema
+} from '../../../../src/shared/schemas/approval.schema';
 
 describe('approvalRequestSchema', () => {
   it('accepts pending approval request', () => {
@@ -53,6 +56,39 @@ describe('approvalRequestSchema', () => {
         reason: 'Needs confirmation',
         status: 'waiting',
         createdAt: 1710000000000
+      })
+    ).toThrowError();
+  });
+});
+
+describe('approvalDecisionSchema', () => {
+  it('accepts approve decisions', () => {
+    const result = approvalDecisionSchema.parse({
+      requestId: 'apr_1',
+      decision: 'approved',
+      decidedAt: 1710000001000
+    });
+
+    expect(result.decision).toBe('approved');
+  });
+
+  it('accepts deny decisions with reason', () => {
+    const result = approvalDecisionSchema.parse({
+      requestId: 'apr_1',
+      decision: 'denied',
+      reason: 'User rejected destructive action',
+      decidedAt: 1710000001000
+    });
+
+    expect(result.reason).toContain('rejected');
+  });
+
+  it('rejects unknown decisions', () => {
+    expect(() =>
+      approvalDecisionSchema.parse({
+        requestId: 'apr_1',
+        decision: 'maybe',
+        decidedAt: 1710000001000
       })
     ).toThrowError();
   });

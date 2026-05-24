@@ -12,8 +12,13 @@ import { traceEventSchema } from '../../shared/schemas/trace.schema';
 import type { ApprovalRequest } from '../../shared/schemas/approval.schema';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { TRACE_EVENT_NAMES } from '../../shared/constants/event-names';
-import { ApprovalPolicy } from '../policy/approval-policy';
+import { PolicyEngine } from '../policy/policy-engine';
 import { approvalRequiredResult } from '../../tools/core/tool-result-factory';
+import {
+  redactDecisionForTrace,
+  redactModelOutputText,
+  redactToolArgs
+} from '../../tools/core/tool-args-redaction';
 
 type AgentLoopDeps = {
   modelClient: ModelClient;
@@ -41,7 +46,7 @@ export class AgentLoop {
     const runMode = input.mode ?? 'ask';
     const controller = new RunController(maxSteps);
     const stepRunner = new StepRunner();
-    const approvalPolicy = new ApprovalPolicy();
+    const policyEngine = new PolicyEngine();
     const session = createLoopSession({
       runId,
       task: input.task
@@ -179,7 +184,7 @@ export class AgentLoop {
         timestamp: Date.now(),
         schemaVersion: TRACE_SCHEMA_VERSION,
         payload: {
-          rawText: modelOutput.text,
+          rawText: redactModelOutputText(modelOutput.text),
           model: runtimeModel
         }
       });
@@ -195,7 +200,7 @@ export class AgentLoop {
           timestamp: Date.now(),
           schemaVersion: TRACE_SCHEMA_VERSION,
           payload: {
-            rawText: modelOutput.text,
+            rawText: redactModelOutputText(modelOutput.text),
             parseError: {
               code: parsed.error.code,
               message: parsed.error.message,
@@ -228,7 +233,7 @@ export class AgentLoop {
         timestamp: Date.now(),
         schemaVersion: TRACE_SCHEMA_VERSION,
         payload: {
-          decision: parsed.decision
+          decision: redactDecisionForTrace(parsed.decision)
         }
       });
 
@@ -313,6 +318,7 @@ export class AgentLoop {
       }
 
       const toolCall = parsed.decision;
+      const redactedArgs = redactToolArgs(toolCall.tool, toolCall.args);
       const toolContract = this.deps.toolRouter.getToolContract(toolCall.tool);
       appendTrace(this.deps.traceRecorder, {
         id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.TOOL_STARTED),
@@ -324,7 +330,7 @@ export class AgentLoop {
         schemaVersion: TRACE_SCHEMA_VERSION,
         payload: {
           tool: toolCall.tool,
-          argsPreview: toolCall.args,
+          argsPreview: redactedArgs,
           risk: toolContract?.risk ?? 'safe',
           modes: toolContract?.modes ?? ['internal']
         }
@@ -335,15 +341,15 @@ export class AgentLoop {
         !toolContract || isToolAvailableInRunMode(toolContract.modes, runMode);
       let toolResult: Awaited<ReturnType<ToolRouter['execute']>>;
       if (toolAllowed) {
-        const approvalEvaluation = approvalPolicy.evaluate({
+        const approvalEvaluation = policyEngine.evaluate({
           risk,
-          requestedByToolResult: false
+          wouldRequireApproval: false
         });
         toolResult = approvalEvaluation.requiresApproval
           ? approvalRequiredResult({
               reason: approvalEvaluation.reason,
               risk,
-              actionPreview: `Tool ${toolCall.tool} with args ${JSON.stringify(toolCall.args)}`
+              actionPreview: `Tool ${toolCall.tool} with args ${JSON.stringify(redactedArgs)}`
             })
           : await this.deps.toolRouter.execute(
               {
@@ -380,7 +386,7 @@ export class AgentLoop {
         schemaVersion: TRACE_SCHEMA_VERSION,
         payload: {
           tool: toolCall.tool,
-          argsPreview: toolCall.args,
+          argsPreview: redactedArgs,
           result: toolResult
         }
       });
@@ -390,7 +396,7 @@ export class AgentLoop {
         runId,
         stepIndex,
         ...(intent ? { intent } : {}),
-        decision: parsed.decision,
+        decision: redactDecisionForTrace(parsed.decision),
         toolResult
       });
 
@@ -468,7 +474,7 @@ export class AgentLoop {
           runId,
           stepId,
           tool: toolCall.tool,
-          argsPreview: toolCall.args,
+          argsPreview: redactedArgs,
           risk: toolResult.approval?.risk ?? 'high',
           reason: toolResult.approval?.reason ?? 'Approval required',
           ...(toolResult.approval?.actionPreview
@@ -533,7 +539,7 @@ export class AgentLoop {
           schemaVersion: TRACE_SCHEMA_VERSION,
           payload: {
             tool: toolCall.tool,
-            argsPreview: toolCall.args,
+            argsPreview: redactedArgs,
             code: toolResult.code,
             message: toolResult.summary,
             retryable

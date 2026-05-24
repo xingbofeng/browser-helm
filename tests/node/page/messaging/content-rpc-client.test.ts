@@ -205,6 +205,106 @@ describe('content RPC frame aggregation', () => {
       'frame_9 https://appleid.apple.com/widget/account/: CONTENT_SCRIPT_UNAVAILABLE'
     );
   });
+
+  it('routes iframe action messages to the requested frame', async () => {
+    const sendMessage = vi.fn(async () => ({
+      ok: true,
+      ref: {
+        refId: 'ref_102',
+        role: 'textbox',
+        name: '邮箱',
+        tagName: 'input',
+        visible: true,
+        disabled: false
+      },
+      changedPage: true
+    }));
+    vi.stubGlobal('chrome', {
+      scripting: {
+        executeScript: vi.fn(async () => [])
+      },
+      tabs: {
+        sendMessage
+      },
+      webNavigation: {
+        getAllFrames: vi.fn(async () => [
+          {
+            frameId: 0,
+            url: 'https://account.example.com'
+          },
+          {
+            frameId: 7,
+            url: 'https://frame.example.com/form',
+            parentFrameId: 0
+          }
+        ])
+      }
+    });
+
+    const client = new ChromeContentRpcClient(42);
+    const response = await client.request({
+      type: CONTENT_RPC_MESSAGES.IFRAME_TYPE,
+      frameId: 7,
+      refId: 'ref_102',
+      text: 'hello@example.com',
+      valuePreview: {
+        masked: false,
+        preview: 'hello@example.com'
+      }
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      changedPage: true
+    });
+    expect(sendMessage).toHaveBeenCalledWith(
+      42,
+      {
+        type: CONTENT_RPC_MESSAGES.IFRAME_TYPE,
+        frameId: 7,
+        refId: 'ref_102',
+        text: 'hello@example.com',
+        valuePreview: {
+          masked: false,
+          preview: 'hello@example.com'
+        }
+      },
+      { frameId: 7 }
+    );
+  });
+
+  it('returns a structured error when requested iframe is not listed', async () => {
+    const sendMessage = vi.fn();
+    vi.stubGlobal('chrome', {
+      scripting: {
+        executeScript: vi.fn(async () => [])
+      },
+      tabs: {
+        sendMessage
+      },
+      webNavigation: {
+        getAllFrames: vi.fn(async () => [
+          {
+            frameId: 0,
+            url: 'https://account.example.com'
+          }
+        ])
+      }
+    });
+
+    const client = new ChromeContentRpcClient(42);
+    const response = await client.request({
+      type: CONTENT_RPC_MESSAGES.IFRAME_CLICK,
+      frameId: 99,
+      refId: 'ref_102'
+    });
+
+    expect(response).toMatchObject({
+      ok: false,
+      code: 'FRAME_NOT_FOUND'
+    });
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
 });
 
 function observation(overrides: Record<string, unknown>) {

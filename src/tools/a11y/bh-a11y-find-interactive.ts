@@ -13,6 +13,15 @@ import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({});
 
+/**
+ * Returns a read-only list of current interactive page elements.
+ *
+ * Use this safe Debug/Form tool after observation when the Agent needs refs,
+ * roles, names, visibility, disabled state, and selection state for action
+ * planning or form diagnosis. It accepts no parameters, never changes page
+ * state, never triggers approval, and returns an interactive payload plus a
+ * compact context summary.
+ */
 export function bhA11yFindInteractive(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {

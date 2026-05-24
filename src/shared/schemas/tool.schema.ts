@@ -13,7 +13,14 @@ export const toolModeSchema = z.enum([
   'internal'
 ]);
 
-export const runModeSchema = z.enum(['ask', 'debug', 'form']);
+export const runModeSchema = z.enum(['ask', 'debug', 'form', 'act']);
+
+export const runModeLabels = {
+  ask: '询问 / Ask',
+  debug: '调试 / Debug',
+  form: '表单 / Form',
+  act: '动作准备 / Act'
+} as const satisfies Record<z.infer<typeof runModeSchema>, string>;
 
 export const toolSpecMetaSchema = z.object({
   name: z.string().min(1),

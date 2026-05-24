@@ -5,7 +5,7 @@ import type { RuntimePort } from '../../runtime/runtime-port';
 import type { RunSnapshot } from '../../runtime/runtime-messages';
 import { SIDE_PANEL_MESSAGES } from '../../shared/constants/event-names';
 import type { StructuredPageData } from '../../shared/schemas/structured-page-data.schema';
-import type { RunMode } from '../../shared/schemas/tool.schema';
+import { runModeLabels, type RunMode } from '../../shared/schemas/tool.schema';
 import './app.css';
 
 type SidePanelViewProps = {
@@ -196,6 +196,7 @@ export function SidePanelView(props: SidePanelViewProps) {
   const isError = Boolean(error) || snapshot?.status === 'error';
   const isEmpty = snapshot?.status === 'empty';
   const statusText = statusLabel(snapshot, busy, error);
+  const toolStatusHints = toolResultHints(snapshot?.toolResult);
 
   return (
     <main className="bh-shell">
@@ -218,9 +219,10 @@ export function SidePanelView(props: SidePanelViewProps) {
               value={mode}
               onChange={(event) => onModeChange(event.currentTarget.value as RunMode)}
             >
-              <option value="ask">Ask</option>
-              <option value="debug">Debug</option>
-              <option value="form">Form</option>
+              <option value="ask">{runModeLabels.ask}</option>
+              <option value="debug">{runModeLabels.debug}</option>
+              <option value="form">{runModeLabels.form}</option>
+              <option value="act">{runModeLabels.act}</option>
             </select>
           </div>
         </div>
@@ -373,6 +375,13 @@ export function SidePanelView(props: SidePanelViewProps) {
         {snapshot?.toolResult ? (
           <div className={snapshot.toolResult.ok ? 'bh-success' : 'bh-error'}>
             {snapshot.toolResult.tool} {snapshot.toolResult.code}: {snapshot.toolResult.summary}
+            {toolStatusHints.length ? (
+              <ul className="bh-toolHints">
+                {toolStatusHints.map((hint) => (
+                  <li key={hint}>{hint}</li>
+                ))}
+              </ul>
+            ) : null}
           </div>
         ) : (
           <div className="bh-empty">暂无工具结果。</div>
@@ -397,7 +406,7 @@ export function SidePanelView(props: SidePanelViewProps) {
         <h2>
           Trace / 调试日志 <span>{snapshot?.runId ?? '未开始'}</span>
         </h2>
-        <p className="bh-modeTrace">当前模式 {snapshot?.mode ?? mode}</p>
+        <p className="bh-modeTrace">当前模式 {runModeLabels[snapshot?.mode ?? mode]}</p>
       </section>
     </main>
   );
@@ -570,7 +579,30 @@ function statusLabel(
   if (snapshot.status === 'error') {
     return '观察失败';
   }
+  if (snapshot.status === 'waiting_for_approval') {
+    return '等待用户审批';
+  }
   return snapshot.status;
+}
+
+function toolResultHints(toolResult: RunSnapshot['toolResult'] | undefined): string[] {
+  if (!toolResult) {
+    return [];
+  }
+  const hints: string[] = [];
+  if (toolResult.requiresApproval || toolResult.code === 'APPROVAL_REQUIRED') {
+    hints.push('需要用户确认后再继续');
+  }
+  if (toolResult.code === 'USER_DENIED_APPROVAL') {
+    hints.push('用户拒绝了审批');
+  }
+  if (toolResult.requiresObserve) {
+    hints.push('需要重新观察页面');
+  }
+  if (toolResult.changedPage === false) {
+    hints.push('页面未被修改');
+  }
+  return hints;
 }
 
 function countRoles(refs: NonNullable<RunSnapshot['refs']>, roles: string[]): number {

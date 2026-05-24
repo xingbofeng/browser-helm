@@ -25,7 +25,10 @@ export const ERROR_CODE_DEFINITIONS = [
   { number: 3201, code: 'OBSERVATION_BUDGET_EXCEEDED', description: '页面观察超过预算' },
   { number: 3300, code: 'REF_NOT_FOUND', description: 'Ref 不存在' },
   { number: 3301, code: 'REF_STALE', description: 'Ref 已失效' },
+  { number: 3302, code: 'FRAME_NOT_FOUND', description: 'Frame 不存在' },
   { number: 3400, code: 'ELEMENT_STATE_UNREADABLE', description: '元素状态不可读' },
+  { number: 3401, code: 'ELEMENT_NOT_ACTIONABLE', description: '元素不可执行目标动作' },
+  { number: 3402, code: 'IFRAME_ACTION_UNAUTHORIZED', description: 'iframe 动作未通过 runtime 授权' },
   { number: 3500, code: 'FIELD_LABEL_MISSING', description: '字段 label 缺失' },
   { number: 3501, code: 'FORM_SUBMIT_NOT_FOUND', description: '未找到表单提交控件' },
   { number: 3502, code: 'FORM_FIELDS_UNAVAILABLE', description: '表单字段快照不可用' }
@@ -58,7 +61,10 @@ export const ERROR_CODES = {
   OBSERVATION_BUDGET_EXCEEDED: 'OBSERVATION_BUDGET_EXCEEDED',
   REF_NOT_FOUND: 'REF_NOT_FOUND',
   REF_STALE: 'REF_STALE',
+  FRAME_NOT_FOUND: 'FRAME_NOT_FOUND',
   ELEMENT_STATE_UNREADABLE: 'ELEMENT_STATE_UNREADABLE',
+  ELEMENT_NOT_ACTIONABLE: 'ELEMENT_NOT_ACTIONABLE',
+  IFRAME_ACTION_UNAUTHORIZED: 'IFRAME_ACTION_UNAUTHORIZED',
   FIELD_LABEL_MISSING: 'FIELD_LABEL_MISSING',
   FORM_SUBMIT_NOT_FOUND: 'FORM_SUBMIT_NOT_FOUND',
   FORM_FIELDS_UNAVAILABLE: 'FORM_FIELDS_UNAVAILABLE'

@@ -4,6 +4,7 @@
     <title>Iframe 表单 Widget</title>
   </head>
   <body>
+    <p id="iframe-readable-text">Iframe 内可读文本：账户资料 Widget 已加载。</p>
     <form>
       <label>邮箱 <input name="email" type="email" required /></label>
       <label>密码 <input name="password" type="password" required /></label>
@@ -13,6 +14,15 @@
           <option value="cn">中国大陆</option>
         </select>
       </label>
+      <button id="details" type="button" onclick="document.body.dataset.details = 'open'">
+        展开详情
+      </button>
+      <button id="navigate" type="button" onclick="document.body.innerHTML = '<p>iframe 已导航后的替代内容</p>'">
+        模拟 frame 导航
+      </button>
+      <button id="delete-account" type="button" onclick="document.body.dataset.danger = 'deleted'">
+        删除账号
+      </button>
       <button type="submit" disabled>创建账号</button>
     </form>
   </body>

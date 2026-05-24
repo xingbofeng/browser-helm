@@ -3,11 +3,26 @@ import { z } from 'zod';
 import type { StructuredPageData } from '../shared/schemas/structured-page-data.schema';
 import { runModeSchema, type RunMode } from '../shared/schemas/tool.schema';
 import { RUNTIME_MESSAGES } from '../shared/constants/event-names';
+import type { ApprovalRequest } from '../shared/schemas/approval.schema';
+import type { ToolResult } from '../shared/schemas/tool-result.schema';
 
 export const startRunInputSchema = z.object({
   task: z.string().min(1),
   mode: runModeSchema.default('ask'),
   tabId: z.number().int().positive().optional()
+});
+
+export const executeToolInputSchema = z.object({
+  runId: z.string().min(1),
+  tool: z.string().min(1),
+  args: z.record(z.string(), z.unknown())
+});
+
+export const decideApprovalInputSchema = z.object({
+  runId: z.string().min(1),
+  requestId: z.string().min(1),
+  decision: z.enum(['approved', 'denied']),
+  reason: z.string().min(1).optional()
 });
 
 export const runtimeRequestSchema = z.discriminatedUnion('type', [
@@ -18,6 +33,14 @@ export const runtimeRequestSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal(RUNTIME_MESSAGES.GET_SNAPSHOT),
     runId: z.string().min(1)
+  }),
+  z.object({
+    type: z.literal(RUNTIME_MESSAGES.EXECUTE_TOOL),
+    input: executeToolInputSchema
+  }),
+  z.object({
+    type: z.literal(RUNTIME_MESSAGES.DECIDE_APPROVAL),
+    input: decideApprovalInputSchema
   })
 ]);
 
@@ -34,6 +57,8 @@ export const runtimeResponseSchema = z.discriminatedUnion('ok', [
 ]);
 
 export type StartRunInput = z.input<typeof startRunInputSchema>;
+export type ExecuteToolInput = z.infer<typeof executeToolInputSchema>;
+export type DecideApprovalInput = z.infer<typeof decideApprovalInputSchema>;
 export type RuntimeRequest = z.infer<typeof runtimeRequestSchema>;
 export type RuntimeResponse = z.infer<typeof runtimeResponseSchema>;
 
@@ -62,21 +87,35 @@ export type RuntimeToolResultSnapshot = {
   ok: boolean;
   code: string;
   summary: string;
+  changedPage?: boolean | undefined;
+  requiresObserve?: boolean | undefined;
+  requiresApproval?: boolean | undefined;
 };
 
 export type RunSnapshot = {
   runId: string;
   mode: RunMode;
-  status: 'created' | 'observed' | 'empty' | 'error' | 'not_found';
+  status:
+    | 'created'
+    | 'observed'
+    | 'empty'
+    | 'error'
+    | 'failed'
+    | 'not_found'
+    | 'waiting_for_approval';
   observation?: RuntimeObservationSnapshot;
   refs?: RuntimeRefSnapshot[];
   structuredPageData?: StructuredPageData;
   toolResult?: RuntimeToolResultSnapshot;
+  pendingApproval?: ApprovalRequest | undefined;
+  trace?: RuntimeEvent[] | undefined;
   error?: {
     code: string;
     message: string;
   };
 };
+
+export type RuntimeToolExecutionResult = ToolResult;
 
 export type RuntimeEvent = {
   runId: string;

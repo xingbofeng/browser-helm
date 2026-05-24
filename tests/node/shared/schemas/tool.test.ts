@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  runModeLabels,
   runModeSchema,
   toolModeSchema,
   toolSpecMetaSchema
@@ -25,10 +26,20 @@ describe('toolSpecMetaSchema', () => {
     ).toThrowError();
   });
 
-  it('accepts only user-selectable run modes', () => {
+  it('accepts user-selectable run modes including act', () => {
     expect(runModeSchema.parse('ask')).toBe('ask');
     expect(runModeSchema.parse('debug')).toBe('debug');
     expect(runModeSchema.parse('form')).toBe('form');
-    expect(() => runModeSchema.parse('act')).toThrowError();
+    expect(runModeSchema.parse('act')).toBe('act');
+    expect(() => runModeSchema.parse('admin')).toThrowError();
+  });
+
+  it('provides bilingual run mode labels', () => {
+    expect(runModeLabels).toEqual({
+      ask: '询问 / Ask',
+      debug: '调试 / Debug',
+      form: '表单 / Form',
+      act: '动作准备 / Act'
+    });
   });
 });

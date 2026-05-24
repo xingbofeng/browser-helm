@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   approvalRequiredResult,
   failedToolResult,
-  successToolResult
+  successToolResult,
+  userDeniedApprovalResult
 } from '../../../../src/tools/core/tool-result-factory';
 
 describe('tool-result-factory', () => {
@@ -41,5 +42,15 @@ describe('tool-result-factory', () => {
     expect(result.ok).toBe(false);
     expect(result.requiresApproval).toBe(true);
     expect(result.code).toBe('APPROVAL_REQUIRED');
+  });
+
+  it('creates user denied approval result without marking page changed', () => {
+    const result = userDeniedApprovalResult('User declined checkout submit');
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('USER_DENIED_APPROVAL');
+    expect(result.summary).toBe('User declined checkout submit');
+    expect(result.changedPage).toBe(false);
+    expect(result.requiresObserve).toBe(false);
   });
 });

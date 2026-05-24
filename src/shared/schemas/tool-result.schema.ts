@@ -2,6 +2,13 @@ import { z } from 'zod';
 
 export const toolRiskSchema = z.enum(['safe', 'low', 'medium', 'high']);
 
+export const toolRiskLabels = {
+  safe: '安全 / Safe',
+  low: '低风险 / Low',
+  medium: '中风险 / Medium',
+  high: '高风险 / High'
+} as const satisfies Record<z.infer<typeof toolRiskSchema>, string>;
+
 export const toolResultSchema = z.object({
   ok: z.boolean(),
   code: z.string().min(1),

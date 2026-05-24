@@ -3,6 +3,7 @@ import { readAccessibleName } from './accessible-name';
 import { readElementState } from './element-state-reader';
 import type { RefMap } from './ref-map';
 import { resolveRole } from './role-resolver';
+import { isSensitiveField } from '../dom/sensitive-field';
 
 export type ResolvedRefElement = {
   refId: string;
@@ -13,6 +14,9 @@ export type ResolvedRefElement = {
   disabled: boolean;
   checked?: boolean | undefined;
   selected?: boolean | undefined;
+  inputType?: string | undefined;
+  autocomplete?: string | undefined;
+  isSensitive?: boolean | undefined;
   warnings?: Array<{ code: string; message: string }>;
 };
 
@@ -51,7 +55,8 @@ export function resolveRef(refMap: RefMap, refId: string): ResolveRefResult {
       role: resolveRole(entry.element),
       name: readAccessibleName(entry.element),
       tagName: entry.element.tagName.toLowerCase(),
-      ...readResolvedState(entry.element)
+      ...readResolvedState(entry.element),
+      ...readInputMetadata(entry.element)
     }
   };
 }
@@ -64,5 +69,16 @@ function readResolvedState(element: Element) {
     checked: state.checked,
     selected: state.selected,
     warnings: state.warnings
+  };
+}
+
+function readInputMetadata(element: Element) {
+  if (!(element instanceof HTMLElement)) {
+    return {};
+  }
+  return {
+    inputType: element.getAttribute('type')?.trim().toLowerCase() || undefined,
+    autocomplete: element.getAttribute('autocomplete')?.trim().toLowerCase() || undefined,
+    isSensitive: isSensitiveField(element)
   };
 }

@@ -65,6 +65,80 @@
 - [ ] 是否将“外部 URL 的人工验证清单”写入固定的 debug checklist。  
 - [ ] 是否将 `BROWSER_HELM_AGENT_URL` 从默认值改成必须显式传参。  
 - [ ] v0.31/v0.32 interactive 与 forms 上线后，是否继续保留 current placeholder 文案，还是直接切到最小可交互展示。
+- [ ] v0.33 若先实现 `bh_iframe_read` / `bh_iframe_click` / `bh_iframe_type`，后续进入 submit 类动作时提醒用户单独确认 `iframe_submit` / `bh_form_submit_with_approval` 的 approval UI、字段摘要和 submit 前 verify 边界。
+- [ ] v0.33 需要一次性补齐所有现有 `src/tools/` 工具的 TSDoc/JSDoc 风格块注释；新增 iframe/action readiness 工具也必须按同一标准落地。该要求已记录到 `AGENTS.md` 的工具实现规范。
+
+## [v0.33 Safe Action Readiness 实现] - 2026-05-25
+
+**目标**：实现动作准备状态、`动作准备 / Act` run mode、iframe read/click/type 受控原型、最小 approval runtime hook，并补齐全部 `bh_` 工具头部 TSDoc/JSDoc 注释。
+
+**设计决策**：选择把 Action Readiness 做成纯 DOM/page 能力，再由 `bh_action_check_readiness` 和 iframe click/type 强制复用。原因：安全检查不能只依赖模型主动调用；会修改页面的 iframe action 必须在工具内部先做 ref freshness、元素状态、风险和 approval 判断。
+
+**偏差说明**：原 roadmap 写“本阶段不实际修改页面”，本期根据用户确认引入了 iframe click/type prototype。偏差被限制在 `src/tools/frame/` 和 content RPC target-frame 链路内，且继续明确不做 `iframe_submit`、普通页面完整 click/type/nav、自动填表和完整 approval UI。
+
+**权衡分析**：
+- 方案一：只实现 readiness 与 `bh_iframe_read`。优点是范围最窄；缺点是无法验证 `changedPage/requiresObserve`、mask preview 和 approval 阻断在真实 mutating tool 中是否成立。
+- 方案二：增加 iframe read/click/type 受控原型。优点是能验证跨 frame 路由、动作前检查、敏感输入和 stale ref；缺点是 v0.33 范围扩大。
+- 选择方案二，因为 iframe 是当前真实网页的关键结构，且 click/type 仍受 Act mode、readiness 和 approval policy 约束，不进入 submit。
+
+**roadmap 验收对照**：
+- AC1-AC3：`checkActionReadiness` 覆盖有效 ref、stale ref、不可见、disabled、动作类型不匹配和 page change `requiresObserve`。
+- AC4-AC6：ApprovalRequest/ApprovalDecision/ApprovalManager、`waiting_for_approval`、approve resume、deny `USER_DENIED_APPROVAL`、approval audit/trace 事件已覆盖。
+- AC7：完整 `npm test` 与 E2E 回归通过。
+- AC8：主要改动落在 proposal 约定目录；额外触及 `src/entrypoints/sidepanel`、`src/background/runtime`、`tests/e2e` 与 roadmap/docs，是 Act 文案、runtime snapshot 和验收所需。
+- AC9-AC12：roadmap 已同步 Act 双语、iframe prototype、`iframe_submit` non-goal 和工具注释治理；工具文档结构测试覆盖全部 21 个 `bh_` 工具。
+
+**验证记录**：
+- `npx vitest run ...` action/frame/approval/tool schema 相关组合：18 files / 127 tests passed。
+- `npm run typecheck`：passed。
+- `npm run lint`：passed。
+- `npm test`：74 files / 282 tests passed。
+- `npm run build`：Chrome MV3 extension build passed。
+- `npm run test:e2e`：9 tests passed，真实 Chrome for Testing / unpacked extension / iframe fixtures；新增 act mode iframe read/click/type 链路通过。
+- `npx openspec validate implement-v0-33-safe-action-readiness --strict`：passed。
+
+**待确认**：
+- [ ] 进入 submit 类动作时，需提醒用户单独确认 `iframe_submit` / `bh_form_submit_with_approval` 是否作为独立工具、是否复用同一 approval UI、以及 submit 前 verify 边界。
+- [ ] v0.4 Approval UI 采用 modal、drawer 还是 timeline inspector 仍待设计确认。
+
+### Review 修复 - 2026-05-25
+
+**目标**：补齐 v0.33 验收 review 指出的真实 runtime 闭环缺口：runtime tool execution、approval approve/deny API、以及 iframe tool 的 extension E2E 链路。
+
+**设计决策**：选择在 `RunManager` 中新增 `executeTool` / `decideApproval` 最小 API，并通过 `BackgroundRuntimeHost` 暴露 `BH_RUNTIME_EXECUTE_TOOL` / `BH_RUNTIME_DECIDE_APPROVAL`。原因：v0.33 仍不做完整 Action UI，但必须让 background runtime 能真实调用 ToolRouter、创建 ApprovalRequest、处理 deny/approve 并更新 snapshot。
+
+**偏差说明**：approve 后本期只恢复 run 到可继续状态，不自动 replay/执行高风险动作。原因：v0.33 non-goal 仍是不做完整 approval UI、workflow replay 和 submit；后续 v0.4/v1.1 再决定批准后是否自动继续执行对应 action。
+
+**验证记录**：
+- `npx vitest run tests/node/runtime/run-manager.test.ts tests/node/runtime/background-runtime-host.test.ts`：passed。
+- `npm run typecheck`：passed。
+- `npm run lint`：passed。
+- `npm test`：75 files / 286 tests passed。
+- `npm run build`：passed。
+- `npm run test:e2e`：10 tests passed；新增 E2E 通过 `BH_RUNTIME_EXECUTE_TOOL` 调用 `bh_iframe_read/click/type`，并通过 `BH_RUNTIME_DECIDE_APPROVAL` 验证 high-risk iframe tool deny 后 `USER_DENIED_APPROVAL` 且页面未修改。
+- `npx openspec validate implement-v0-33-safe-action-readiness --strict`：passed。
+
+### Security Review 修复 - 2026-05-25
+
+**目标**：修复二次 review 指出的安全边界缺口：iframe type 敏感文本泄漏、裸 content RPC 可绕过工具层、policy/approval 判断分叉、敏感字段识别信号不足、Act mode 工具可见性偏宽。
+
+**设计决策**：选择增加统一 `redactToolArgs`，并把 AgentLoop trace、model decision trace、approval request、RunManager pending approval 都改为记录 redacted args。iframe click/type 的 content RPC 增加 runtime action token，工具层保留真实 text 执行但 preview/trace 只保留 `valuePreview`。
+
+**偏差说明**：本期仍不实现完整 approval UI 或 approve 后自动 replay；approve 只恢复到可继续状态。原因：v0.33 的目标是安全 readiness/runtime contract，完整人机审批界面留给 v0.4。
+
+**权衡分析**：
+- 方案一：只在 `bh_iframe_type` 工具内部 mask。优点是改动少；缺点是 AgentLoop、runtime approval、session trace 仍可能从上游 raw args 泄漏。
+- 方案二：在 trace/approval 入口统一 redaction，并让 content RPC 也具备最小授权守卫。优点是防线覆盖工具前、工具后和裸 RPC；缺点是需要多层测试。
+- 选择方案二，因为敏感值治理和页面 mutation 边界必须按 runtime 入口统一处理。
+
+**验证记录**：
+- `npx vitest run tests/node/agent/kernel/agent-loop.test.ts tests/node/runtime/run-manager.test.ts tests/dom/page/messaging/content-rpc-handler.test.ts tests/node/tools/frame/iframe-tools.test.ts tests/dom/page/dom/action-readiness.test.ts tests/node/tools/core/tool-router.test.ts tests/node/agent/policy/policy-engine.test.ts`：44 tests passed。
+- `npm run typecheck`：passed。
+- `npm run lint`：passed。
+- `npm test`：74 files / 289 tests passed。
+- `npm run build`：passed。
+- `npm run test:e2e`：10 tests passed，真实 Chrome for Testing / unpacked extension / iframe fixtures。
+- `npx openspec validate implement-v0-33-safe-action-readiness --strict`：passed。
 
 ## [v0.31/v0.32 Structured Interactions 实现] - 2026-05-24
 

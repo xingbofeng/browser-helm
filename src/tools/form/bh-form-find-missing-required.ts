@@ -9,6 +9,14 @@ import { isToolResult, loadFormToolData, missingRequiredFields } from './form-to
 
 const argsSchema = z.object({});
 
+/**
+ * Lists required form fields that currently have empty value previews.
+ *
+ * Use this safe Form-mode diagnostic to explain why a form may be incomplete.
+ * It accepts no parameters, reads the current form snapshot only, never
+ * triggers approval, and returns the missing required field list with count and
+ * warnings.
+ */
 export function bhFormFindMissingRequired(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {

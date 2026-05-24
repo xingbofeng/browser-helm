@@ -119,9 +119,10 @@ describe('side panel MVP', () => {
     expect(html).toContain('unsupported');
     expect(html).toContain('Observed 127.0.0.1');
     expect(html).toContain('Trace / 调试日志');
-    expect(html).toContain('Ask');
-    expect(html).toContain('Debug');
-    expect(html).toContain('Form');
+    expect(html).toContain('询问 / Ask');
+    expect(html).toContain('调试 / Debug');
+    expect(html).toContain('表单 / Form');
+    expect(html).toContain('动作准备 / Act');
     expect(html).toContain('当前模式');
     expect(html).toContain('<select');
     expect(html).toContain('<option');
@@ -228,6 +229,84 @@ describe('side panel MVP', () => {
     expect(html).toContain('邮箱');
     expect(html).toContain('valuePreview');
     expect(html).toContain('推断');
+  });
+
+  it('renders act mode and minimal approval/readiness status copy', () => {
+    const waitingHtml = renderToString(
+      <SidePanelView
+        task="点击 iframe 按钮"
+        mode="act"
+        snapshot={{
+          runId: 'run_act',
+          mode: 'act',
+          status: 'waiting_for_approval',
+          refs: [],
+          toolResult: {
+            tool: 'bh_iframe_click',
+            ok: false,
+            code: 'APPROVAL_REQUIRED',
+            summary: 'Requires approval before execution',
+            requiresApproval: true
+          }
+        }}
+        onTaskChange={() => undefined}
+        onModeChange={() => undefined}
+        onStartRun={() => undefined}
+      />
+    );
+    const deniedHtml = renderToString(
+      <SidePanelView
+        task="点击 iframe 按钮"
+        mode="act"
+        snapshot={{
+          runId: 'run_act',
+          mode: 'act',
+          status: 'error',
+          refs: [],
+          toolResult: {
+            tool: 'bh_iframe_click',
+            ok: false,
+            code: 'USER_DENIED_APPROVAL',
+            summary: 'User declined checkout submit',
+            changedPage: false,
+            requiresObserve: false
+          }
+        }}
+        onTaskChange={() => undefined}
+        onModeChange={() => undefined}
+        onStartRun={() => undefined}
+      />
+    );
+    const requiresObserveHtml = renderToString(
+      <SidePanelView
+        task="检查动作准备"
+        mode="act"
+        snapshot={{
+          runId: 'run_act',
+          mode: 'act',
+          status: 'observed',
+          refs: [],
+          toolResult: {
+            tool: 'bh_action_check_readiness',
+            ok: false,
+            code: 'REF_STALE',
+            summary: 'Action target needs a fresh observation',
+            changedPage: false,
+            requiresObserve: true
+          }
+        }}
+        onTaskChange={() => undefined}
+        onModeChange={() => undefined}
+        onStartRun={() => undefined}
+      />
+    );
+
+    expect(waitingHtml).toContain('动作准备 / Act');
+    expect(waitingHtml).toContain('等待用户审批');
+    expect(waitingHtml).toContain('需要用户确认后再继续');
+    expect(deniedHtml).toContain('用户拒绝了审批');
+    expect(deniedHtml).toContain('页面未被修改');
+    expect(requiresObserveHtml).toContain('需要重新观察页面');
   });
 });
 

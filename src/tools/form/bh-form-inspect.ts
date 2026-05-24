@@ -11,6 +11,14 @@ const argsSchema = z.object({
   formRefId: z.string().min(1).optional()
 });
 
+/**
+ * Inspects current form fields and submit state.
+ *
+ * Use this safe Debug/Form tool for a read-only form overview. The optional
+ * `formRefId` scopes the returned payload when available; the tool never fills,
+ * clicks, or submits, never triggers approval, and returns fields, submit
+ * diagnostics, and warnings.
+ */
 export function bhFormInspect(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {

@@ -9,6 +9,14 @@ import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({});
 
+/**
+ * Refreshes the page stable ref map without mutating the page.
+ *
+ * Use this safe Ask/Debug/Form tool after DOM changes or stale-ref failures to
+ * rebuild the a11y snapshot and stable refs. It accepts no parameters, never
+ * triggers approval, and returns the refreshed snapshot with `requiresObserve`
+ * set on failures that need a new observation cycle.
+ */
 export function bhA11yRefreshRefs(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {

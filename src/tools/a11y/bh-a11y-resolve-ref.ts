@@ -10,6 +10,14 @@ const argsSchema = z.object({
   refId: z.string().min(1)
 });
 
+/**
+ * Resolves one stable `refId` to the current element summary.
+ *
+ * Use this safe Ask/Debug/Form tool before inspecting or diagnosing a specific
+ * element. The `refId` parameter names the stable ref to resolve; the tool is
+ * read-only, never triggers approval, and returns either the current ref
+ * summary or a structured stale/unavailable error.
+ */
 export function bhA11yResolveRef(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {

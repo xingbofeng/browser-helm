@@ -14,6 +14,14 @@ const argsSchema = z.object({
   refId: z.string().min(1)
 });
 
+/**
+ * Reads visible, disabled, checked, and selected state for one ref.
+ *
+ * Use this safe Debug/Form tool to verify current element state without
+ * rereading a full form or page. The `refId` parameter names the target stable
+ * ref; the tool is read-only, never triggers approval, and returns a compact
+ * state payload or structured stale-ref failure.
+ */
 export function bhElementReadState(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {

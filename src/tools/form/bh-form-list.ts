@@ -9,6 +9,14 @@ import { isToolResult, loadFormToolData } from './form-tool-data';
 
 const argsSchema = z.object({});
 
+/**
+ * Lists detected form groups and high-level submit state.
+ *
+ * Use this safe Debug/Form tool to decide whether a page has form data worth
+ * inspecting. It accepts no parameters, does not mutate the page, never
+ * triggers approval, and returns form count, field count, submit summary, and
+ * warnings.
+ */
 export function bhFormList(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {

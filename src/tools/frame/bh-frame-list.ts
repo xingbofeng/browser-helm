@@ -8,6 +8,14 @@ import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({});
 
+/**
+ * Lists the frame tree for the current browser page.
+ *
+ * Use this read-only Debug/Form/Act helper when diagnosing iframe-hosted forms,
+ * widgets, and cross-frame refs. It never changes page state, carries safe risk,
+ * and returns frame ids, URLs, parent frame ids, and top-frame markers that later
+ * frame tools can use for routing and troubleshooting.
+ */
 export function bhFrameList(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
@@ -16,7 +24,7 @@ export function bhFrameList(
     // 调试跨域 iframe 与动态 widget 时列出当前页面 frame 元信息。
     title: 'Frame List',
     description: 'Lists frame ids and urls for the current page',
-    modes: ['debug', 'form'],
+    modes: ['debug', 'form', 'act'],
     risk: 'safe',
     argsSchema,
     resultSchema: toolResultSchema,

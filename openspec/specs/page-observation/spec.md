@@ -1,5 +1,9 @@
 # Page Observation Specification
 
+## Purpose
+
+定义 BrowserHelm 页面观察、stable ref、LLM 上下文隔离、provider 请求边界和只读 side panel MVP 的主线能力契约。
+
 ## Requirements
 
 ### Requirement: 页面观察工具

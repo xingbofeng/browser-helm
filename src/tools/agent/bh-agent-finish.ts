@@ -8,6 +8,14 @@ const argsSchema = z.object({
   message: z.string().min(1)
 });
 
+/**
+ * Ends the current Agent run with a successful final summary.
+ *
+ * Use this safe internal tool when the Agent has completed the task. The
+ * `message` parameter is the final user-facing summary; the tool does not
+ * mutate page state, never triggers approval, and returns an `AGENT_FINISH`
+ * result for terminal run orchestration.
+ */
 export const bhAgentFinish: ToolSpec<
   z.infer<typeof argsSchema>,
   z.infer<typeof toolResultSchema>

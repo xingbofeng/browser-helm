@@ -117,7 +117,10 @@ describe('ToolRouter', () => {
 
   it('filters prompt contracts by run mode while keeping internal tools visible', () => {
     const registry = new ToolRegistry();
-    const makeTool = (name: string, modes: Array<'ask' | 'debug' | 'form' | 'internal'>) => ({
+    const makeTool = (
+      name: string,
+      modes: Array<'ask' | 'debug' | 'form' | 'act' | 'internal'>
+    ) => ({
       name,
       title: name,
       description: name,
@@ -138,6 +141,7 @@ describe('ToolRouter', () => {
     registry.register(makeTool('bh_ask', ['ask']));
     registry.register(makeTool('bh_debug', ['debug']));
     registry.register(makeTool('bh_form', ['form']));
+    registry.register(makeTool('bh_act', ['act']));
     registry.register(makeTool('bh_internal', ['internal']));
 
     const router = new ToolRouter(registry);
@@ -154,6 +158,11 @@ describe('ToolRouter', () => {
     expect(router.listToolContracts('form').map((tool) => tool.name)).toEqual([
       'bh_ask',
       'bh_form',
+      'bh_internal'
+    ]);
+    expect(router.listToolContracts('act').map((tool) => tool.name)).toEqual([
+      'bh_ask',
+      'bh_act',
       'bh_internal'
     ]);
   });

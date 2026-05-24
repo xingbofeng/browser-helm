@@ -59,6 +59,84 @@ export class SidePanelPage {
     }, input);
   }
 
+  async executeTool(input: {
+    runId: string;
+    tool: string;
+    args: Record<string, unknown>;
+  }): Promise<unknown> {
+    const page = this.pageObject;
+    return await page.evaluate(async (toolInput) => {
+      type RuntimeSuccess<T> = { ok: true; data: T };
+      type RuntimeFailure = { ok: false; message: string };
+      const isSuccess = <T>(value: unknown): value is RuntimeSuccess<T> =>
+        typeof value === 'object' &&
+        value !== null &&
+        (value as { ok?: unknown }).ok === true &&
+        'data' in value;
+      const failureMessage = (value: unknown, fallback: string): string =>
+        typeof value === 'object' &&
+        value !== null &&
+        (value as RuntimeFailure).ok === false &&
+        typeof (value as RuntimeFailure).message === 'string'
+          ? (value as RuntimeFailure).message
+          : fallback;
+
+      const result: unknown = await chrome.runtime.sendMessage({
+        type: 'BH_RUNTIME_EXECUTE_TOOL',
+        input: toolInput
+      });
+      if (!isSuccess<unknown>(result)) {
+        throw new Error(failureMessage(result, 'Unable to execute tool'));
+      }
+      return result.data;
+    }, input);
+  }
+
+  async snapshot(runId: string): Promise<RunSnapshot> {
+    const page = this.pageObject;
+    return await page.evaluate(async (targetRunId) => {
+      type RuntimeSuccess<T> = { ok: true; data: T };
+      const result: unknown = await chrome.runtime.sendMessage({
+        type: 'BH_RUNTIME_GET_SNAPSHOT',
+        runId: targetRunId
+      });
+      if (
+        typeof result !== 'object' ||
+        result === null ||
+        (result as { ok?: unknown }).ok !== true ||
+        !('data' in result)
+      ) {
+        throw new Error('Unable to read run snapshot');
+      }
+      return (result as RuntimeSuccess<RunSnapshot>).data;
+    }, runId);
+  }
+
+  async decideApproval(input: {
+    runId: string;
+    requestId: string;
+    decision: 'approved' | 'denied';
+    reason?: string;
+  }): Promise<unknown> {
+    const page = this.pageObject;
+    return await page.evaluate(async (decisionInput) => {
+      type RuntimeSuccess<T> = { ok: true; data: T };
+      const result: unknown = await chrome.runtime.sendMessage({
+        type: 'BH_RUNTIME_DECIDE_APPROVAL',
+        input: decisionInput
+      });
+      if (
+        typeof result !== 'object' ||
+        result === null ||
+        (result as { ok?: unknown }).ok !== true ||
+        !('data' in result)
+      ) {
+        throw new Error('Unable to decide approval');
+      }
+      return (result as RuntimeSuccess<unknown>).data;
+    }, input);
+  }
+
   get pageObject(): Page {
     if (!this.page) {
       throw new Error('Side panel page is not open');

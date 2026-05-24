@@ -52,3 +52,21 @@ export function approvalRequiredResult(input: {
     }
   };
 }
+
+export function userDeniedApprovalResult(
+  reason = 'User denied approval'
+): ToolResult {
+  return {
+    ok: false,
+    code: ERROR_CODES.USER_DENIED_APPROVAL,
+    summary: reason,
+    changedPage: false,
+    requiresObserve: false,
+    error: {
+      message: reason,
+      detail: {
+        retryable: false
+      }
+    }
+  };
+}

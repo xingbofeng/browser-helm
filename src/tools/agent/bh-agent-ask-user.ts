@@ -8,6 +8,14 @@ const argsSchema = z.object({
   question: z.string().min(1)
 });
 
+/**
+ * Requests user input and pauses the Agent run.
+ *
+ * Use this safe internal tool only when the Agent cannot continue without a
+ * human decision. The `question` parameter is the visible prompt to return to
+ * the user; the tool does not touch page state, never triggers approval, and
+ * returns an `ASK_USER_REQUIRED` result for run orchestration.
+ */
 export const bhAgentAskUser: ToolSpec<
   z.infer<typeof argsSchema>,
   z.infer<typeof toolResultSchema>

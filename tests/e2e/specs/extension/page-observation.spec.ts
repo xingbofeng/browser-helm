@@ -37,3 +37,21 @@ test('refreshes side panel after delayed iframe form render', async () => {
     await flow.close();
   }
 });
+
+test('routes iframe read click and type in act mode without submit', async () => {
+  const flow = await PageObservationFlow.start();
+  try {
+    await flow.expectIframeActModeReadClickType();
+  } finally {
+    await flow.close();
+  }
+});
+
+test('denies high-risk iframe tool through runtime approval API', async () => {
+  const flow = await PageObservationFlow.start();
+  try {
+    await flow.expectRuntimeApprovalDenyForIframeTool();
+  } finally {
+    await flow.close();
+  }
+});

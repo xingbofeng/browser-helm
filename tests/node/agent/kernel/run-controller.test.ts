@@ -33,4 +33,19 @@ describe('run-controller', () => {
     expect(controller.status).toBe('cancelled');
     expect(controller.canRunStep(0)).toBe(false);
   });
+
+  it('supports approval approve and deny transitions', () => {
+    const controller = new RunController(3);
+
+    controller.waitForApproval('apr_1');
+    controller.approvePendingApproval();
+    expect(controller.status).toBe('running');
+    expect(controller.pendingApprovalRequestId).toBeUndefined();
+
+    controller.waitForApproval('apr_2');
+    controller.denyPendingApproval('USER_DENIED_APPROVAL');
+    expect(controller.status).toBe('failed');
+    expect(controller.pauseReason).toBe('USER_DENIED_APPROVAL');
+    expect(controller.pendingApprovalRequestId).toBeUndefined();
+  });
 });

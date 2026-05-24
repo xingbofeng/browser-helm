@@ -5,6 +5,7 @@ import { buildObservation } from '../observe/build-observation';
 import { readPageMetadata } from '../observe/page-metadata';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
+import { IFRAME_ACTION_TOKEN } from '../../shared/constants/runtime-auth';
 import {
   contentRpcRequestSchema,
   type ContentRpcRequest,
@@ -81,7 +82,121 @@ export class ContentRpcHandler {
           snapshot: buildA11ySnapshot(this.document, refMap)
         };
       }
+      case CONTENT_RPC_MESSAGES.IFRAME_READ: {
+        return this.readIframeTarget(message.refId);
+      }
+      case CONTENT_RPC_MESSAGES.IFRAME_CLICK: {
+        const unauthorized = this.validateIframeActionToken(message.actionToken);
+        if (unauthorized) {
+          return unauthorized;
+        }
+        const response = this.readIframeTarget(message.refId);
+        if (!response.ok || !('ref' in response)) {
+          return response;
+        }
+        const element = this.resolveElement(message.refId);
+        if (!element.ok) {
+          return element;
+        }
+        element.element.click();
+        return {
+          ok: true,
+          ref: response.ref,
+          changedPage: true
+        };
+      }
+      case CONTENT_RPC_MESSAGES.IFRAME_TYPE: {
+        const unauthorized = this.validateIframeActionToken(message.actionToken);
+        if (unauthorized) {
+          return unauthorized;
+        }
+        const response = this.readIframeTarget(message.refId);
+        if (!response.ok || !('ref' in response)) {
+          return response;
+        }
+        const element = this.resolveElement(message.refId);
+        if (!element.ok) {
+          return element;
+        }
+        if (!isTextEntryElement(element.element)) {
+          return {
+            ok: false,
+            code: ERROR_CODES.ELEMENT_NOT_ACTIONABLE,
+            message: 'Target element does not accept text input'
+          };
+        }
+        element.element.value = message.text;
+        element.element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.element.dispatchEvent(new Event('change', { bubbles: true }));
+        return {
+          ok: true,
+          ref: response.ref,
+          changedPage: true
+        };
+      }
     }
+  }
+
+  private readIframeTarget(refId: string): ContentRpcResponse {
+    const result = resolveRef(this.ensureRefMap(), refId);
+    if (!result.ok) {
+      return {
+        ok: false,
+        code: result.code,
+        message: result.message
+      };
+    }
+    return {
+      ok: true,
+      ref: result.element,
+      changedPage: false
+    };
+  }
+
+  private validateIframeActionToken(
+    actionToken: string | undefined
+  ): ContentRpcResponse | undefined {
+    if (actionToken === IFRAME_ACTION_TOKEN) {
+      return undefined;
+    }
+    return {
+      ok: false,
+      code: ERROR_CODES.IFRAME_ACTION_UNAUTHORIZED,
+      message: 'Iframe mutations must be routed through the runtime tool boundary'
+    };
+  }
+
+  private resolveElement(refId: string):
+    | {
+        ok: true;
+        element: HTMLElement;
+      }
+    | {
+        ok: false;
+        code: string;
+        message: string;
+      } {
+    const refMap = this.ensureRefMap();
+    const result = resolveRef(refMap, refId);
+    if (!result.ok) {
+      return {
+        ok: false,
+        code: result.code,
+        message: result.message
+      };
+    }
+    const entry = refMap.resolve(refId);
+    if (entry?.element instanceof HTMLElement && !refMap.isEntryStale(entry)) {
+      return {
+        ok: true,
+        element: entry.element
+      };
+    }
+    return {
+      ok: false,
+      code: ERROR_CODES.REF_STALE,
+      message: `Ref is stale: ${refId}`
+    };
   }
 
   private ensureRefMap(reset = false): RefMap {
@@ -99,4 +214,13 @@ export class ContentRpcHandler {
     }
     return this.refMap;
   }
+}
+
+function isTextEntryElement(
+  element: HTMLElement
+): element is HTMLInputElement | HTMLTextAreaElement {
+  return (
+    element.tagName.toLowerCase() === 'input' ||
+    element.tagName.toLowerCase() === 'textarea'
+  );
 }

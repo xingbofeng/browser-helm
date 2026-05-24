@@ -4,6 +4,7 @@ import {
   a11ySnapshotSchema,
   observationSchema
 } from '../../shared/schemas/observation.schema';
+import { actionValuePreviewSchema } from '../../shared/schemas/action-readiness.schema';
 import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 
 export const contentRpcRequestSchema = z.discriminatedUnion('type', [
@@ -22,10 +23,29 @@ export const contentRpcRequestSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal(CONTENT_RPC_MESSAGES.A11Y_REFRESH_REFS)
+  }),
+  z.object({
+    type: z.literal(CONTENT_RPC_MESSAGES.IFRAME_READ),
+    frameId: z.number().int().nonnegative(),
+    refId: z.string().min(1)
+  }),
+  z.object({
+    type: z.literal(CONTENT_RPC_MESSAGES.IFRAME_CLICK),
+    frameId: z.number().int().nonnegative(),
+    refId: z.string().min(1),
+    actionToken: z.string().optional()
+  }),
+  z.object({
+    type: z.literal(CONTENT_RPC_MESSAGES.IFRAME_TYPE),
+    frameId: z.number().int().nonnegative(),
+    refId: z.string().min(1),
+    text: z.string(),
+    actionToken: z.string().optional(),
+    valuePreview: actionValuePreviewSchema
   })
 ]);
 
-export const contentRpcSuccessSchema = z.discriminatedUnion('ok', [
+export const contentRpcSuccessSchema = z.union([
   z.object({
     ok: z.literal(true),
     observation: observationSchema
@@ -47,7 +67,8 @@ export const contentRpcSuccessSchema = z.discriminatedUnion('ok', [
   }),
   z.object({
     ok: z.literal(true),
-    ref: z.unknown()
+    ref: z.unknown(),
+    changedPage: z.boolean().optional()
   })
 ]);
 

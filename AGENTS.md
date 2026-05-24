@@ -25,7 +25,9 @@ BrowserHelm 是一个 local-first、a11y-first 的浏览器 Agent 扩展，技�
 
 ## 工具实现规范
 
-`src/tools/` 下新增工具必须同步维护工具可读性和目录清单。每个 `ToolSpec.title` 字段前必须有一句简短中文注释，说明该工具在 Agent 语义里的用途和使用时机；注释服务维护者阅读，不替代 `description`。新增、删除或重命名工具时，必须同步更新 `src/tools/README.md` 的已实现工具表格，至少包含工具名、title、目录、模式、风险、参数和含义。新增工具仍必须遵循 `bh_` 协议名前缀、Zod `argsSchema` / `resultSchema`、正确 `risk` 标注和既有 approval policy 边界。
+`src/tools/` 下新增工具必须同步维护工具可读性和目录清单。每个工具模块必须在导出的 ToolSpec 或 ToolSpec factory 前提供 TSDoc/JSDoc 风格块注释（`/** ... */`），作为工具头部说明。注释至少说明：工具在 Agent 语义里的用途、适用 run mode、是否只读或会改变页面状态、风险等级、是否可能触发 approval、主要参数含义、返回结果语义，以及典型使用时机。该块注释是工具维护的金标准，服务维护者阅读，不替代 `description`。
+
+每个 `ToolSpec.title` 字段前仍必须保留一句简短中文维护注释，说明该工具在 Agent 语义里的用途和使用时机。新增、删除或重命名工具时，必须同步更新 `src/tools/README.md` 的已实现工具表格，至少包含工具名、title、目录、模式、风险、参数和含义。新增工具仍必须遵循 `bh_` 协议名前缀、Zod `argsSchema` / `resultSchema`、正确 `risk` 标注和既有 approval policy 边界。v0.33 需要一次性补齐所有历史工具的同等 TSDoc/JSDoc 块注释；此后不再接受只依赖行内短注释的工具模块。
 
 ## 文档与 OpenSpec 语言
 

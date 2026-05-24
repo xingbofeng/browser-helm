@@ -14,6 +14,15 @@ const argsSchema = z.object({
   refId: z.string().min(1)
 });
 
+/**
+ * Inspects one interactive element by stable ref.
+ *
+ * Use this safe Debug/Form tool when the Agent needs a focused read-only
+ * element summary before form diagnosis or action planning. The `refId`
+ * parameter selects the stable ref; the tool never mutates page state, never
+ * triggers approval, and returns role/name/tag/state details or a stale-ref
+ * error.
+ */
 export function bhElementInspect(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {

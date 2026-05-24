@@ -20,6 +20,10 @@ _避免使用_：full page parser、form doctor、action executor
 面向产品的数据类别，用于 Cockpit panel 和 runtime snapshot。
 _避免使用_：browser tab、Chrome tab
 
+**Cockpit UI / 驾驶舱 UI**：
+BrowserHelm 在 extension side panel 中提供的用户控制面，用于查看页面数据、Agent 步骤、工具结果、trace、settings 和 approval。
+_避免使用_：side panel app、desktop workbench、form doctor UI
+
 **Observation Tab Data**：
 记录页面 URL、标题、可见文本摘要和页面状态的 Tab Data 类别。
 _避免使用_：raw DOM
@@ -53,8 +57,8 @@ _避免使用_：empty、no data
 _避免使用_：LLM summary、narrative report
 
 **Run Mode**：
-一次 Agent run 的工具可见性边界。
-_避免使用_：task classifier、mode system
+一次 Agent run 的工具可见性边界。面向用户展示时使用中英文双语名称，例如“询问 / Ask”、“调试 / Debug”、“表单 / Form”、“动作准备 / Act”。
+_避免使用_：task classifier、mode system、权限模式
 
 **Run Mode Gate**：
 按当前 Run Mode 裁剪模型可见工具，并阻止不允许的工具执行的最小门禁。
@@ -85,7 +89,8 @@ _避免使用_：empty reason、unsupported
 - **Agent Kernel** 产出工具调用或 **Terminal Decision**。
 - **Structured Page Data** 包含 **Observation Tab Data**、**Ref Tab Data**、**Interactive Tab Data** 和 **Form Fields Tab Data**。
 - **Structured Page Data** 是 v0.3 契约层；完整 interactive discovery 属于 v0.31，完整 form field reading 属于 v0.32，**Action Readiness** 属于 v0.33。
-- **Tab Data** 供 Cockpit UI 和 runtime snapshot 使用；Agent context 只接收从 Tab Data 裁剪出的摘要。
+- **Cockpit UI / 驾驶舱 UI** 承载用户可见的 side panel 体验；side panel 是宿主位置，不是产品概念。
+- **Tab Data** 供 **Cockpit UI / 驾驶舱 UI** 和 runtime snapshot 使用；Agent context 只接收从 Tab Data 裁剪出的摘要。
 - **Interactive Tab Data** 和 **Form Fields Tab Data** 只负责识别与诊断页面结构，不判断动作是否可以安全执行。
 - **Run Mode Gate** 是 v0.31/v0.32 为新增细粒度工具提供的最小工具门禁；完整 **Mode System** 属于 v1.0。
 - **Disabled Submit Reason** 可以是 **Confirmed Reason**、**Inferred Reason** 或 **Unknown Reason**。
@@ -117,3 +122,4 @@ _避免使用_：empty reason、unsupported
 - “interactive” 容易被误解成允许执行动作。已澄清：**Interactive Tab Data** 是只读识别；**Action Readiness** 才判断后续动作是否可以安全执行。
 - “submit disabled reason” 容易把推断说成事实。已澄清：disabled submit reason 必须区分 **Confirmed Reason**、**Inferred Reason** 和 **Unknown Reason**。
 - “mode” 容易同时指手动门禁和完整智能模式系统。已澄清：**Run Mode Gate** 是当前最小工具门禁；**Mode System** 是 v1.0 的自动分类和策略裁剪。
+- “side panel” 容易同时指 Chrome 宿主位置和产品界面。已澄清：产品界面统一称为 **Cockpit UI / 驾驶舱 UI**。

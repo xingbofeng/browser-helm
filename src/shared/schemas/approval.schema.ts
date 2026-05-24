@@ -16,4 +16,12 @@ export const approvalRequestSchema = z.object({
   decidedAt: z.number().int().nonnegative().optional()
 });
 
+export const approvalDecisionSchema = z.object({
+  requestId: z.string().min(1),
+  decision: z.enum(['approved', 'denied']),
+  reason: z.string().min(1).optional(),
+  decidedAt: z.number().int().nonnegative()
+});
+
 export type ApprovalRequest = z.infer<typeof approvalRequestSchema>;
+export type ApprovalDecision = z.infer<typeof approvalDecisionSchema>;

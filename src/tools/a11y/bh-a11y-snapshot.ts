@@ -9,6 +9,14 @@ import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({});
 
+/**
+ * Captures an a11y-like snapshot and stable refs for the current page.
+ *
+ * Use this safe Ask/Debug/Form tool as a low-level page structure reader. It
+ * accepts no parameters, does not modify page state, never triggers approval,
+ * and returns the bounded snapshot with a compact summary suitable for Agent
+ * context.
+ */
 export function bhA11ySnapshot(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {

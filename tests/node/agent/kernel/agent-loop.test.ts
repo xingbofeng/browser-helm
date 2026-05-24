@@ -372,6 +372,78 @@ describe('agent-loop', () => {
     expect(approvalRequired).toBeDefined();
   });
 
+  it('redacts sensitive iframe type text from trace and approval previews', async () => {
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'bh_iframe_type',
+      title: 'Type In Iframe Target',
+      description: 'Types into iframe',
+      modes: ['act'],
+      risk: 'medium',
+      argsSchema: z.object({
+        refId: z.string(),
+        text: z.string(),
+        valuePreview: z.object({
+          masked: z.boolean(),
+          preview: z.string(),
+          reason: z.string().optional()
+        })
+      }),
+      resultSchema: z.object({
+        ok: z.boolean(),
+        code: z.string(),
+        summary: z.string(),
+        requiresApproval: z.boolean(),
+        approval: z.object({
+          reason: z.string(),
+          risk: z.enum(['safe', 'low', 'medium', 'high']),
+          actionPreview: z.string()
+        })
+      }),
+      execute: async () => ({
+        ok: false,
+        code: 'APPROVAL_REQUIRED',
+        summary: 'Need approval',
+        requiresApproval: true,
+        approval: {
+          reason: 'Sensitive input',
+          risk: 'high',
+          actionPreview: 'Type [MASKED] into frame_7:ref_201'
+        }
+      })
+    });
+    const loop = new AgentLoop({
+      modelClient: new MockModelClient([
+        JSON.stringify({
+          type: 'tool_call',
+          tool: 'bh_iframe_type',
+          args: {
+            refId: 'frame_7:ref_201',
+            text: 'super-secret',
+            valuePreview: {
+              masked: true,
+              preview: '[MASKED]',
+              reason: 'password'
+            }
+          }
+        })
+      ]),
+      decisionParser: new DecisionParser(),
+      toolRouter: new ToolRouter(registry),
+      contextBuilder: new ContextBuilder(),
+      traceRecorder: new InMemoryTraceRecorder()
+    });
+
+    const result = await loop.run({
+      task: 'Type password',
+      mode: 'act',
+      maxSteps: 2
+    });
+
+    expect(JSON.stringify(result.trace)).not.toContain('super-secret');
+    expect(JSON.stringify(result.trace)).toContain('[MASKED]');
+  });
+
   it('records tool_failed with retryable', async () => {
     const registry = new ToolRegistry();
     registry.register({

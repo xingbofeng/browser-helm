@@ -9,6 +9,14 @@ import { isToolResult, loadFormToolData, validationErrorFields } from './form-to
 
 const argsSchema = z.object({});
 
+/**
+ * Lists form fields that currently fail validation.
+ *
+ * Use this safe Form-mode diagnostic when the Agent needs browser validation or
+ * `aria-invalid` evidence. It accepts no parameters, does not modify fields or
+ * submit forms, never triggers approval, and returns invalid field snapshots
+ * with count and warnings.
+ */
 export function bhFormFindValidationErrors(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {

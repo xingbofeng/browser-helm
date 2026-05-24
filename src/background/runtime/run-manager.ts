@@ -2,11 +2,21 @@ import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import { ChromeContentRpcClient } from '../../page/messaging/content-rpc-client';
 import { buildStructuredPageData } from '../../page/structured/structured-page-data';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
+import { TRACE_EVENT_NAMES } from '../../shared/constants/event-names';
 import type { Observation } from '../../shared/schemas/observation.schema';
 import type { ToolResult } from '../../shared/schemas/tool-result.schema';
+import { ApprovalManager } from '../../runtime/approval/approval-manager';
+import { redactToolArgs } from '../../tools/core/tool-args-redaction';
 import { ToolRouter } from '../../tools/core/tool-router';
+import { userDeniedApprovalResult } from '../../tools/core/tool-result-factory';
 import { createToolRegistry } from '../../tools';
-import type { RunSnapshot, StartRunInput } from '../../runtime/runtime-messages';
+import type {
+  DecideApprovalInput,
+  ExecuteToolInput,
+  RunSnapshot,
+  RuntimeEvent,
+  StartRunInput
+} from '../../runtime/runtime-messages';
 import type { RunMode } from '../../shared/schemas/tool.schema';
 
 type RunManagerDeps = {
@@ -16,6 +26,15 @@ type RunManagerDeps = {
 
 export class RunManager {
   private nextId = 1;
+  private readonly approvalManager = new ApprovalManager();
+  private readonly records = new Map<
+    string,
+    {
+      mode: RunMode;
+      tabId?: number | undefined;
+      trace: RuntimeEvent[];
+    }
+  >();
   private readonly snapshots = new Map<string, RunSnapshot>();
 
   constructor(private readonly deps: RunManagerDeps = {}) {}
@@ -32,6 +51,10 @@ export class RunManager {
 
     const tabId = input.tabId ?? (await this.getActiveTabId());
     if (!tabId) {
+      this.records.set(runId, {
+        mode,
+        trace: []
+      });
       this.snapshots.set(runId, {
         runId,
         mode,
@@ -45,6 +68,11 @@ export class RunManager {
       return { runId };
     }
 
+    this.records.set(runId, {
+      mode,
+      tabId,
+      trace: []
+    });
     const router = this.createToolRouter(tabId);
     const result = await router.execute(
       { tool: 'bh_page_observe', args: {} },
@@ -52,6 +80,152 @@ export class RunManager {
     );
     this.snapshots.set(runId, this.snapshotFromToolResult(runId, mode, result));
     return { runId };
+  }
+
+  async executeTool(input: ExecuteToolInput): Promise<ToolResult> {
+    const record = this.records.get(input.runId);
+    const redactedArgs = redactToolArgs(input.tool, input.args);
+    if (!record?.tabId) {
+      const result = userDeniedApprovalResult('Run is not available for tool execution');
+      this.snapshots.set(input.runId, {
+        runId: input.runId,
+        mode: record?.mode ?? 'ask',
+        status: 'error',
+        refs: [],
+        toolResult: snapshotToolResult(input.tool, result),
+        error: {
+          code: result.code,
+          message: result.summary
+        },
+        trace: record?.trace ?? []
+      });
+      return result;
+    }
+
+    const router = this.createToolRouter(record.tabId);
+    const result = await router.execute(
+      {
+        tool: input.tool,
+        args: input.args
+      },
+      {
+        runId: input.runId,
+        stepId: `${input.runId}:${input.tool}`,
+        runMode: record.mode
+      }
+    );
+
+    if (result.requiresApproval) {
+      const request = this.approvalManager.create({
+        runId: input.runId,
+        stepId: `${input.runId}:${input.tool}`,
+        tool: input.tool,
+        argsPreview: redactedArgs,
+        risk: result.approval?.risk ?? 'high',
+        reason: result.approval?.reason ?? result.summary,
+        actionPreview: result.approval?.actionPreview
+      });
+      record.trace.push({
+        runId: input.runId,
+        type: TRACE_EVENT_NAMES.APPROVAL_REQUIRED,
+        payload: {
+          request,
+          summary: request.reason
+        }
+      });
+      this.snapshots.set(input.runId, {
+        ...this.getSnapshot(input.runId),
+        status: 'waiting_for_approval',
+        toolResult: snapshotToolResult(input.tool, result),
+        pendingApproval: request,
+        trace: record.trace
+      });
+      return result;
+    }
+
+    this.snapshots.set(input.runId, {
+      ...this.getSnapshot(input.runId),
+      status: result.ok ? 'observed' : 'error',
+      toolResult: snapshotToolResult(input.tool, result),
+      pendingApproval: undefined,
+      trace: record.trace,
+      ...(result.ok
+        ? {}
+        : {
+            error: {
+              code: result.code,
+              message: result.error?.message ?? result.summary
+            }
+          })
+    });
+    return result;
+  }
+
+  decideApproval(input: DecideApprovalInput): Promise<ToolResult> {
+    const record = this.records.get(input.runId);
+    const decidedAt = Date.now();
+    const decision = this.approvalManager.decide({
+      requestId: input.requestId,
+      decision: input.decision,
+      reason: input.reason,
+      decidedAt
+    });
+    if (!decision.ok) {
+      return Promise.resolve({
+        ok: false,
+        code: decision.code,
+        summary: decision.message,
+        error: {
+          message: decision.message
+        }
+      });
+    }
+
+    if (input.decision === 'denied') {
+      const result = userDeniedApprovalResult(input.reason ?? 'User denied approval');
+      record?.trace.push({
+        runId: input.runId,
+        type: TRACE_EVENT_NAMES.STATE_CHANGED,
+        payload: {
+          from: 'waiting_for_approval',
+          to: 'failed',
+          reason: result.code
+        }
+      });
+      this.snapshots.set(input.runId, {
+        ...this.getSnapshot(input.runId),
+        status: 'failed',
+        pendingApproval: undefined,
+        toolResult: snapshotToolResult(decision.request.tool, result),
+        trace: record?.trace ?? []
+      });
+      return Promise.resolve(result);
+    }
+
+    const result: ToolResult = {
+      ok: true,
+      code: ERROR_CODES.OK,
+      summary: 'Approval approved; run can resume',
+      changedPage: false,
+      requiresObserve: false
+    };
+    record?.trace.push({
+      runId: input.runId,
+      type: TRACE_EVENT_NAMES.STATE_CHANGED,
+      payload: {
+        from: 'waiting_for_approval',
+        to: 'running',
+        reason: 'approval_approved'
+      }
+    });
+    this.snapshots.set(input.runId, {
+      ...this.getSnapshot(input.runId),
+      status: 'observed',
+      pendingApproval: undefined,
+      toolResult: snapshotToolResult(decision.request.tool, result),
+      trace: record?.trace ?? []
+    });
+    return Promise.resolve(result);
   }
 
   getSnapshot(runId: string): RunSnapshot {
@@ -135,4 +309,19 @@ export class RunManager {
       toolResult
     };
   }
+}
+
+function snapshotToolResult(
+  tool: string,
+  result: ToolResult
+): NonNullable<RunSnapshot['toolResult']> {
+  return {
+    tool,
+    ok: result.ok,
+    code: result.code,
+    summary: result.summary,
+    changedPage: result.changedPage,
+    requiresObserve: result.requiresObserve,
+    requiresApproval: result.requiresApproval
+  };
 }

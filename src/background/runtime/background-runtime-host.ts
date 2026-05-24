@@ -6,8 +6,13 @@ import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { RUNTIME_MESSAGES } from '../../shared/constants/event-names';
 import { RunManager } from './run-manager';
 
+type RuntimeRunManager = Pick<
+  RunManager,
+  'startRun' | 'getSnapshot' | 'executeTool' | 'decideApproval'
+>;
+
 export class BackgroundRuntimeHost {
-  constructor(private readonly runManager = new RunManager()) {}
+  constructor(private readonly runManager: RuntimeRunManager = new RunManager()) {}
 
   async handleMessage(message: unknown): Promise<RuntimeResponse> {
     const parsed = runtimeRequestSchema.safeParse(message);
@@ -29,6 +34,16 @@ export class BackgroundRuntimeHost {
         return {
           ok: true,
           data: this.runManager.getSnapshot(parsed.data.runId)
+        };
+      case RUNTIME_MESSAGES.EXECUTE_TOOL:
+        return {
+          ok: true,
+          data: await this.runManager.executeTool(parsed.data.input)
+        };
+      case RUNTIME_MESSAGES.DECIDE_APPROVAL:
+        return {
+          ok: true,
+          data: await this.runManager.decideApproval(parsed.data.input)
         };
     }
   }

@@ -1,0 +1,132 @@
+import { z } from 'zod';
+
+import { checkResolvedActionReadiness } from '../../page/dom/action-readiness';
+import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
+import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
+import { IFRAME_ACTION_TOKEN } from '../../shared/constants/runtime-auth';
+import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
+import { approvalRequiredResult } from '../core/tool-result-factory';
+import type { ToolSpec } from '../core/tool-spec';
+import { parseFrameRef } from './frame-ref';
+
+const argsSchema = z.object({
+  refId: z.string().min(1),
+  frameId: z.number().int().nonnegative().optional()
+});
+
+/**
+ * Clicks a target inside an iframe after readiness and policy checks.
+ *
+ * Use this Act-mode prototype for controlled iframe clicks only. It first reads
+ * the target ref, checks visibility/disabled/risk through Action Readiness, and
+ * returns approval-required results for high-risk targets before any mutation.
+ * Successful clicks mark the page as changed and require a fresh observation.
+ */
+export function bhIframeClick(
+  rpc: ContentRpcClient
+): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
+  return {
+    name: 'bh_iframe_click',
+    // 对 iframe 内目标执行受控点击，执行前必须通过 readiness 和 approval policy。
+    title: 'Click Iframe Target',
+    description: 'Clicks an iframe target after readiness and approval checks',
+    modes: ['act'],
+    risk: 'medium',
+    argsSchema,
+    resultSchema: toolResultSchema,
+    async execute(args) {
+      const parsed = parseFrameRef(args);
+      if (!parsed.ok) {
+        return failure(parsed.code, parsed.message, false);
+      }
+      const read = await rpc.request({
+        type: CONTENT_RPC_MESSAGES.IFRAME_READ,
+        frameId: parsed.frameId,
+        refId: parsed.innerRefId
+      });
+      if (!read.ok) {
+        return failure(read.code, read.message, true, read.detail);
+      }
+      if (!('ref' in read)) {
+        return failure(ERROR_CODES.OBSERVATION_FAILED, 'Content RPC did not return an iframe ref', true);
+      }
+
+      const readiness = checkResolvedActionReadiness(
+        { kind: 'click', refId: args.refId, source: 'tool' },
+        normalizeResolvedRef(parsed.innerRefId, read.ref)
+      );
+      if (!readiness.canAct) {
+        return failure(readiness.code, readiness.reason, readiness.requiresObserve);
+      }
+      if (readiness.wouldRequireApproval) {
+        return {
+          ...approvalRequiredResult({
+            reason: readiness.reason,
+            risk: readiness.risk,
+            actionPreview: `Click ${args.refId}`
+          }),
+          changedPage: false,
+          requiresObserve: false
+        };
+      }
+
+      const clicked = await rpc.request({
+        type: CONTENT_RPC_MESSAGES.IFRAME_CLICK,
+        frameId: parsed.frameId,
+        refId: parsed.innerRefId,
+        actionToken: IFRAME_ACTION_TOKEN
+      });
+      if (!clicked.ok) {
+        return failure(clicked.code, clicked.message, true, clicked.detail);
+      }
+
+      return {
+        ok: true,
+        code: ERROR_CODES.OK,
+        summary: `Clicked iframe target ${args.refId}`,
+        data: {
+          frameId: parsed.frameId,
+          refId: args.refId
+        },
+        changedPage: true,
+        requiresObserve: true,
+        nextHints: ['Run bh_page_observe again after iframe click']
+      };
+    }
+  };
+}
+
+function failure(
+  code: string,
+  message: string,
+  requiresObserve: boolean,
+  detail?: unknown
+): ToolResult {
+  return {
+    ok: false,
+    code,
+    summary: message,
+    error: { message, detail },
+    changedPage: false,
+    requiresObserve
+  };
+}
+
+function normalizeResolvedRef(refId: string, ref: unknown) {
+  const record = (typeof ref === 'object' && ref !== null ? ref : {}) as Record<
+    string,
+    unknown
+  >;
+  return {
+    refId,
+    role: typeof record.role === 'string' ? record.role : undefined,
+    name: typeof record.name === 'string' ? record.name : undefined,
+    tagName: typeof record.tagName === 'string' ? record.tagName : 'unknown',
+    visible: typeof record.visible === 'boolean' ? record.visible : false,
+    disabled: typeof record.disabled === 'boolean' ? record.disabled : false,
+    inputType: typeof record.inputType === 'string' ? record.inputType : undefined,
+    autocomplete: typeof record.autocomplete === 'string' ? record.autocomplete : undefined,
+    isSensitive: typeof record.isSensitive === 'boolean' ? record.isSensitive : undefined
+  };
+}

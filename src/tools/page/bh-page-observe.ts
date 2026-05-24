@@ -13,6 +13,14 @@ import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({});
 
+/**
+ * Observes the current page and returns bounded structured context.
+ *
+ * Use this safe Ask/Debug/Form tool as the primary read-only page observation
+ * entrypoint. It accepts no parameters, never mutates the page, never triggers
+ * approval, and returns the raw observation plus a compact structured summary
+ * for Agent context and follow-up ref-based tools.
+ */
 export function bhPageObserve(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {

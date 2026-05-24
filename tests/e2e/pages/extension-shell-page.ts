@@ -56,6 +56,32 @@ export class ExtensionShellPage {
     return result;
   }
 
+  async sendFrameMessage(
+    tabId: number,
+    frameId: number,
+    message: Record<string, unknown>
+  ): Promise<unknown> {
+    const worker = await this.worker();
+    const result = await worker.evaluate<unknown, {
+      targetTabId: number;
+      targetFrameId: number;
+      payload: Record<string, unknown>;
+    }>(
+      async ({ targetTabId, targetFrameId, payload }) => {
+        const response: unknown = await chrome.tabs.sendMessage(targetTabId, payload, {
+          frameId: targetFrameId
+        });
+        return response;
+      },
+      {
+        targetTabId: tabId,
+        targetFrameId: frameId,
+        payload: message
+      }
+    );
+    return result;
+  }
+
   private async worker(): Promise<Worker> {
     return (
       this.context.serviceWorkers()[0] ??

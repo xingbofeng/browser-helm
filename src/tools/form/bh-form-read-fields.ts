@@ -9,6 +9,14 @@ import { isToolResult, loadFormToolData } from './form-tool-data';
 
 const argsSchema = z.object({});
 
+/**
+ * Reads current form field snapshots.
+ *
+ * Use this safe Debug/Form tool when the Agent needs labels, names, types,
+ * required flags, masked value previews, and validation state. It accepts no
+ * parameters, never writes page state, never triggers approval, and returns the
+ * field list, count, submit summary, and warnings.
+ */
 export function bhFormReadFields(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {

@@ -4,6 +4,7 @@ node_modules/
 dist/
 test-results/
 artifacts/
+data/
 .env
 .env.*
 !.env.example

@@ -42,7 +42,10 @@ export function createContentRpcStrategies(
     new AllFrameObservationStrategy(context),
     new AllFrameSnapshotStrategy(context, CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT),
     new AllFrameSnapshotStrategy(context, CONTENT_RPC_MESSAGES.A11Y_REFRESH_REFS),
-    new ResolveRefStrategy(context)
+    new ResolveRefStrategy(context),
+    new TargetFrameStrategy(context, CONTENT_RPC_MESSAGES.IFRAME_READ),
+    new TargetFrameStrategy(context, CONTENT_RPC_MESSAGES.IFRAME_CLICK),
+    new TargetFrameStrategy(context, CONTENT_RPC_MESSAGES.IFRAME_TYPE)
   ];
 }
 
@@ -135,6 +138,32 @@ class ResolveRefStrategy implements ContentRpcStrategy {
       };
     }
     return response;
+  }
+}
+
+class TargetFrameStrategy implements ContentRpcStrategy {
+  constructor(
+    private readonly context: ContentRpcStrategyContext,
+    readonly type: ContentRpcRequest['type']
+  ) {}
+
+  async execute(message: ContentRpcRequest): Promise<ContentRpcResponse> {
+    if (!('frameId' in message) || typeof message.frameId !== 'number') {
+      return {
+        ok: false,
+        code: ERROR_CODES.CONTENT_SCRIPT_UNAVAILABLE,
+        message: `Missing target frame for ${message.type}`
+      };
+    }
+    const frames = await this.context.frames();
+    if (!frames.some((frame) => frame.frameId === message.frameId)) {
+      return {
+        ok: false,
+        code: ERROR_CODES.FRAME_NOT_FOUND,
+        message: `Frame not found: ${message.frameId}`
+      };
+    }
+    return safeSendFrameMessage(this.context, message.frameId, message);
   }
 }
 

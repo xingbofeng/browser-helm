@@ -42,6 +42,16 @@ export class RunController {
     this.pendingApprovalRequestId = requestId;
   }
 
+  approvePendingApproval(): void {
+    this.resume();
+  }
+
+  denyPendingApproval(reason: string): void {
+    this.stateMachine.transitionTo('failed');
+    this.pauseReason = reason;
+    this.pendingApprovalRequestId = undefined;
+  }
+
   markFinished(): void {
     this.stateMachine.transitionTo('finished');
   }

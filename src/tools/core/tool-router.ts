@@ -110,7 +110,10 @@ export function isToolAvailableInRunMode(
   if (runMode === 'debug') {
     return toolModes.includes('ask') || toolModes.includes('debug');
   }
-  return toolModes.includes('ask') || toolModes.includes('form');
+  if (runMode === 'form') {
+    return toolModes.includes('ask') || toolModes.includes('form');
+  }
+  return toolModes.includes('ask') || toolModes.includes('act');
 }
 
 function normalizeError(error: unknown): string {

@@ -1,5 +1,9 @@
 # Agent Kernel Specification
 
+## Purpose
+
+定义 BrowserHelm Agent Kernel 的最小决策循环、工具结果边界、HITL 协议预留和 trace 元数据契约。
+
 ## Requirements
 
 ### Requirement: 工具结果压缩边界

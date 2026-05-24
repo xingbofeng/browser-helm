@@ -4,7 +4,7 @@ import { bhA11yRefreshRefs } from '../../../../src/tools/a11y/bh-a11y-refresh-re
 import { bhA11yResolveRef } from '../../../../src/tools/a11y/bh-a11y-resolve-ref';
 import { bhA11ySnapshot } from '../../../../src/tools/a11y/bh-a11y-snapshot';
 import { bhPageObserve } from '../../../../src/tools/page/bh-page-observe';
-import { bhFrameList } from '../../../../src/tools/page/bh-frame-list';
+import { bhFrameList } from '../../../../src/tools/frame/bh-frame-list';
 import type { ContentRpcClient } from '../../../../src/page/messaging/content-rpc-client';
 import { ToolRegistry } from '../../../../src/tools/core/tool-registry';
 import { ToolRouter } from '../../../../src/tools/core/tool-router';
