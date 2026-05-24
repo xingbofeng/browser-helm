@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Delayed Iframe 表单 Widget</title>
+  </head>
+  <body>
+    <main id="root">
+      <p>loading form...</p>
+    </main>
+    <script>
+      window.setTimeout(() => {
+        document.querySelector('#root').innerHTML = `
+          <form>
+            <label>邮箱 <input name="email" type="email" required /></label>
+            <label>密码 <input name="password" type="password" required /></label>
+            <button type="submit" disabled>创建账号</button>
+          </form>
+        `;
+      }, 1200);
+    </script>
+  </body>
+</html>

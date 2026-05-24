@@ -127,9 +127,104 @@ describe('agent-loop', () => {
       throw new Error('expected run_started event');
     }
     expect(runStarted.payload.metadata.model).toBe('gpt-5-mini');
+    expect(runStarted.payload.metadata.runMode).toBe('ask');
     expect(runStarted.payload.metadata.providerBaseUrl).toBe(
       'https://api.example.com/v1'
     );
+  });
+
+  it('records explicit run mode and only exposes mode-available tools to the model', async () => {
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'bh_page_observe',
+      title: 'Observe',
+      description: 'Observe page',
+      modes: ['ask'],
+      risk: 'safe',
+      argsSchema: z.object({}),
+      resultSchema: z.object({
+        ok: z.boolean(),
+        code: z.string(),
+        summary: z.string()
+      }),
+      execute: async () => ({
+        ok: true,
+        code: 'OK',
+        summary: 'observed'
+      })
+    });
+    registry.register({
+      name: 'bh_form_read_fields',
+      title: 'Read Fields',
+      description: 'Read fields',
+      modes: ['form'],
+      risk: 'safe',
+      argsSchema: z.object({}),
+      resultSchema: z.object({
+        ok: z.boolean(),
+        code: z.string(),
+        summary: z.string()
+      }),
+      execute: async () => ({
+        ok: true,
+        code: 'OK',
+        summary: 'fields'
+      })
+    });
+    registry.register({
+      name: 'bh_debug_only',
+      title: 'Debug Only',
+      description: 'Debug',
+      modes: ['debug'],
+      risk: 'safe',
+      argsSchema: z.object({}),
+      resultSchema: z.object({
+        ok: z.boolean(),
+        code: z.string(),
+        summary: z.string()
+      }),
+      execute: async () => ({
+        ok: true,
+        code: 'OK',
+        summary: 'debug'
+      })
+    });
+
+    let systemPrompt = '';
+    const loop = new AgentLoop({
+      modelClient: {
+        complete: async (input) => {
+          systemPrompt = input.messages[0]?.content ?? '';
+          return {
+            text: JSON.stringify({
+              type: 'finish',
+              message: 'done'
+            })
+          };
+        }
+      },
+      decisionParser: new DecisionParser(),
+      toolRouter: new ToolRouter(registry),
+      contextBuilder: new ContextBuilder(),
+      traceRecorder: new InMemoryTraceRecorder()
+    });
+
+    const result = await loop.run({
+      task: 'Diagnose form',
+      mode: 'form',
+      maxSteps: 1
+    });
+    const runStarted = result.trace.find((event) => event.type === 'run_started');
+
+    expect(systemPrompt).toContain('Current run mode: form');
+    expect(systemPrompt).toContain('bh_page_observe');
+    expect(systemPrompt).toContain('bh_form_read_fields');
+    expect(systemPrompt).not.toContain('bh_debug_only');
+    expect(runStarted).toBeDefined();
+    if (!runStarted || runStarted.type !== 'run_started') {
+      throw new Error('expected run_started event');
+    }
+    expect(runStarted.payload.metadata.runMode).toBe('form');
   });
 
   it('passes registered tool names into context builder', async () => {

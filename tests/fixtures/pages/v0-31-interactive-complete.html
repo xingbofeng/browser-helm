@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head>
+    <title>v0.31 交互元素 Fixture</title>
+  </head>
+  <body>
+    <main>
+      <button>保存</button>
+      <button disabled>删除</button>
+      <a href="/help">帮助中心</a>
+      <input aria-label="搜索" value="browser helm" />
+      <textarea aria-label="备注">已有备注</textarea>
+      <select aria-label="城市">
+        <option>上海</option>
+        <option selected>杭州</option>
+      </select>
+      <details>
+        <summary>展开高级选项</summary>
+        <p>高级内容</p>
+      </details>
+      <div role="button" aria-label="自定义按钮" tabindex="0"></div>
+      <div role="link" aria-label="自定义链接" tabindex="0"></div>
+      <div role="checkbox" aria-label="订阅通知" aria-checked="true" tabindex="0"></div>
+      <div role="radio" aria-label="企业版" aria-checked="false" tabindex="0"></div>
+      <div role="switch" aria-label="启用同步" aria-checked="true" tabindex="0"></div>
+      <div role="textbox" aria-label="自定义输入" contenteditable="true"></div>
+      <div role="combobox" aria-label="选择国家" tabindex="0"></div>
+      <div role="option" aria-label="中国" aria-selected="true" tabindex="0"></div>
+      <div role="tab" aria-label="设置" aria-selected="false" tabindex="0"></div>
+      <div tabindex="0" data-plain-tabindex>只可聚焦的普通容器</div>
+    </main>
+  </body>
+</html>

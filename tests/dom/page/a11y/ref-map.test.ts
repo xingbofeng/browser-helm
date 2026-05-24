@@ -72,6 +72,37 @@ describe('a11y snapshot and ref map', () => {
     });
   });
 
+  it('preserves checked and selected state when resolving interactive refs', () => {
+    const page = loadDomFixture(
+      'v0-31-interactive-complete.html',
+      'https://demo.example.com/interactive'
+    );
+    const refMap = new RefMap({
+      tabId: 1,
+      documentId: 'doc-1',
+      origin: 'https://demo.example.com'
+    });
+    const snapshot = buildA11ySnapshot(page.document, refMap);
+    const switchRefId = snapshot.elements.find(
+      (element) => element.name === '启用同步'
+    )?.refId;
+    const optionRefId = snapshot.elements.find(
+      (element) => element.name === '中国'
+    )?.refId;
+
+    const resolvedSwitch = resolveRef(refMap, switchRefId ?? '');
+    expect(resolvedSwitch.ok).toBe(true);
+    if (resolvedSwitch.ok) {
+      expect(resolvedSwitch.element.checked).toBe(true);
+    }
+
+    const resolvedOption = resolveRef(refMap, optionRefId ?? '');
+    expect(resolvedOption.ok).toBe(true);
+    if (resolvedOption.ok) {
+      expect(resolvedOption.element.selected).toBe(true);
+    }
+  });
+
   it('does not reuse refs across origins', () => {
     const page = loadDomFixture(
       'dynamic-page.html',

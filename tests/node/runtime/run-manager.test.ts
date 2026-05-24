@@ -41,12 +41,13 @@ describe('RunManager', () => {
       }
     });
 
-    const started = await manager.startRun({ task: '观察页面' });
+    const started = await manager.startRun({ task: '观察页面', mode: 'form' });
     const snapshot = manager.getSnapshot(started.runId);
 
     expect(snapshot).toMatchObject({
       runId: started.runId,
       status: 'observed',
+      mode: 'form',
       observation: {
         title: '欢迎注册 - 示例网站',
         currentDomain: '127.0.0.1',
@@ -59,6 +60,20 @@ describe('RunManager', () => {
           name: '提交'
         }
       ],
+      structuredPageData: {
+        refs: {
+          status: 'ready',
+          count: 1
+        },
+        interactive: {
+          status: 'ready',
+          count: 1
+        },
+        forms: {
+          status: 'unsupported',
+          count: 0
+        }
+      },
       toolResult: {
         tool: 'bh_page_observe',
         ok: true,
@@ -85,6 +100,7 @@ describe('RunManager', () => {
 
     expect(manager.getSnapshot(started.runId)).toMatchObject({
       status: 'error',
+      mode: 'ask',
       error: {
         code: 'CONTENT_SCRIPT_UNAVAILABLE',
         message: 'Cannot access this page'

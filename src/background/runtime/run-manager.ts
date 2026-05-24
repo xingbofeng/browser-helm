@@ -1,14 +1,13 @@
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import { ChromeContentRpcClient } from '../../page/messaging/content-rpc-client';
+import { buildStructuredPageData } from '../../page/structured/structured-page-data';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
 import type { Observation } from '../../shared/schemas/observation.schema';
 import type { ToolResult } from '../../shared/schemas/tool-result.schema';
-import { bhA11yRefreshRefs } from '../../tools/a11y/bh-a11y-refresh-refs';
-import { bhA11yResolveRef } from '../../tools/a11y/bh-a11y-resolve-ref';
-import { bhA11ySnapshot } from '../../tools/a11y/bh-a11y-snapshot';
-import { ToolRegistry } from '../../tools/core/tool-registry';
 import { ToolRouter } from '../../tools/core/tool-router';
-import { bhPageObserve } from '../../tools/page/bh-page-observe';
+import { createToolRegistry } from '../../tools';
 import type { RunSnapshot, StartRunInput } from '../../runtime/runtime-messages';
+import type { RunMode } from '../../shared/schemas/tool.schema';
 
 type RunManagerDeps = {
   getActiveTabId?: () => Promise<number | undefined>;
@@ -24,8 +23,10 @@ export class RunManager {
   async startRun(input: StartRunInput): Promise<{ runId: string }> {
     const runId = `run_${this.nextId}`;
     this.nextId += 1;
+    const mode = input.mode ?? 'ask';
     this.snapshots.set(runId, {
       runId,
+      mode,
       status: 'created'
     });
 
@@ -33,10 +34,11 @@ export class RunManager {
     if (!tabId) {
       this.snapshots.set(runId, {
         runId,
+        mode,
         status: 'error',
         refs: [],
         error: {
-          code: 'CONTENT_SCRIPT_UNAVAILABLE',
+          code: ERROR_CODES.CONTENT_SCRIPT_UNAVAILABLE,
           message: 'No active browser tab is available'
         }
       });
@@ -46,9 +48,9 @@ export class RunManager {
     const router = this.createToolRouter(tabId);
     const result = await router.execute(
       { tool: 'bh_page_observe', args: {} },
-      { runId, stepId: `${runId}:observe` }
+      { runId, stepId: `${runId}:observe`, runMode: mode }
     );
-    this.snapshots.set(runId, this.snapshotFromToolResult(runId, result));
+    this.snapshots.set(runId, this.snapshotFromToolResult(runId, mode, result));
     return { runId };
   }
 
@@ -56,6 +58,7 @@ export class RunManager {
     return (
       this.snapshots.get(runId) ?? {
         runId,
+        mode: 'ask',
         status: 'not_found'
       }
     );
@@ -63,12 +66,7 @@ export class RunManager {
 
   private createToolRouter(tabId: number): ToolRouter {
     const rpc = this.createContentRpcClient(tabId);
-    const registry = new ToolRegistry();
-    registry.register(bhPageObserve(rpc));
-    registry.register(bhA11ySnapshot(rpc));
-    registry.register(bhA11yResolveRef(rpc));
-    registry.register(bhA11yRefreshRefs(rpc));
-    return new ToolRouter(registry);
+    return new ToolRouter(createToolRegistry(rpc));
   }
 
   private createContentRpcClient(tabId: number): ContentRpcClient {
@@ -89,7 +87,11 @@ export class RunManager {
     return tab?.id;
   }
 
-  private snapshotFromToolResult(runId: string, result: ToolResult): RunSnapshot {
+  private snapshotFromToolResult(
+    runId: string,
+    mode: RunMode,
+    result: ToolResult
+  ): RunSnapshot {
     const toolResult = {
       tool: 'bh_page_observe',
       ok: result.ok,
@@ -100,6 +102,7 @@ export class RunManager {
     if (!result.ok) {
       return {
         runId,
+        mode,
         status: 'error',
         refs: [],
         toolResult,
@@ -112,8 +115,10 @@ export class RunManager {
 
     const observation = result.data as Observation;
     const refs = observation.refSummary;
+    const structuredPageData = buildStructuredPageData(observation);
     return {
       runId,
+      mode,
       status: refs.length > 0 ? 'observed' : 'empty',
       observation: {
         url: observation.url,
@@ -126,6 +131,7 @@ export class RunManager {
         warnings: observation.warnings
       },
       refs,
+      structuredPageData,
       toolResult
     };
   }

@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <title>v0.32 校验与敏感字段 Fixture</title>
+  </head>
+  <body>
+    <main>
+      <form id="blocked">
+        <label for="blocked-email">邮箱</label>
+        <input
+          id="blocked-email"
+          name="email"
+          type="email"
+          required
+          value="not-an-email"
+          aria-invalid="true"
+        />
+        <label>
+          密码
+          <input name="password" type="password" value="super-secret-password" />
+        </label>
+        <label for="api-key">API Key</label>
+        <input id="api-key" name="apiKey" type="text" value="sk-test-123456" autocomplete="one-time-code" />
+        <label for="otp">一次性验证码</label>
+        <input id="otp" name="otp" type="text" value="123456" />
+        <button type="submit" disabled>提交</button>
+      </form>
+      <form id="missing-submit" data-missing-submit>
+        <label>
+          只有字段没有提交按钮
+          <input name="missingSubmitField" required />
+        </label>
+      </form>
+    </main>
+  </body>
+</html>

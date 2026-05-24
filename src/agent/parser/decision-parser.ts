@@ -4,9 +4,12 @@ import {
   type AgentDecision,
   agentDecisionSchema
 } from '../../shared/schemas/agent-decision.schema';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
 
 type DecisionParseError = {
-  code: 'MODEL_OUTPUT_INVALID_JSON' | 'MODEL_OUTPUT_SCHEMA_INVALID';
+  code:
+    | typeof ERROR_CODES.MODEL_OUTPUT_INVALID_JSON
+    | typeof ERROR_CODES.MODEL_OUTPUT_SCHEMA_INVALID;
   message: string;
   detail?: unknown;
 };
@@ -32,7 +35,7 @@ export class DecisionParser {
       return {
         ok: false,
         error: {
-          code: 'MODEL_OUTPUT_INVALID_JSON',
+          code: ERROR_CODES.MODEL_OUTPUT_INVALID_JSON,
           message: 'Model output is not valid JSON'
         }
       };
@@ -43,7 +46,7 @@ export class DecisionParser {
       return {
         ok: false,
         error: {
-          code: 'MODEL_OUTPUT_SCHEMA_INVALID',
+          code: ERROR_CODES.MODEL_OUTPUT_SCHEMA_INVALID,
           message: 'Model output does not match AgentDecision schema',
           detail: normalizeZodError(result.error)
         }

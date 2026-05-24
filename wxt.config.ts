@@ -9,7 +9,7 @@ export default defineConfig({
     action: {
       default_title: 'Open BrowserHelm side panel'
     },
-    permissions: ['storage', 'tabs', 'scripting', 'sidePanel'],
+    permissions: ['storage', 'tabs', 'scripting', 'sidePanel', 'webNavigation'],
     host_permissions: ['<all_urls>']
   }
 });

@@ -20,7 +20,8 @@ describe('traceEventSchema', () => {
           promptVersion: 'v0.1.0',
           toolSchemaVersion: 'v0.1.0',
           contextPolicyVersion: 'v0.1.0',
-          model: 'gpt-5-mini'
+          model: 'gpt-5-mini',
+          runMode: 'ask'
         }
       }
     });

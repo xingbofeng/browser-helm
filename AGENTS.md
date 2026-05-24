@@ -23,6 +23,10 @@ BrowserHelm 是一个 local-first、a11y-first 的浏览器 Agent 扩展，技�
 
 使用 TypeScript 严格类型和 Zod schema 维护运行时契约。遵守现有 ESLint flat config，不绕过 lint 规则。文件名统一使用横杠式 kebab-case，例如 `agent-loop.ts`、`tool-result.schema.ts`、`agent-loop.test.ts`；类名和类型名使用 PascalCase，函数和变量使用 camelCase。工具命名遵循 `bh_` 前缀。优先小而直接的模块，不新增无需求驱动的抽象。
 
+## 工具实现规范
+
+`src/tools/` 下新增工具必须同步维护工具可读性和目录清单。每个 `ToolSpec.title` 字段前必须有一句简短中文注释，说明该工具在 Agent 语义里的用途和使用时机；注释服务维护者阅读，不替代 `description`。新增、删除或重命名工具时，必须同步更新 `src/tools/README.md` 的已实现工具表格，至少包含工具名、title、目录、模式、风险、参数和含义。新增工具仍必须遵循 `bh_` 协议名前缀、Zod `argsSchema` / `resultSchema`、正确 `risk` 标注和既有 approval policy 边界。
+
 ## 文档与 OpenSpec 语言
 
 项目文档默认使用中文，包括 `docs/roadmap/`、`CONTEXT.md`、`implementation-notes.md`、`AGENTS.md` 和 OpenSpec change artifacts（`proposal.md`、`design.md`、`tasks.md`、`specs/**/spec.md`）。OpenSpec 要求固定的结构性标题或关键字（如 `## ADDED Requirements`、`### Requirement:`、`#### Scenario:`）可以保留英文以满足工具解析，但标题内容、正文、验收描述和任务说明应使用中文。

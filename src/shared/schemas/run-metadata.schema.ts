@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { modelCapabilitiesSchema } from './capabilities.schema';
+import { runModeSchema } from './tool.schema';
 
 export const runMetadataSchema = z.object({
   schemaVersion: z.string().min(1),
@@ -8,6 +9,7 @@ export const runMetadataSchema = z.object({
   toolSchemaVersion: z.string().min(1),
   contextPolicyVersion: z.string().min(1),
   model: z.string().min(1),
+  runMode: runModeSchema,
   providerBaseUrl: z.url().optional(),
   modelCapabilities: modelCapabilitiesSchema.optional()
 });

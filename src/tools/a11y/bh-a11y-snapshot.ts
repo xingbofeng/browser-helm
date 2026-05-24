@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { ERROR_CODES } from '../../shared/constants/error-codes';
+import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 import { a11ySnapshotSchema } from '../../shared/schemas/observation.schema';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
@@ -12,6 +14,7 @@ export function bhA11ySnapshot(
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
   return {
     name: 'bh_a11y_snapshot',
+    // 捕获当前页面的 a11y-like 快照，并为可交互候选生成 stable refs。
     title: 'A11y Snapshot',
     description: 'Returns an accessibility-like snapshot with stable refs',
     modes: ['ask', 'debug', 'form'],
@@ -19,20 +22,20 @@ export function bhA11ySnapshot(
     argsSchema,
     resultSchema: toolResultSchema,
     async execute() {
-      const response = await rpc.request({ type: 'BH_A11Y_SNAPSHOT' });
+      const response = await rpc.request({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
       if (!response.ok) {
         return failure(response.code, response.message, response.detail);
       }
       if (!('snapshot' in response)) {
         return failure(
-          'OBSERVATION_FAILED',
+          ERROR_CODES.OBSERVATION_FAILED,
           'Content RPC did not return an a11y snapshot'
         );
       }
       const snapshot = a11ySnapshotSchema.parse(response.snapshot);
       return {
         ok: true,
-        code: 'OK',
+        code: ERROR_CODES.OK,
         summary: `Captured ${snapshot.elements.length} interactive refs`,
         data: snapshot,
         changedPage: false,

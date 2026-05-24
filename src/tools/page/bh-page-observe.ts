@@ -1,9 +1,14 @@
 import { z } from 'zod';
 
+import { ERROR_CODES } from '../../shared/constants/error-codes';
+import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 import { observationSchema } from '../../shared/schemas/observation.schema';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
-import { compressObservation } from '../../page/observe/observation-compressor';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
+import {
+  buildStructuredPageContextSummary,
+  buildStructuredPageData
+} from '../../page/structured/structured-page-data';
 import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({});
@@ -13,6 +18,7 @@ export function bhPageObserve(
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
   return {
     name: 'bh_page_observe',
+    // 读取当前页面的 bounded observation，并派生 structured context summary。
     title: 'Page Observe',
     description: 'Observes the current page and returns a bounded summary',
     modes: ['ask', 'debug', 'form'],
@@ -20,7 +26,7 @@ export function bhPageObserve(
     argsSchema,
     resultSchema: toolResultSchema,
     async execute() {
-      const response = await rpc.request({ type: 'BH_PAGE_OBSERVE' });
+      const response = await rpc.request({ type: CONTENT_RPC_MESSAGES.PAGE_OBSERVE });
       if (!response.ok) {
         return {
           ok: false,
@@ -41,7 +47,7 @@ export function bhPageObserve(
       if (!('observation' in response)) {
         return {
           ok: false,
-          code: 'OBSERVATION_FAILED',
+          code: ERROR_CODES.OBSERVATION_FAILED,
           summary: 'Content RPC did not return an observation',
           error: {
             message: 'Content RPC did not return an observation'
@@ -52,11 +58,12 @@ export function bhPageObserve(
       }
 
       const observation = observationSchema.parse(response.observation);
-      const summary = compressObservation(observation);
+      const structured = buildStructuredPageData(observation);
+      const summary = buildStructuredPageContextSummary(structured);
       return {
         ok: true,
-        code: 'OK',
-        summary: `Observed ${summary.currentDomain}: ${summary.pageStateSummary}`,
+        code: ERROR_CODES.OK,
+        summary: `Observed ${summary.currentDomain}: ${summary.summary}`,
         data: observation,
         nextHints: ['Use ref_id values for follow-up page tools'],
         changedPage: false,

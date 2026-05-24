@@ -1,0 +1,71 @@
+export const ERROR_CODE_DEFINITIONS = [
+  { number: 0, code: 'OK', description: '成功' },
+  { number: 1000, code: 'PROVIDER_NOT_CONFIGURED', description: '模型 provider 未配置' },
+  { number: 1001, code: 'PROVIDER_ENDPOINT_UNAVAILABLE', description: '模型 provider endpoint 不可用' },
+  { number: 1100, code: 'MODEL_REQUEST_FAILED', description: '模型请求失败' },
+  { number: 1200, code: 'MODEL_OUTPUT_INVALID', description: '模型输出不符合 Agent 决策契约' },
+  { number: 1201, code: 'MODEL_OUTPUT_INVALID_JSON', description: '模型输出不是有效 JSON' },
+  { number: 1202, code: 'MODEL_OUTPUT_SCHEMA_INVALID', description: '模型输出 schema 校验失败' },
+  { number: 2000, code: 'TOOL_NOT_FOUND', description: '工具不存在' },
+  { number: 2001, code: 'TOOL_ARGS_INVALID', description: '工具参数无效' },
+  { number: 2002, code: 'TOOL_RESULT_INVALID', description: '工具结果无效' },
+  { number: 2003, code: 'TOOL_EXECUTION_FAILED', description: '工具执行失败' },
+  { number: 2004, code: 'TOOL_MODE_NOT_ALLOWED', description: '当前 Run Mode 不允许使用该工具' },
+  { number: 2100, code: 'AGENT_FINISH', description: 'Agent 正常结束' },
+  { number: 2101, code: 'AGENT_FAIL', description: 'Agent 失败结束' },
+  { number: 2102, code: 'ASK_USER_REQUIRED', description: 'Agent 需要用户输入' },
+  { number: 2200, code: 'APPROVAL_REQUIRED', description: '需要审批' },
+  { number: 2201, code: 'USER_DENIED_APPROVAL', description: '用户拒绝审批' },
+  { number: 2300, code: 'MAX_STEPS_EXCEEDED', description: '超过最大步骤数' },
+  { number: 3000, code: 'RUNTIME_UNAVAILABLE', description: '扩展 runtime 不可用' },
+  { number: 3001, code: 'RUNTIME_RESPONSE_INVALID', description: '扩展 runtime 响应无效' },
+  { number: 3002, code: 'RUNTIME_MESSAGE_INVALID', description: '扩展 runtime 消息无效' },
+  { number: 3100, code: 'CONTENT_SCRIPT_UNAVAILABLE', description: 'content script 不可用' },
+  { number: 3200, code: 'OBSERVATION_FAILED', description: '页面观察失败' },
+  { number: 3201, code: 'OBSERVATION_BUDGET_EXCEEDED', description: '页面观察超过预算' },
+  { number: 3300, code: 'REF_NOT_FOUND', description: 'Ref 不存在' },
+  { number: 3301, code: 'REF_STALE', description: 'Ref 已失效' },
+  { number: 3400, code: 'ELEMENT_STATE_UNREADABLE', description: '元素状态不可读' },
+  { number: 3500, code: 'FIELD_LABEL_MISSING', description: '字段 label 缺失' },
+  { number: 3501, code: 'FORM_SUBMIT_NOT_FOUND', description: '未找到表单提交控件' },
+  { number: 3502, code: 'FORM_FIELDS_UNAVAILABLE', description: '表单字段快照不可用' }
+] as const;
+
+export const ERROR_CODES = {
+  OK: 'OK',
+  PROVIDER_NOT_CONFIGURED: 'PROVIDER_NOT_CONFIGURED',
+  PROVIDER_ENDPOINT_UNAVAILABLE: 'PROVIDER_ENDPOINT_UNAVAILABLE',
+  MODEL_REQUEST_FAILED: 'MODEL_REQUEST_FAILED',
+  MODEL_OUTPUT_INVALID: 'MODEL_OUTPUT_INVALID',
+  MODEL_OUTPUT_INVALID_JSON: 'MODEL_OUTPUT_INVALID_JSON',
+  MODEL_OUTPUT_SCHEMA_INVALID: 'MODEL_OUTPUT_SCHEMA_INVALID',
+  TOOL_NOT_FOUND: 'TOOL_NOT_FOUND',
+  TOOL_ARGS_INVALID: 'TOOL_ARGS_INVALID',
+  TOOL_RESULT_INVALID: 'TOOL_RESULT_INVALID',
+  TOOL_EXECUTION_FAILED: 'TOOL_EXECUTION_FAILED',
+  TOOL_MODE_NOT_ALLOWED: 'TOOL_MODE_NOT_ALLOWED',
+  AGENT_FINISH: 'AGENT_FINISH',
+  AGENT_FAIL: 'AGENT_FAIL',
+  ASK_USER_REQUIRED: 'ASK_USER_REQUIRED',
+  APPROVAL_REQUIRED: 'APPROVAL_REQUIRED',
+  USER_DENIED_APPROVAL: 'USER_DENIED_APPROVAL',
+  MAX_STEPS_EXCEEDED: 'MAX_STEPS_EXCEEDED',
+  RUNTIME_UNAVAILABLE: 'RUNTIME_UNAVAILABLE',
+  RUNTIME_RESPONSE_INVALID: 'RUNTIME_RESPONSE_INVALID',
+  RUNTIME_MESSAGE_INVALID: 'RUNTIME_MESSAGE_INVALID',
+  CONTENT_SCRIPT_UNAVAILABLE: 'CONTENT_SCRIPT_UNAVAILABLE',
+  OBSERVATION_FAILED: 'OBSERVATION_FAILED',
+  OBSERVATION_BUDGET_EXCEEDED: 'OBSERVATION_BUDGET_EXCEEDED',
+  REF_NOT_FOUND: 'REF_NOT_FOUND',
+  REF_STALE: 'REF_STALE',
+  ELEMENT_STATE_UNREADABLE: 'ELEMENT_STATE_UNREADABLE',
+  FIELD_LABEL_MISSING: 'FIELD_LABEL_MISSING',
+  FORM_SUBMIT_NOT_FOUND: 'FORM_SUBMIT_NOT_FOUND',
+  FORM_FIELDS_UNAVAILABLE: 'FORM_FIELDS_UNAVAILABLE'
+} as const;
+
+export const ERROR_CODE_NUMBERS = Object.fromEntries(
+  ERROR_CODE_DEFINITIONS.map((item) => [item.code, item.number])
+) as Record<ErrorCode, number>;
+
+export type ErrorCode = (typeof ERROR_CODE_DEFINITIONS)[number]['code'];

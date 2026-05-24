@@ -1,6 +1,7 @@
 import type { Observation } from '../../shared/schemas/observation.schema';
 import { buildA11ySnapshot } from '../a11y/a11y-snapshot';
 import { RefMap } from '../a11y/ref-map';
+import { readFormFields } from '../dom/form-reader';
 import { readPageMetadata } from './page-metadata';
 import { readPageState } from './page-state';
 import { readVisibleText } from './visible-text';
@@ -29,6 +30,7 @@ export function buildObservation(
   const visibleText = readVisibleText(document, visibleTextOptions);
   const pageState = readPageState(document);
   const snapshot = buildA11ySnapshot(document, refMap);
+  const formFields = readFormFields(document, refMap);
 
   return {
     url: metadata.url,
@@ -39,6 +41,7 @@ export function buildObservation(
     visibleTextSummary: visibleText.text,
     pageStateSummary: pageState.pageStateSummary,
     refSummary: snapshot.elements,
+    formFields,
     warnings: [...metadata.warnings, ...visibleText.warnings, ...snapshot.warnings]
   };
 }

@@ -3,32 +3,41 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ExtensionRuntimePort } from '../../runtime/extension-runtime-port';
 import type { RuntimePort } from '../../runtime/runtime-port';
 import type { RunSnapshot } from '../../runtime/runtime-messages';
+import type { StructuredPageData } from '../../shared/schemas/structured-page-data.schema';
+import type { RunMode } from '../../shared/schemas/tool.schema';
 import './app.css';
 
 type SidePanelViewProps = {
   task: string;
+  mode: RunMode;
+  initialTab?: SidePanelTab;
   snapshot: RunSnapshot | undefined;
   busy?: boolean;
   error?: string | undefined;
   onTaskChange: (task: string) => void;
+  onModeChange: (mode: RunMode) => void;
   onStartRun: () => void;
 };
 
 type SidePanelTab = 'observation' | 'refs' | 'interactive' | 'forms';
 
+const INITIAL_OBSERVE_DELAYS_MS = [0, 500, 1_500, 3_000, 6_000] as const;
+const NAVIGATION_SETTLE_DELAYS_MS = [250, 1_000, 2_500, 5_000] as const;
+
 export function App() {
   const port = useMemo<RuntimePort>(() => new ExtensionRuntimePort(), []);
   const [task, setTask] = useState('观察当前页面');
+  const [mode, setMode] = useState<RunMode>('ask');
   const [snapshot, setSnapshot] = useState<RunSnapshot>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
-  const runWithTask = useCallback(async (taskToRun: string) => {
+  const runWithTask = useCallback(async (taskToRun: string, modeToRun: RunMode) => {
     setBusy(true);
     setError(undefined);
     try {
       const tabId = await resolveTargetTabId();
-      const started = await port.startRun({ task: taskToRun, tabId });
+      const started = await port.startRun({ task: taskToRun, mode: modeToRun, tabId });
       const nextSnapshot = await port.getRunSnapshot(started.runId);
       setSnapshot(nextSnapshot);
     } catch (runError) {
@@ -40,29 +49,46 @@ export function App() {
   }, [port]);
 
   const startRun = useCallback(async () => {
-    await runWithTask(task);
-  }, [runWithTask, task]);
+    await runWithTask(task, mode);
+  }, [runWithTask, task, mode]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void runWithTask('观察当前页面');
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [runWithTask]);
+    const timers = scheduleSettledRefreshes(
+      () => {
+        void runWithTask('观察当前页面', mode);
+      },
+      INITIAL_OBSERVE_DELAYS_MS
+    );
+    return () => clearTimers(timers);
+  }, [runWithTask, mode]);
 
   useEffect(() => {
     if (!globalThis.chrome?.tabs) {
       return undefined;
     }
 
-    let timer: number | undefined;
+    let debounceTimer: number | undefined;
+    let settleTimers: number[] = [];
     const scheduleRefresh = () => {
-      if (timer) {
-        window.clearTimeout(timer);
+      if (debounceTimer) {
+        window.clearTimeout(debounceTimer);
       }
-      timer = window.setTimeout(() => {
-        void runWithTask('观察当前页面');
+      debounceTimer = window.setTimeout(() => {
+        clearTimers(settleTimers);
+        settleTimers = scheduleSettledRefreshes(
+          () => {
+            void runWithTask('观察当前页面', mode);
+          },
+          NAVIGATION_SETTLE_DELAYS_MS
+        );
       }, 250);
+    };
+    const scheduleRefreshForTab = (tabId: number) => {
+      const pinnedTabId = readTabIdFromUrl();
+      if (pinnedTabId && pinnedTabId !== tabId) {
+        return;
+      }
+      scheduleRefresh();
     };
 
     const onActivated = () => {
@@ -80,26 +106,36 @@ export function App() {
         scheduleRefresh();
       }
     };
+    const onFrameNavigation = (details: { tabId: number }) => {
+      scheduleRefreshForTab(details.tabId);
+    };
 
     chrome.tabs.onActivated.addListener(onActivated);
     chrome.tabs.onUpdated.addListener(onUpdated);
+    chrome.webNavigation?.onDOMContentLoaded?.addListener(onFrameNavigation);
+    chrome.webNavigation?.onCompleted?.addListener(onFrameNavigation);
 
     return () => {
-      if (timer) {
-        window.clearTimeout(timer);
+      if (debounceTimer) {
+        window.clearTimeout(debounceTimer);
       }
+      clearTimers(settleTimers);
       chrome.tabs.onActivated.removeListener(onActivated);
       chrome.tabs.onUpdated.removeListener(onUpdated);
+      chrome.webNavigation?.onDOMContentLoaded?.removeListener(onFrameNavigation);
+      chrome.webNavigation?.onCompleted?.removeListener(onFrameNavigation);
     };
-  }, [runWithTask]);
+  }, [runWithTask, mode]);
 
   return (
     <SidePanelView
       task={task}
+      mode={mode}
       snapshot={snapshot}
       busy={busy}
       error={error}
       onTaskChange={setTask}
+      onModeChange={setMode}
       onStartRun={() => {
         void startRun();
       }}
@@ -107,11 +143,37 @@ export function App() {
   );
 }
 
+function scheduleSettledRefreshes(
+  refresh: () => void,
+  delays: readonly number[]
+): number[] {
+  return delays.map((delay) => window.setTimeout(refresh, delay));
+}
+
+function clearTimers(timers: number[]): void {
+  for (const timer of timers) {
+    window.clearTimeout(timer);
+  }
+}
+
 export function SidePanelView(props: SidePanelViewProps) {
-  const { task, snapshot, busy, error, onTaskChange, onStartRun } = props;
-  const [activeTab, setActiveTab] = useState<SidePanelTab>('observation');
+  const {
+    task,
+    mode,
+    initialTab,
+    snapshot,
+    busy,
+    error,
+    onTaskChange,
+    onModeChange,
+    onStartRun
+  } = props;
+  const [activeTab, setActiveTab] = useState<SidePanelTab>(
+    initialTab ?? 'observation'
+  );
   const observation = snapshot?.observation;
   const refs = snapshot?.refs ?? [];
+  const structuredPageData = snapshot?.structuredPageData;
   const isError = Boolean(error) || snapshot?.status === 'error';
   const isEmpty = snapshot?.status === 'empty';
   const statusText = statusLabel(snapshot, busy, error);
@@ -128,6 +190,21 @@ export function SidePanelView(props: SidePanelViewProps) {
       </header>
 
       <section className="bh-taskRow" aria-label="任务输入">
+        <div className="bh-modeGroup" aria-label="Run Mode">
+          <label htmlFor="bh-run-mode">当前模式</label>
+          <div className="bh-modeSelectWrap">
+            <select
+              id="bh-run-mode"
+              aria-label="选择 Run Mode"
+              value={mode}
+              onChange={(event) => onModeChange(event.currentTarget.value as RunMode)}
+            >
+              <option value="ask">Ask</option>
+              <option value="debug">Debug</option>
+              <option value="form">Form</option>
+            </select>
+          </div>
+        </div>
         <input
           aria-label="任务"
           value={task}
@@ -173,6 +250,18 @@ export function SidePanelView(props: SidePanelViewProps) {
           表单字段
         </button>
       </nav>
+
+      {structuredPageData ? (
+        <section className="bh-structuredSummary" aria-label="Structured Page Data">
+          <h2>Structured Page Data</h2>
+          <div>
+            <span>observation <strong>{structuredPageData.observation.status}</strong></span>
+            <span>refs <strong>{structuredPageData.refs.status}</strong> {structuredPageData.refs.count}</span>
+            <span>interactive <strong>{structuredPageData.interactive.status}</strong> {structuredPageData.interactive.count}</span>
+            <span>forms <strong>{structuredPageData.forms.status}</strong> {structuredPageData.forms.count}</span>
+          </div>
+        </section>
+      ) : null}
 
       {activeTab === 'observation' ? (
         <section className="bh-grid" aria-label="页面观察">
@@ -253,17 +342,11 @@ export function SidePanelView(props: SidePanelViewProps) {
       ) : null}
 
       {activeTab === 'interactive' ? (
-        <TabPlaceholder
-          title="交互元素"
-          description="交互元素结构化列表将在 v0.31 接入。当前版本先通过 Ref 映射展示可交互元素基础信息。"
-        />
+        <InteractivePanel data={structuredPageData?.interactive} />
       ) : null}
 
       {activeTab === 'forms' ? (
-        <TabPlaceholder
-          title="表单字段"
-          description="表单字段结构化诊断将在 v0.32 接入。当前版本先展示页面观察和 Ref 映射。"
-        />
+        <FormsPanel data={structuredPageData?.forms} />
       ) : null}
 
       <section className="bh-result">
@@ -292,19 +375,157 @@ export function SidePanelView(props: SidePanelViewProps) {
         </article>
       </section>
       <section className="bh-result compact">
-        <h2>Trace / 调试日志 <span>{snapshot?.runId ?? '未开始'}</span></h2>
+        <h2>
+          Trace / 调试日志 <span>{snapshot?.runId ?? '未开始'}</span>
+        </h2>
+        <p className="bh-modeTrace">当前模式 {snapshot?.mode ?? mode}</p>
       </section>
     </main>
   );
 }
 
-function TabPlaceholder(props: { title: string; description: string }) {
+function InteractivePanel(props: {
+  data: StructuredPageData['interactive'] | undefined;
+}) {
+  const data = props.data;
+  const first = data?.items[0];
   return (
-    <section className="bh-placeholder" aria-label={props.title}>
-      <h2>{props.title}</h2>
-      <p>{props.description}</p>
+    <section className="bh-refPanel" aria-label="交互元素">
+      <header>
+        <div>
+          <h2>交互元素</h2>
+          <p>{data?.summary ?? '等待 v0.31 交互元素数据。'}</p>
+        </div>
+      </header>
+      <div className="bh-statRow">
+        <span>交互元素数量 <strong>{data?.count ?? 0}</strong></span>
+        <span>可用 <strong>{data?.items.filter((item) => !item.disabled).length ?? 0}</strong></span>
+        <span>禁用 <strong>{data?.items.filter((item) => item.disabled).length ?? 0}</strong></span>
+        <span>状态 <strong>{data?.status ?? 'pending'}</strong></span>
+      </div>
+      {data?.status === 'empty' ? (
+        <p className="bh-empty">{data.emptyReason ?? '未检测到交互元素。'}</p>
+      ) : null}
+      {data?.items.length ? (
+        <>
+          <table>
+            <thead>
+              <tr>
+                <th>ref_id</th>
+                <th>role</th>
+                <th>name</th>
+                <th>状态</th>
+                <th>选择态</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.items.map((item) => (
+                <tr key={item.refId}>
+                  <td>{item.refId}</td>
+                  <td>{item.role ?? 'unknown'}</td>
+                  <td>{item.name ?? '(no name)'}</td>
+                  <td>{item.visible ? '可见' : '不可见'} / {item.disabled ? '禁用' : '可用'}</td>
+                  <td>{formatInteractiveState(item)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {first ? (
+            <article className="bh-detailCard">
+              <h3>基础详情</h3>
+              <p>{first.refId} · {first.role ?? 'unknown'} · {first.tagName}</p>
+              <p>{first.name ?? '(no name)'}</p>
+            </article>
+          ) : null}
+        </>
+      ) : null}
     </section>
   );
+}
+
+function FormsPanel(props: {
+  data: StructuredPageData['forms'] | undefined;
+}) {
+  const data = props.data;
+  const requiredCount = data?.items.filter((field) => field.required).length ?? 0;
+  const invalidCount =
+    data?.items.filter((field) => !field.validation.valid).length ?? 0;
+  const submit = data?.items.find((field) => field.submit)?.submit;
+  return (
+    <section className="bh-refPanel" aria-label="表单字段">
+      <header>
+        <div>
+          <h2>表单字段</h2>
+          <p>{data?.summary ?? '等待 v0.32 表单字段数据。'}</p>
+        </div>
+      </header>
+      <div className="bh-statRow">
+        <span>字段数量 <strong>{data?.count ?? 0}</strong></span>
+        <span>必填 <strong>{requiredCount}</strong></span>
+        <span>校验错误 <strong>{invalidCount}</strong></span>
+        <span>{submit?.disabled ? 'submit disabled' : 'submit enabled'}</span>
+      </div>
+      {submit?.reason ? (
+        <article className="bh-detailCard">
+          <h3>Disabled Submit Reason</h3>
+          <p>{confidenceLabel(submit.reason.kind)}：{submit.reason.message}</p>
+        </article>
+      ) : null}
+      {data?.status === 'empty' ? (
+        <p className="bh-empty">{data.emptyReason ?? '当前页面未检测到表单字段。'}</p>
+      ) : null}
+      {data?.items.length ? (
+        <table>
+          <thead>
+            <tr>
+              <th>ref_id</th>
+              <th>label</th>
+              <th>type</th>
+              <th>required</th>
+              <th>valuePreview</th>
+              <th>validation</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.items.map((field) => (
+              <tr key={field.refId}>
+                <td>{field.refId}</td>
+                <td>{field.label ?? field.name ?? '(no label)'}</td>
+                <td>{field.type}</td>
+                <td>{field.required ? '必填' : '可选'}</td>
+                <td>{field.valuePreview}</td>
+                <td>{field.validation.valid ? 'valid' : field.validation.message ?? 'invalid'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+    </section>
+  );
+}
+
+function formatInteractiveState(item: {
+  checked?: boolean | undefined;
+  selected?: boolean | undefined;
+}): string {
+  const parts = [];
+  if (item.checked !== undefined) {
+    parts.push(`checked=${String(item.checked)}`);
+  }
+  if (item.selected !== undefined) {
+    parts.push(`selected=${String(item.selected)}`);
+  }
+  return parts.join(' / ') || '-';
+}
+
+function confidenceLabel(kind: 'confirmed' | 'inferred' | 'unknown'): string {
+  if (kind === 'confirmed') {
+    return '已确认';
+  }
+  if (kind === 'inferred') {
+    return '推断';
+  }
+  return '无法判断';
 }
 
 function statusLabel(

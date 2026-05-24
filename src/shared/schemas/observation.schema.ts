@@ -26,6 +26,7 @@ export const observationSchema = z.object({
   visibleTextSummary: z.string(),
   pageStateSummary: z.string(),
   refSummary: z.array(elementRefSchema),
+  formFields: z.unknown().optional(),
   warnings: z.array(z.string()).default([])
 });
 

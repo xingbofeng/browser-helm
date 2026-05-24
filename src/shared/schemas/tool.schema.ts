@@ -13,6 +13,8 @@ export const toolModeSchema = z.enum([
   'internal'
 ]);
 
+export const runModeSchema = z.enum(['ask', 'debug', 'form']);
+
 export const toolSpecMetaSchema = z.object({
   name: z.string().min(1),
   title: z.string().min(1),
@@ -22,4 +24,5 @@ export const toolSpecMetaSchema = z.object({
 });
 
 export type ToolMode = z.infer<typeof toolModeSchema>;
+export type RunMode = z.infer<typeof runModeSchema>;
 export type ToolSpecMeta = z.infer<typeof toolSpecMetaSchema>;

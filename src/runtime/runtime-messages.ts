@@ -1,17 +1,22 @@
 import { z } from 'zod';
 
+import type { StructuredPageData } from '../shared/schemas/structured-page-data.schema';
+import { runModeSchema, type RunMode } from '../shared/schemas/tool.schema';
+import { RUNTIME_MESSAGES } from '../shared/constants/event-names';
+
 export const startRunInputSchema = z.object({
   task: z.string().min(1),
+  mode: runModeSchema.default('ask'),
   tabId: z.number().int().positive().optional()
 });
 
 export const runtimeRequestSchema = z.discriminatedUnion('type', [
   z.object({
-    type: z.literal('BH_RUNTIME_START_RUN'),
+    type: z.literal(RUNTIME_MESSAGES.START_RUN),
     input: startRunInputSchema
   }),
   z.object({
-    type: z.literal('BH_RUNTIME_GET_SNAPSHOT'),
+    type: z.literal(RUNTIME_MESSAGES.GET_SNAPSHOT),
     runId: z.string().min(1)
   })
 ]);
@@ -28,7 +33,7 @@ export const runtimeResponseSchema = z.discriminatedUnion('ok', [
   })
 ]);
 
-export type StartRunInput = z.infer<typeof startRunInputSchema>;
+export type StartRunInput = z.input<typeof startRunInputSchema>;
 export type RuntimeRequest = z.infer<typeof runtimeRequestSchema>;
 export type RuntimeResponse = z.infer<typeof runtimeResponseSchema>;
 
@@ -61,9 +66,11 @@ export type RuntimeToolResultSnapshot = {
 
 export type RunSnapshot = {
   runId: string;
+  mode: RunMode;
   status: 'created' | 'observed' | 'empty' | 'error' | 'not_found';
   observation?: RuntimeObservationSnapshot;
   refs?: RuntimeRefSnapshot[];
+  structuredPageData?: StructuredPageData;
   toolResult?: RuntimeToolResultSnapshot;
   error?: {
     code: string;

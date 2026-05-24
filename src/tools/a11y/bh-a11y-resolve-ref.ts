@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { ERROR_CODES } from '../../shared/constants/error-codes';
+import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import type { ToolSpec } from '../core/tool-spec';
@@ -13,6 +15,7 @@ export function bhA11yResolveRef(
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
   return {
     name: 'bh_a11y_resolve_ref',
+    // 将已有 ref_id 解析回当前页面元素摘要，用于确认 ref 是否仍然有效。
     title: 'Resolve Ref',
     description: 'Resolves a stable ref_id to the current page element summary',
     modes: ['ask', 'debug', 'form'],
@@ -21,7 +24,7 @@ export function bhA11yResolveRef(
     resultSchema: toolResultSchema,
     async execute(args) {
       const response = await rpc.request({
-        type: 'BH_A11Y_RESOLVE_REF',
+        type: CONTENT_RPC_MESSAGES.A11Y_RESOLVE_REF,
         refId: args.refId
       });
       if (!response.ok) {
@@ -31,7 +34,7 @@ export function bhA11yResolveRef(
           summary: response.message,
           error: { message: response.message, detail: response.detail },
           changedPage: false,
-          requiresObserve: response.code === 'REF_STALE',
+          requiresObserve: response.code === ERROR_CODES.REF_STALE,
           context: {
             visibility: 'summary',
             summary: `${response.code}: ${response.message}`
@@ -41,7 +44,7 @@ export function bhA11yResolveRef(
       if (!('ref' in response)) {
         return {
           ok: false,
-          code: 'OBSERVATION_FAILED',
+          code: ERROR_CODES.OBSERVATION_FAILED,
           summary: 'Content RPC did not return a resolved ref',
           error: { message: 'Content RPC did not return a resolved ref' },
           changedPage: false,
@@ -50,7 +53,7 @@ export function bhA11yResolveRef(
       }
       return {
         ok: true,
-        code: 'OK',
+        code: ERROR_CODES.OK,
         summary: `Resolved ${args.refId}`,
         data: response.ref,
         changedPage: false,

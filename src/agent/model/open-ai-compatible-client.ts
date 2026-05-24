@@ -1,4 +1,5 @@
 import type { ModelClient, ModelInput, ModelOutput } from './model-client';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
 
 type FetchImpl = typeof fetch;
 
@@ -18,11 +19,11 @@ type OpenAICompletionResponse = {
 };
 
 class ProviderNotConfiguredError extends Error {
-  readonly code = 'PROVIDER_NOT_CONFIGURED' as const;
+  readonly code = ERROR_CODES.PROVIDER_NOT_CONFIGURED;
 }
 
 class ModelRequestFailedError extends Error {
-  readonly code = 'MODEL_REQUEST_FAILED' as const;
+  readonly code = ERROR_CODES.MODEL_REQUEST_FAILED;
 }
 
 export class OpenAICompatibleClient implements ModelClient {

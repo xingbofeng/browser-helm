@@ -8,6 +8,7 @@ import type { CompactedContext } from './context-compactor';
 import type { ModelMessage } from '../../shared/schemas/model-message.schema';
 import { buildSystemPrompt } from '../prompts/system-prompt';
 import type { ToolPromptContract } from '../../tools/core/tool-router';
+import type { RunMode } from '../../shared/schemas/tool.schema';
 
 export type BuildContextInput = {
   task: string;
@@ -16,6 +17,7 @@ export type BuildContextInput = {
   turns: LoopTurn[];
   toolNames?: string[];
   tools?: ToolPromptContract[];
+  runMode?: RunMode;
 };
 
 export type BuiltContext = {
@@ -46,7 +48,7 @@ export class ContextBuilder {
       messages: [
         {
           role: 'system',
-          content: buildSystemPrompt(input.tools ?? input.toolNames ?? [])
+          content: buildSystemPrompt(input.tools ?? input.toolNames ?? [], input.runMode)
         },
         {
           role: 'user',

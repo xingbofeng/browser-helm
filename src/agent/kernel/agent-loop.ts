@@ -6,9 +6,12 @@ import { RunController } from './run-controller';
 import { createLoopSession } from './agent-state';
 import { StepRunner } from './step-runner';
 import type { ToolRouter } from '../../tools/core/tool-router';
+import { isToolAvailableInRunMode } from '../../tools/core/tool-router';
 import type { TraceRecorder } from '../../storage/interfaces/trace-recorder';
 import { traceEventSchema } from '../../shared/schemas/trace.schema';
 import type { ApprovalRequest } from '../../shared/schemas/approval.schema';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
+import { TRACE_EVENT_NAMES } from '../../shared/constants/event-names';
 import { ApprovalPolicy } from '../policy/approval-policy';
 import { approvalRequiredResult } from '../../tools/core/tool-result-factory';
 
@@ -35,6 +38,7 @@ export class AgentLoop {
   async run(input: AgentRunInput): Promise<AgentRunResult> {
     const runId = createRunId();
     const maxSteps = input.maxSteps ?? 3;
+    const runMode = input.mode ?? 'ask';
     const controller = new RunController(maxSteps);
     const stepRunner = new StepRunner();
     const approvalPolicy = new ApprovalPolicy();
@@ -48,9 +52,9 @@ export class AgentLoop {
       this.deps.runtimeMetadata?.providerBaseUrl ?? process.env.OPENAI_BASE_URL;
 
     appendTrace(this.deps.traceRecorder, {
-      id: createEventId(runId, 0, 'run_started'),
+      id: createEventId(runId, 0, TRACE_EVENT_NAMES.RUN_STARTED),
       runId,
-      type: 'run_started',
+      type: TRACE_EVENT_NAMES.RUN_STARTED,
       timestamp: Date.now(),
       schemaVersion: TRACE_SCHEMA_VERSION,
       payload: {
@@ -64,6 +68,7 @@ export class AgentLoop {
           toolSchemaVersion: TOOL_SCHEMA_VERSION,
           contextPolicyVersion: CONTEXT_POLICY_VERSION,
           model: runtimeModel,
+          runMode,
           providerBaseUrl: runtimeBaseUrl
         }
       }
@@ -80,15 +85,16 @@ export class AgentLoop {
         ...(input.successCriteria ? { successCriteria: input.successCriteria } : {}),
         turns: session.turns,
         toolNames: this.deps.toolRouter.listToolNames(),
-        tools: this.deps.toolRouter.listToolContracts()
+        tools: this.deps.toolRouter.listToolContracts(runMode),
+        runMode
       });
 
       appendTrace(this.deps.traceRecorder, {
-        id: createEventId(runId, stepIndex, 'turn_started'),
+        id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.TURN_STARTED),
         runId,
         turnId: stepId,
         stepIndex,
-        type: 'turn_started',
+        type: TRACE_EVENT_NAMES.TURN_STARTED,
         timestamp: startedAt,
         schemaVersion: TRACE_SCHEMA_VERSION,
         payload: {
@@ -99,11 +105,11 @@ export class AgentLoop {
       });
 
       appendTrace(this.deps.traceRecorder, {
-        id: createEventId(runId, stepIndex, 'context_built'),
+        id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.CONTEXT_BUILT),
         runId,
         turnId: stepId,
         stepIndex,
-        type: 'context_built',
+        type: TRACE_EVENT_NAMES.CONTEXT_BUILT,
         timestamp: Date.now(),
         schemaVersion: TRACE_SCHEMA_VERSION,
         payload: {
@@ -112,11 +118,11 @@ export class AgentLoop {
         }
       });
       appendTrace(this.deps.traceRecorder, {
-        id: createEventId(runId, stepIndex, 'context_compacted'),
+        id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.CONTEXT_COMPACTED),
         runId,
         turnId: stepId,
         stepIndex,
-        type: 'context_compacted',
+        type: TRACE_EVENT_NAMES.CONTEXT_COMPACTED,
         timestamp: Date.now(),
         schemaVersion: TRACE_SCHEMA_VERSION,
         payload: {
@@ -130,11 +136,11 @@ export class AgentLoop {
         }
       });
       appendTrace(this.deps.traceRecorder, {
-        id: createEventId(runId, stepIndex, 'context_summary'),
+        id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.CONTEXT_SUMMARY),
         runId,
         turnId: stepId,
         stepIndex,
-        type: 'context_summary',
+        type: TRACE_EVENT_NAMES.CONTEXT_SUMMARY,
         timestamp: Date.now(),
         schemaVersion: TRACE_SCHEMA_VERSION,
         payload: {
@@ -165,11 +171,11 @@ export class AgentLoop {
       }
 
       appendTrace(this.deps.traceRecorder, {
-        id: createEventId(runId, stepIndex, 'model_output_received'),
+        id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.MODEL_OUTPUT_RECEIVED),
         runId,
         turnId: stepId,
         stepIndex,
-        type: 'model_output_received',
+        type: TRACE_EVENT_NAMES.MODEL_OUTPUT_RECEIVED,
         timestamp: Date.now(),
         schemaVersion: TRACE_SCHEMA_VERSION,
         payload: {
@@ -181,11 +187,11 @@ export class AgentLoop {
       const parsed = this.deps.decisionParser.parse(modelOutput.text);
       if (!parsed.ok) {
         appendTrace(this.deps.traceRecorder, {
-          id: createEventId(runId, stepIndex, 'decision_parse_failed'),
+          id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.DECISION_PARSE_FAILED),
           runId,
           turnId: stepId,
           stepIndex,
-          type: 'decision_parse_failed',
+          type: TRACE_EVENT_NAMES.DECISION_PARSE_FAILED,
           timestamp: Date.now(),
           schemaVersion: TRACE_SCHEMA_VERSION,
           payload: {
@@ -214,11 +220,11 @@ export class AgentLoop {
       }
 
       appendTrace(this.deps.traceRecorder, {
-        id: createEventId(runId, stepIndex, 'model_decision'),
+        id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.MODEL_DECISION),
         runId,
         turnId: stepId,
         stepIndex,
-        type: 'model_decision',
+        type: TRACE_EVENT_NAMES.MODEL_DECISION,
         timestamp: Date.now(),
         schemaVersion: TRACE_SCHEMA_VERSION,
         payload: {
@@ -230,11 +236,11 @@ export class AgentLoop {
         controller.markFinished();
         const endedAt = Date.now();
         appendTrace(this.deps.traceRecorder, {
-          id: createEventId(runId, stepIndex, 'turn_finished'),
+          id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.TURN_FINISHED),
           runId,
           turnId: stepId,
           stepIndex,
-          type: 'turn_finished',
+          type: TRACE_EVENT_NAMES.TURN_FINISHED,
           timestamp: endedAt,
           durationMs: endedAt - startedAt,
           schemaVersion: TRACE_SCHEMA_VERSION,
@@ -247,10 +253,10 @@ export class AgentLoop {
           }
         });
         appendTrace(this.deps.traceRecorder, {
-          id: createEventId(runId, stepIndex, 'run_finished'),
+          id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.RUN_FINISHED),
           runId,
           stepIndex,
-          type: 'run_finished',
+          type: TRACE_EVENT_NAMES.RUN_FINISHED,
           timestamp: endedAt,
           schemaVersion: TRACE_SCHEMA_VERSION,
           payload: {
@@ -267,14 +273,14 @@ export class AgentLoop {
       }
 
       if (parsed.decision.type === 'ask_user') {
-        controller.pause('ASK_USER_REQUIRED');
+        controller.pause(ERROR_CODES.ASK_USER_REQUIRED);
         const endedAt = Date.now();
         appendTrace(this.deps.traceRecorder, {
-          id: createEventId(runId, stepIndex, 'turn_finished'),
+          id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.TURN_FINISHED),
           runId,
           turnId: stepId,
           stepIndex,
-          type: 'turn_finished',
+          type: TRACE_EVENT_NAMES.TURN_FINISHED,
           timestamp: endedAt,
           durationMs: endedAt - startedAt,
           schemaVersion: TRACE_SCHEMA_VERSION,
@@ -301,7 +307,7 @@ export class AgentLoop {
           stepIndex,
           startedAt,
           controller,
-          code: parsed.decision.code ?? 'AGENT_FAIL',
+          code: parsed.decision.code ?? ERROR_CODES.AGENT_FAIL,
           message: parsed.decision.message
         });
       }
@@ -309,11 +315,11 @@ export class AgentLoop {
       const toolCall = parsed.decision;
       const toolContract = this.deps.toolRouter.getToolContract(toolCall.tool);
       appendTrace(this.deps.traceRecorder, {
-        id: createEventId(runId, stepIndex, 'tool_started'),
+        id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.TOOL_STARTED),
         runId,
         turnId: stepId,
         stepIndex,
-        type: 'tool_started',
+        type: TRACE_EVENT_NAMES.TOOL_STARTED,
         timestamp: Date.now(),
         schemaVersion: TRACE_SCHEMA_VERSION,
         payload: {
@@ -325,33 +331,51 @@ export class AgentLoop {
       });
 
       const risk = toolContract?.risk ?? 'safe';
-      const approvalEvaluation = approvalPolicy.evaluate({
-        risk,
-        requestedByToolResult: false
-      });
-      const toolResult = approvalEvaluation.requiresApproval
-        ? approvalRequiredResult({
-            reason: approvalEvaluation.reason,
-            risk,
-            actionPreview: `Tool ${toolCall.tool} with args ${JSON.stringify(toolCall.args)}`
-          })
-        : await this.deps.toolRouter.execute(
-            {
-              tool: toolCall.tool,
-              args: toolCall.args
-            },
-            {
-              runId,
-              stepId
-            }
-          );
+      const toolAllowed =
+        !toolContract || isToolAvailableInRunMode(toolContract.modes, runMode);
+      let toolResult: Awaited<ReturnType<ToolRouter['execute']>>;
+      if (toolAllowed) {
+        const approvalEvaluation = approvalPolicy.evaluate({
+          risk,
+          requestedByToolResult: false
+        });
+        toolResult = approvalEvaluation.requiresApproval
+          ? approvalRequiredResult({
+              reason: approvalEvaluation.reason,
+              risk,
+              actionPreview: `Tool ${toolCall.tool} with args ${JSON.stringify(toolCall.args)}`
+            })
+          : await this.deps.toolRouter.execute(
+              {
+                tool: toolCall.tool,
+                args: toolCall.args
+              },
+              {
+                runId,
+                stepId,
+                runMode
+              }
+            );
+      } else {
+        toolResult = await this.deps.toolRouter.execute(
+          {
+            tool: toolCall.tool,
+            args: toolCall.args
+          },
+          {
+            runId,
+            stepId,
+            runMode
+          }
+        );
+      }
 
       appendTrace(this.deps.traceRecorder, {
-        id: createEventId(runId, stepIndex, 'tool_result'),
+        id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.TOOL_RESULT),
         runId,
         turnId: stepId,
         stepIndex,
-        type: 'tool_result',
+        type: TRACE_EVENT_NAMES.TOOL_RESULT,
         timestamp: Date.now(),
         schemaVersion: TRACE_SCHEMA_VERSION,
         payload: {
@@ -374,11 +398,11 @@ export class AgentLoop {
         controller.markFinished();
         const endedAt = Date.now();
         appendTrace(this.deps.traceRecorder, {
-          id: createEventId(runId, stepIndex, 'turn_finished'),
+          id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.TURN_FINISHED),
           runId,
           turnId: stepId,
           stepIndex,
-          type: 'turn_finished',
+          type: TRACE_EVENT_NAMES.TURN_FINISHED,
           timestamp: endedAt,
           durationMs: endedAt - startedAt,
           schemaVersion: TRACE_SCHEMA_VERSION,
@@ -391,10 +415,10 @@ export class AgentLoop {
           }
         });
         appendTrace(this.deps.traceRecorder, {
-          id: createEventId(runId, stepIndex, 'run_finished'),
+          id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.RUN_FINISHED),
           runId,
           stepIndex,
-          type: 'run_finished',
+          type: TRACE_EVENT_NAMES.RUN_FINISHED,
           timestamp: endedAt,
           schemaVersion: TRACE_SCHEMA_VERSION,
           payload: {
@@ -410,15 +434,15 @@ export class AgentLoop {
         };
       }
 
-      if (toolCall.tool === 'bh_agent_ask_user' && toolResult.code === 'ASK_USER_REQUIRED') {
-        controller.pause('ASK_USER_REQUIRED');
+      if (toolCall.tool === 'bh_agent_ask_user' && toolResult.code === ERROR_CODES.ASK_USER_REQUIRED) {
+        controller.pause(ERROR_CODES.ASK_USER_REQUIRED);
         const endedAt = Date.now();
         appendTrace(this.deps.traceRecorder, {
-          id: createEventId(runId, stepIndex, 'turn_finished'),
+          id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.TURN_FINISHED),
           runId,
           turnId: stepId,
           stepIndex,
-          type: 'turn_finished',
+          type: TRACE_EVENT_NAMES.TURN_FINISHED,
           timestamp: endedAt,
           durationMs: endedAt - startedAt,
           schemaVersion: TRACE_SCHEMA_VERSION,
@@ -457,11 +481,11 @@ export class AgentLoop {
         session.status = controller.status;
 
         appendTrace(this.deps.traceRecorder, {
-          id: createEventId(runId, stepIndex, 'approval_required'),
+          id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.APPROVAL_REQUIRED),
           runId,
           turnId: stepId,
           stepIndex,
-          type: 'approval_required',
+          type: TRACE_EVENT_NAMES.APPROVAL_REQUIRED,
           timestamp: Date.now(),
           schemaVersion: TRACE_SCHEMA_VERSION,
           payload: {
@@ -472,11 +496,11 @@ export class AgentLoop {
 
         const endedAt = Date.now();
         appendTrace(this.deps.traceRecorder, {
-          id: createEventId(runId, stepIndex, 'turn_finished'),
+          id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.TURN_FINISHED),
           runId,
           turnId: stepId,
           stepIndex,
-          type: 'turn_finished',
+          type: TRACE_EVENT_NAMES.TURN_FINISHED,
           timestamp: endedAt,
           durationMs: endedAt - startedAt,
           schemaVersion: TRACE_SCHEMA_VERSION,
@@ -500,11 +524,11 @@ export class AgentLoop {
       if (!toolResult.ok) {
         const retryable = getRetryableFromToolResult(toolResult);
         appendTrace(this.deps.traceRecorder, {
-          id: createEventId(runId, stepIndex, 'tool_failed'),
+          id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.TOOL_FAILED),
           runId,
           turnId: stepId,
           stepIndex,
-          type: 'tool_failed',
+          type: TRACE_EVENT_NAMES.TOOL_FAILED,
           timestamp: Date.now(),
           schemaVersion: TRACE_SCHEMA_VERSION,
           payload: {
@@ -529,11 +553,11 @@ export class AgentLoop {
 
       const endedAt = Date.now();
       appendTrace(this.deps.traceRecorder, {
-        id: createEventId(runId, stepIndex, 'turn_finished'),
+        id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.TURN_FINISHED),
         runId,
         turnId: stepId,
         stepIndex,
-        type: 'turn_finished',
+        type: TRACE_EVENT_NAMES.TURN_FINISHED,
         timestamp: endedAt,
         durationMs: endedAt - startedAt,
         schemaVersion: TRACE_SCHEMA_VERSION,
@@ -554,7 +578,7 @@ export class AgentLoop {
       stepIndex: maxSteps,
       startedAt: Date.now(),
       controller,
-      code: 'MAX_STEPS_EXCEEDED',
+      code: ERROR_CODES.MAX_STEPS_EXCEEDED,
       message: 'Run exceeded maxSteps limit'
     });
   }
@@ -573,11 +597,11 @@ export class AgentLoop {
     const endedAt = Date.now();
 
     appendTrace(this.deps.traceRecorder, {
-      id: createEventId(input.runId, input.stepIndex, 'turn_finished'),
+      id: createEventId(input.runId, input.stepIndex, TRACE_EVENT_NAMES.TURN_FINISHED),
       runId: input.runId,
       turnId: input.stepId,
       stepIndex: input.stepIndex,
-      type: 'turn_finished',
+      type: TRACE_EVENT_NAMES.TURN_FINISHED,
       timestamp: endedAt,
       durationMs: endedAt - input.startedAt,
       schemaVersion: TRACE_SCHEMA_VERSION,
@@ -591,10 +615,10 @@ export class AgentLoop {
     });
 
     appendTrace(this.deps.traceRecorder, {
-      id: createEventId(input.runId, input.stepIndex, 'run_failed'),
+      id: createEventId(input.runId, input.stepIndex, TRACE_EVENT_NAMES.RUN_FAILED),
       runId: input.runId,
       stepIndex: input.stepIndex,
-      type: 'run_failed',
+      type: TRACE_EVENT_NAMES.RUN_FAILED,
       timestamp: endedAt,
       schemaVersion: TRACE_SCHEMA_VERSION,
       payload: {
@@ -638,13 +662,13 @@ function normalizeModelError(error: unknown): {
     'code' in error &&
     typeof error.code === 'string'
       ? error.code
-      : 'MODEL_REQUEST_FAILED';
+      : ERROR_CODES.MODEL_REQUEST_FAILED;
   const message = error instanceof Error ? error.message : String(error);
 
   return {
     code,
     message,
-    retryable: code !== 'PROVIDER_NOT_CONFIGURED'
+    retryable: code !== ERROR_CODES.PROVIDER_NOT_CONFIGURED
   };
 }
 

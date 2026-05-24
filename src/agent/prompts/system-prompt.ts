@@ -1,8 +1,10 @@
 import { decisionContractPrompt } from './prompt-parts';
 import type { ToolPromptContract } from '../../tools/core/tool-router';
+import type { RunMode } from '../../shared/schemas/tool.schema';
 
 export function buildSystemPrompt(
-  tools: Array<string | ToolPromptContract>
+  tools: Array<string | ToolPromptContract>,
+  runMode?: RunMode
 ): string {
   const normalized = tools.map((tool) =>
     typeof tool === 'string'
@@ -28,7 +30,8 @@ export function buildSystemPrompt(
       : 'No tools available.';
   return [
     'You are BrowserHelm v0.1 agent kernel.',
+    runMode ? `Current run mode: ${runMode}.` : undefined,
     decisionContractPrompt,
     toolLine
-  ].join(' ');
+  ].filter((part): part is string => typeof part === 'string').join(' ');
 }

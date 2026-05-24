@@ -6,11 +6,13 @@ import {
   type RunSnapshot,
   type StartRunInput
 } from './runtime-messages';
+import { ERROR_CODES } from '../shared/constants/error-codes';
+import { RUNTIME_MESSAGES } from '../shared/constants/event-names';
 
 export class ExtensionRuntimePort implements RuntimePort {
   async startRun(input: StartRunInput): Promise<{ runId: string }> {
     const response = await sendRuntimeMessage({
-      type: 'BH_RUNTIME_START_RUN',
+      type: RUNTIME_MESSAGES.START_RUN,
       input
     });
     if (!response.ok) {
@@ -32,7 +34,7 @@ export class ExtensionRuntimePort implements RuntimePort {
 
   async getRunSnapshot(runId: string): Promise<RunSnapshot> {
     const response = await sendRuntimeMessage({
-      type: 'BH_RUNTIME_GET_SNAPSHOT',
+      type: RUNTIME_MESSAGES.GET_SNAPSHOT,
       runId
     });
     if (!response.ok) {
@@ -53,7 +55,7 @@ async function sendRuntimeMessage(message: unknown): Promise<RuntimeResponse> {
   if (!globalThis.chrome?.runtime?.sendMessage) {
     return {
       ok: false,
-      code: 'RUNTIME_UNAVAILABLE',
+      code: ERROR_CODES.RUNTIME_UNAVAILABLE,
       message: 'Chrome runtime messaging is unavailable'
     };
   }
@@ -62,7 +64,7 @@ async function sendRuntimeMessage(message: unknown): Promise<RuntimeResponse> {
   if (!parsed.success) {
     return {
       ok: false,
-      code: 'RUNTIME_RESPONSE_INVALID',
+      code: ERROR_CODES.RUNTIME_RESPONSE_INVALID,
       message: 'Runtime response invalid'
     };
   }

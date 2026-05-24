@@ -4,6 +4,7 @@ import { approvalRequestSchema } from './approval.schema';
 import { agentDecisionSchema } from './agent-decision.schema';
 import { runMetadataSchema } from './run-metadata.schema';
 import { toolResultSchema, toolRiskSchema } from './tool-result.schema';
+import { TRACE_EVENT_NAMES } from '../constants/event-names';
 
 const traceEventBaseSchema = z.object({
   id: z.string().min(1),
@@ -25,7 +26,7 @@ const loopSessionStatusSchema = z.enum([
 ]);
 
 const runStartedEventSchema = traceEventBaseSchema.extend({
-  type: z.literal('run_started'),
+  type: z.literal(TRACE_EVENT_NAMES.RUN_STARTED),
   payload: z.object({
     task: z.string().min(1),
     goal: z.string().min(1).optional(),
@@ -36,7 +37,7 @@ const runStartedEventSchema = traceEventBaseSchema.extend({
 });
 
 const runFinishedEventSchema = traceEventBaseSchema.extend({
-  type: z.literal('run_finished'),
+  type: z.literal(TRACE_EVENT_NAMES.RUN_FINISHED),
   payload: z.object({
     status: z.literal('finished'),
     message: z.string().min(1)
@@ -44,7 +45,7 @@ const runFinishedEventSchema = traceEventBaseSchema.extend({
 });
 
 const runFailedEventSchema = traceEventBaseSchema.extend({
-  type: z.literal('run_failed'),
+  type: z.literal(TRACE_EVENT_NAMES.RUN_FAILED),
   payload: z.object({
     status: z.literal('failed'),
     code: z.string().min(1),
@@ -54,7 +55,7 @@ const runFailedEventSchema = traceEventBaseSchema.extend({
 });
 
 const runCancelledEventSchema = traceEventBaseSchema.extend({
-  type: z.literal('run_cancelled'),
+  type: z.literal(TRACE_EVENT_NAMES.RUN_CANCELLED),
   payload: z.object({
     status: z.literal('cancelled'),
     reason: z.string().min(1).optional()
@@ -62,7 +63,7 @@ const runCancelledEventSchema = traceEventBaseSchema.extend({
 });
 
 const turnStartedEventSchema = traceEventBaseSchema.extend({
-  type: z.literal('turn_started'),
+  type: z.literal(TRACE_EVENT_NAMES.TURN_STARTED),
   payload: z.object({
     stepIndex: z.number().int().nonnegative(),
     intent: z.string().min(1).optional(),
@@ -71,7 +72,7 @@ const turnStartedEventSchema = traceEventBaseSchema.extend({
 });
 
 const turnFinishedEventSchema = traceEventBaseSchema.extend({
-  type: z.literal('turn_finished'),
+  type: z.literal(TRACE_EVENT_NAMES.TURN_FINISHED),
   payload: z.object({
     stepIndex: z.number().int().nonnegative(),
     startedAt: z.number().int().nonnegative(),
@@ -89,7 +90,7 @@ const turnFinishedEventSchema = traceEventBaseSchema.extend({
 });
 
 const modelOutputReceivedEventSchema = traceEventBaseSchema.extend({
-  type: z.literal('model_output_received'),
+  type: z.literal(TRACE_EVENT_NAMES.MODEL_OUTPUT_RECEIVED),
   payload: z.object({
     rawText: z.string(),
     model: z.string().min(1)
@@ -97,14 +98,14 @@ const modelOutputReceivedEventSchema = traceEventBaseSchema.extend({
 });
 
 const modelDecisionEventSchema = traceEventBaseSchema.extend({
-  type: z.literal('model_decision'),
+  type: z.literal(TRACE_EVENT_NAMES.MODEL_DECISION),
   payload: z.object({
     decision: agentDecisionSchema
   })
 });
 
 const decisionParseFailedEventSchema = traceEventBaseSchema.extend({
-  type: z.literal('decision_parse_failed'),
+  type: z.literal(TRACE_EVENT_NAMES.DECISION_PARSE_FAILED),
   payload: z.object({
     rawText: z.string(),
     parseError: z.object({
@@ -120,7 +121,7 @@ const decisionParseFailedEventSchema = traceEventBaseSchema.extend({
 });
 
 const toolStartedEventSchema = traceEventBaseSchema.extend({
-  type: z.literal('tool_started'),
+  type: z.literal(TRACE_EVENT_NAMES.TOOL_STARTED),
   payload: z.object({
     tool: z.string().min(1),
     argsPreview: z.unknown(),
@@ -130,7 +131,7 @@ const toolStartedEventSchema = traceEventBaseSchema.extend({
 });
 
 const toolResultEventSchema = traceEventBaseSchema.extend({
-  type: z.literal('tool_result'),
+  type: z.literal(TRACE_EVENT_NAMES.TOOL_RESULT),
   payload: z.object({
     tool: z.string().min(1),
     argsPreview: z.unknown(),
@@ -139,7 +140,7 @@ const toolResultEventSchema = traceEventBaseSchema.extend({
 });
 
 const toolFailedEventSchema = traceEventBaseSchema.extend({
-  type: z.literal('tool_failed'),
+  type: z.literal(TRACE_EVENT_NAMES.TOOL_FAILED),
   payload: z.object({
     tool: z.string().min(1),
     argsPreview: z.unknown().optional(),
@@ -150,7 +151,7 @@ const toolFailedEventSchema = traceEventBaseSchema.extend({
 });
 
 const contextBuiltEventSchema = traceEventBaseSchema.extend({
-  type: z.literal('context_built'),
+  type: z.literal(TRACE_EVENT_NAMES.CONTEXT_BUILT),
   payload: z.object({
     messageCount: z.number().int().nonnegative(),
     charCount: z.number().int().nonnegative()
@@ -158,7 +159,7 @@ const contextBuiltEventSchema = traceEventBaseSchema.extend({
 });
 
 const contextCompactedEventSchema = traceEventBaseSchema.extend({
-  type: z.literal('context_compacted'),
+  type: z.literal(TRACE_EVENT_NAMES.CONTEXT_COMPACTED),
   payload: z.object({
     retainedStepCount: z.number().int().nonnegative(),
     droppedStepCount: z.number().int().nonnegative(),
@@ -172,7 +173,7 @@ const contextCompactedEventSchema = traceEventBaseSchema.extend({
 });
 
 const contextSummaryEventSchema = traceEventBaseSchema.extend({
-  type: z.literal('context_summary'),
+  type: z.literal(TRACE_EVENT_NAMES.CONTEXT_SUMMARY),
   payload: z.object({
     summary: z.string(),
     charCount: z.number().int().nonnegative()
@@ -180,7 +181,7 @@ const contextSummaryEventSchema = traceEventBaseSchema.extend({
 });
 
 const approvalRequiredEventSchema = traceEventBaseSchema.extend({
-  type: z.literal('approval_required'),
+  type: z.literal(TRACE_EVENT_NAMES.APPROVAL_REQUIRED),
   payload: z.object({
     request: approvalRequestSchema,
     summary: z.string().min(1)
@@ -188,7 +189,7 @@ const approvalRequiredEventSchema = traceEventBaseSchema.extend({
 });
 
 const stateChangedEventSchema = traceEventBaseSchema.extend({
-  type: z.literal('state_changed'),
+  type: z.literal(TRACE_EVENT_NAMES.STATE_CHANGED),
   payload: z.object({
     from: loopSessionStatusSchema,
     to: loopSessionStatusSchema,

@@ -19,3 +19,21 @@ test('renders empty observation for pages without interactive elements', async (
     await flow.close();
   }
 });
+
+test('observes form fields inside iframe through runtime aggregation', async () => {
+  const flow = await PageObservationFlow.start();
+  try {
+    await flow.expectIframeFormObservation();
+  } finally {
+    await flow.close();
+  }
+});
+
+test('refreshes side panel after delayed iframe form render', async () => {
+  const flow = await PageObservationFlow.start();
+  try {
+    await flow.expectDelayedIframeFormRefresh();
+  } finally {
+    await flow.close();
+  }
+});

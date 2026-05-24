@@ -4,6 +4,7 @@ import { bhA11yRefreshRefs } from '../../../../src/tools/a11y/bh-a11y-refresh-re
 import { bhA11yResolveRef } from '../../../../src/tools/a11y/bh-a11y-resolve-ref';
 import { bhA11ySnapshot } from '../../../../src/tools/a11y/bh-a11y-snapshot';
 import { bhPageObserve } from '../../../../src/tools/page/bh-page-observe';
+import { bhFrameList } from '../../../../src/tools/page/bh-frame-list';
 import type { ContentRpcClient } from '../../../../src/page/messaging/content-rpc-client';
 import { ToolRegistry } from '../../../../src/tools/core/tool-registry';
 import { ToolRouter } from '../../../../src/tools/core/tool-router';
@@ -48,6 +49,16 @@ describe('real page tools', () => {
       }
     });
     expect(result.context?.summary).toContain('https://demo.example.com');
+    const contextSummary = JSON.parse(result.context?.summary ?? '{}') as {
+      counts?: { refs: number; interactive: number; forms: number };
+      warnings?: string[];
+    };
+    expect(contextSummary.counts).toEqual({
+      refs: 0,
+      interactive: 0,
+      forms: 0
+    });
+    expect(contextSummary.warnings).toContain('forms: unsupported');
   });
 
   it('returns content unavailable when content RPC cannot reach the page', async () => {
@@ -70,6 +81,58 @@ describe('real page tools', () => {
       ok: false,
       code: 'CONTENT_SCRIPT_UNAVAILABLE',
       requiresObserve: true
+    });
+  });
+
+  it('lists page frames with urls for iframe debugging', async () => {
+    const rpc: ContentRpcClient = {
+      async request(message) {
+        expect(message.type).toBe('BH_FRAME_LIST');
+        return {
+          ok: true,
+          frames: [
+            {
+              frameId: 0,
+              url: 'https://account.apple.com/account',
+              isTop: true
+            },
+            {
+              frameId: 7,
+              url: 'https://appleid.apple.com/widget/account/',
+              parentFrameId: 0,
+              isTop: false
+            }
+          ]
+        };
+      }
+    };
+
+    const result = await bhFrameList(rpc).execute(
+      {},
+      { runId: 'run-1', stepId: 'step-1', runMode: 'debug' }
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      code: 'OK',
+      summary: 'Detected 2 frames',
+      changedPage: false,
+      requiresObserve: false
+    });
+    expect(result.data).toEqual({
+      frames: [
+        {
+          frameId: 0,
+          url: 'https://account.apple.com/account',
+          isTop: true
+        },
+        {
+          frameId: 7,
+          url: 'https://appleid.apple.com/widget/account/',
+          parentFrameId: 0,
+          isTop: false
+        }
+      ]
     });
   });
 

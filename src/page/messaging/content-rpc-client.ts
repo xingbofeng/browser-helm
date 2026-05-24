@@ -1,32 +1,83 @@
+import { ERROR_CODES } from '../../shared/constants/error-codes';
 import type {
   ContentRpcRequest,
   ContentRpcResponse
 } from './content-rpc.schema';
+import {
+  createContentRpcStrategies,
+  mergeFrameObservationResponses,
+  type ContentRpcStrategy
+} from './content-rpc-strategies';
 
 export interface ContentRpcClient {
   request(message: ContentRpcRequest): Promise<ContentRpcResponse>;
 }
 
 export class ChromeContentRpcClient implements ContentRpcClient {
-  constructor(private readonly tabId: number) {}
+  private readonly strategies: Map<ContentRpcRequest['type'], ContentRpcStrategy>;
+
+  constructor(private readonly tabId: number) {
+    this.strategies = new Map(
+      createContentRpcStrategies({
+        frames: () => this.frames(),
+        sendFrameMessage: (frameId, message) =>
+          this.sendFrameMessage(frameId, message)
+      }).map((strategy) => [strategy.type, strategy])
+    );
+  }
 
   async request(message: ContentRpcRequest): Promise<ContentRpcResponse> {
     if (!globalThis.chrome?.tabs?.sendMessage) {
       return {
         ok: false,
-        code: 'CONTENT_SCRIPT_UNAVAILABLE',
+        code: ERROR_CODES.CONTENT_SCRIPT_UNAVAILABLE,
         message: 'Chrome tabs messaging is unavailable'
       };
     }
 
     try {
-      return await chrome.tabs.sendMessage(this.tabId, message);
+      const strategy = this.strategies.get(message.type);
+      return strategy
+        ? await strategy.execute(message)
+        : await this.sendFrameMessage(undefined, message);
     } catch (error) {
       return {
         ok: false,
-        code: 'CONTENT_SCRIPT_UNAVAILABLE',
+        code: ERROR_CODES.CONTENT_SCRIPT_UNAVAILABLE,
         message: error instanceof Error ? error.message : 'Content script unavailable'
       };
     }
   }
+
+  private async frames(): Promise<
+    Array<{
+      frameId: number;
+      url?: string | undefined;
+      parentFrameId?: number | undefined;
+    }>
+  > {
+    if (!globalThis.chrome?.webNavigation?.getAllFrames) {
+      return [{ frameId: 0 }];
+    }
+    const frames = await chrome.webNavigation.getAllFrames({ tabId: this.tabId });
+    return frames?.map((frame) => ({
+      frameId: frame.frameId,
+      url: frame.url,
+      ...(frame.parentFrameId !== undefined
+        ? { parentFrameId: frame.parentFrameId }
+        : {})
+    })) ?? [{ frameId: 0 }];
+  }
+
+  private async sendFrameMessage(
+    frameId: number | undefined,
+    message: ContentRpcRequest
+  ): Promise<ContentRpcResponse> {
+    return await chrome.tabs.sendMessage(this.tabId, message, {
+      frameId
+    });
+  }
 }
+
+export { mergeFrameObservationResponses };
+export type { FrameRpcResponse } from './content-rpc-strategies';

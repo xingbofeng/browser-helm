@@ -1,17 +1,29 @@
-import type { ElementRef } from '../../shared/schemas/observation.schema';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { readAccessibleName } from './accessible-name';
-import { isDisabledElement, isVisibleElement } from './element-finder';
+import { readElementState } from './element-state-reader';
 import type { RefMap } from './ref-map';
 import { resolveRole } from './role-resolver';
+
+export type ResolvedRefElement = {
+  refId: string;
+  role?: string | undefined;
+  name?: string | undefined;
+  tagName: string;
+  visible: boolean;
+  disabled: boolean;
+  checked?: boolean | undefined;
+  selected?: boolean | undefined;
+  warnings?: Array<{ code: string; message: string }>;
+};
 
 export type ResolveRefResult =
   | {
       ok: true;
-      element: ElementRef;
+      element: ResolvedRefElement;
     }
   | {
       ok: false;
-      code: 'REF_NOT_FOUND' | 'REF_STALE';
+      code: typeof ERROR_CODES.REF_NOT_FOUND | typeof ERROR_CODES.REF_STALE;
       message: string;
     };
 
@@ -20,14 +32,14 @@ export function resolveRef(refMap: RefMap, refId: string): ResolveRefResult {
   if (!entry) {
     return {
       ok: false,
-      code: 'REF_NOT_FOUND',
+      code: ERROR_CODES.REF_NOT_FOUND,
       message: `Ref not found: ${refId}`
     };
   }
   if (refMap.isEntryStale(entry)) {
     return {
       ok: false,
-      code: 'REF_STALE',
+      code: ERROR_CODES.REF_STALE,
       message: `Ref is stale: ${refId}`
     };
   }
@@ -39,8 +51,18 @@ export function resolveRef(refMap: RefMap, refId: string): ResolveRefResult {
       role: resolveRole(entry.element),
       name: readAccessibleName(entry.element),
       tagName: entry.element.tagName.toLowerCase(),
-      visible: isVisibleElement(entry.element),
-      disabled: isDisabledElement(entry.element)
+      ...readResolvedState(entry.element)
     }
+  };
+}
+
+function readResolvedState(element: Element) {
+  const state = readElementState(element);
+  return {
+    visible: state.visible,
+    disabled: state.disabled,
+    checked: state.checked,
+    selected: state.selected,
+    warnings: state.warnings
   };
 }

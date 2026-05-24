@@ -2,6 +2,7 @@ import type {
   ToolResult,
   ToolRisk
 } from '../../shared/schemas/tool-result.schema';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
 
 export function successToolResult(
   code: string,
@@ -41,7 +42,7 @@ export function approvalRequiredResult(input: {
 }): ToolResult {
   return {
     ok: false,
-    code: 'APPROVAL_REQUIRED',
+    code: ERROR_CODES.APPROVAL_REQUIRED,
     summary: 'Requires approval before execution',
     requiresApproval: true,
     approval: {

@@ -52,6 +52,65 @@ export class PageObservationFlow {
     });
   }
 
+  async expectIframeFormObservation(): Promise<void> {
+    const fixture = await this.flowContext.fixturePage();
+    await fixture.goto('iframe-form-host.html');
+
+    const tabId = await this.flowContext.shell().activeTabId();
+    const snapshot = await this.flowContext.sidePanel().runOnTab({
+      tabId,
+      task: '观察 iframe 表单',
+      mode: 'form'
+    });
+
+    expect(snapshot).toMatchObject({
+      status: 'observed',
+      structuredPageData: {
+        forms: expect.objectContaining({
+          status: 'ready',
+          count: 3,
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              refId: expect.stringMatching(/^frame_\d+:ref_\d+$/u),
+              name: 'email',
+              type: 'email',
+              required: true
+            }),
+            expect.objectContaining({
+              refId: expect.stringMatching(/^frame_\d+:ref_\d+$/u),
+              name: 'country',
+              type: 'select',
+              required: true
+            })
+          ])
+        })
+      },
+      refs: expect.arrayContaining([
+        expect.objectContaining({
+          refId: expect.stringMatching(/^frame_\d+:ref_\d+$/u),
+          role: 'textbox'
+        }),
+        expect.objectContaining({
+          refId: expect.stringMatching(/^frame_\d+:ref_\d+$/u),
+          role: 'button',
+          name: '创建账号'
+        })
+      ])
+    });
+  }
+
+  async expectDelayedIframeFormRefresh(): Promise<void> {
+    const fixture = await this.flowContext.fixturePage();
+    await fixture.goto('delayed-iframe-form-host.html');
+
+    const tabId = await this.flowContext.shell().activeTabId();
+    const sidePanelPage = await this.flowContext.sidePanel().open(tabId);
+
+    await expect(sidePanelPage.getByText(/forms\s+ready\s+2/u)).toBeVisible({
+      timeout: 8_000
+    });
+  }
+
   async close(): Promise<void> {
     await this.flowContext.close();
   }

@@ -19,7 +19,8 @@ describe('InMemoryTraceRecorder', () => {
           promptVersion: 'v0.1.0',
           toolSchemaVersion: 'v0.1.0',
           contextPolicyVersion: 'v0.1.0',
-          model: 'mock'
+          model: 'mock',
+          runMode: 'ask'
         }
       }
     });
@@ -37,7 +38,8 @@ describe('InMemoryTraceRecorder', () => {
           promptVersion: 'v0.1.0',
           toolSchemaVersion: 'v0.1.0',
           contextPolicyVersion: 'v0.1.0',
-          model: 'mock'
+          model: 'mock',
+          runMode: 'ask'
         }
       }
     });

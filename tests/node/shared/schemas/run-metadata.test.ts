@@ -9,11 +9,13 @@ describe('runMetadataSchema', () => {
       promptVersion: 'v0.1.0',
       toolSchemaVersion: 'v0.1.0',
       contextPolicyVersion: 'v0.1.0',
-      model: 'gpt-5-mini'
+      model: 'gpt-5-mini',
+      runMode: 'ask'
     });
 
     expect(result.schemaVersion).toBe('1.0.0');
     expect(result.model).toBe('gpt-5-mini');
+    expect(result.runMode).toBe('ask');
   });
 
   it('accepts optional provider and capabilities fields', () => {
@@ -23,6 +25,7 @@ describe('runMetadataSchema', () => {
       toolSchemaVersion: 'v0.1.0',
       contextPolicyVersion: 'v0.1.0',
       model: 'gpt-5-mini',
+      runMode: 'form',
       providerBaseUrl: 'https://example.com/v1',
       modelCapabilities: {
         supportsStructuredOutput: true,
@@ -34,6 +37,7 @@ describe('runMetadataSchema', () => {
     });
 
     expect(result.providerBaseUrl).toBe('https://example.com/v1');
+    expect(result.runMode).toBe('form');
     expect(result.modelCapabilities?.supportsTools).toBe(true);
   });
 
@@ -44,7 +48,8 @@ describe('runMetadataSchema', () => {
         promptVersion: 'v0.1.0',
         toolSchemaVersion: 'v0.1.0',
         contextPolicyVersion: 'v0.1.0',
-        model: 'gpt-5-mini'
+        model: 'gpt-5-mini',
+        runMode: 'ask'
       })
     ).toThrowError();
   });

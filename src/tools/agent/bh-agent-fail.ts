@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { toolResultSchema } from '../../shared/schemas/tool-result.schema';
 import type { ToolSpec } from '../core/tool-spec';
 
@@ -13,6 +14,7 @@ export const bhAgentFail: ToolSpec<
   z.infer<typeof toolResultSchema>
 > = {
   name: 'bh_agent_fail',
+  // Agent 无法继续或确认失败时调用，作为一次 run 的失败终止信号。
   title: 'Agent Fail',
   description: 'Fails current run with structured error',
   modes: ['internal'],
@@ -22,7 +24,7 @@ export const bhAgentFail: ToolSpec<
   execute(args) {
     return Promise.resolve({
       ok: false,
-      code: args.code ?? 'AGENT_FAIL',
+      code: args.code ?? ERROR_CODES.AGENT_FAIL,
       summary: args.message,
       error: {
         message: args.message

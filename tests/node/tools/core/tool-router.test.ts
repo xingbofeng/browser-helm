@@ -114,4 +114,90 @@ describe('ToolRouter', () => {
     });
     expect(JSON.stringify(contracts[0]?.argsSchema)).toContain('page');
   });
+
+  it('filters prompt contracts by run mode while keeping internal tools visible', () => {
+    const registry = new ToolRegistry();
+    const makeTool = (name: string, modes: Array<'ask' | 'debug' | 'form' | 'internal'>) => ({
+      name,
+      title: name,
+      description: name,
+      modes,
+      risk: 'safe' as const,
+      argsSchema: z.object({}),
+      resultSchema: z.object({
+        ok: z.boolean(),
+        code: z.string(),
+        summary: z.string()
+      }),
+      execute: async () => ({
+        ok: true,
+        code: 'OK',
+        summary: name
+      })
+    });
+    registry.register(makeTool('bh_ask', ['ask']));
+    registry.register(makeTool('bh_debug', ['debug']));
+    registry.register(makeTool('bh_form', ['form']));
+    registry.register(makeTool('bh_internal', ['internal']));
+
+    const router = new ToolRouter(registry);
+
+    expect(router.listToolContracts('ask').map((tool) => tool.name)).toEqual([
+      'bh_ask',
+      'bh_internal'
+    ]);
+    expect(router.listToolContracts('debug').map((tool) => tool.name)).toEqual([
+      'bh_ask',
+      'bh_debug',
+      'bh_internal'
+    ]);
+    expect(router.listToolContracts('form').map((tool) => tool.name)).toEqual([
+      'bh_ask',
+      'bh_form',
+      'bh_internal'
+    ]);
+  });
+
+  it('blocks execution when tool is unavailable in the current run mode', async () => {
+    const registry = new ToolRegistry();
+    let executed = false;
+    registry.register({
+      name: 'bh_form_only',
+      title: 'Form Only',
+      description: 'Form tool',
+      modes: ['form'],
+      risk: 'safe',
+      argsSchema: z.object({}),
+      resultSchema: z.object({
+        ok: z.boolean(),
+        code: z.string(),
+        summary: z.string()
+      }),
+      execute: async () => {
+        executed = true;
+        return {
+          ok: true,
+          code: 'OK',
+          summary: 'ran'
+        };
+      }
+    });
+
+    const router = new ToolRouter(registry);
+    const blocked = await router.execute(
+      {
+        tool: 'bh_form_only',
+        args: {}
+      },
+      {
+        runId: 'run_1',
+        stepId: 'step_1',
+        runMode: 'ask'
+      }
+    );
+
+    expect(blocked.ok).toBe(false);
+    expect(blocked.code).toBe('TOOL_MODE_NOT_ALLOWED');
+    expect(executed).toBe(false);
+  });
 });

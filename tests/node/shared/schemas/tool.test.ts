@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { toolModeSchema, toolSpecMetaSchema } from '../../../../src/shared/schemas/tool.schema';
+import {
+  runModeSchema,
+  toolModeSchema,
+  toolSpecMetaSchema
+} from '../../../../src/shared/schemas/tool.schema';
 
 describe('toolSpecMetaSchema', () => {
   it('accepts full v0.1 tool spec metadata shape', () => {
@@ -19,5 +23,12 @@ describe('toolSpecMetaSchema', () => {
     expect(() =>
       toolModeSchema.parse('admin')
     ).toThrowError();
+  });
+
+  it('accepts only user-selectable run modes', () => {
+    expect(runModeSchema.parse('ask')).toBe('ask');
+    expect(runModeSchema.parse('debug')).toBe('debug');
+    expect(runModeSchema.parse('form')).toBe('form');
+    expect(() => runModeSchema.parse('act')).toThrowError();
   });
 });
