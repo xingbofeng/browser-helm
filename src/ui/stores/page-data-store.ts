@@ -15,17 +15,19 @@ type PageDataStoreState = {
 };
 
 export function createPageDataStore() {
-  const state: PageDataStoreState = {
+  const store = createSimpleStore<PageDataStoreState>({
     tabStatuses: {},
     setSnapshot: (snapshot) => {
-      state.snapshot = snapshot;
-      state.tabStatuses = {
-        observation: snapshot.structuredPageData?.observation.status,
-        refs: snapshot.structuredPageData?.refs.status,
-        interactive: snapshot.structuredPageData?.interactive.status,
-        forms: snapshot.structuredPageData?.forms.status
-      };
+      store.setState({
+        snapshot,
+        tabStatuses: {
+          observation: snapshot.structuredPageData?.observation.status,
+          refs: snapshot.structuredPageData?.refs.status,
+          interactive: snapshot.structuredPageData?.interactive.status,
+          forms: snapshot.structuredPageData?.forms.status
+        }
+      });
     }
-  };
-  return createSimpleStore(state);
+  });
+  return store;
 }

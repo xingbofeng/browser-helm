@@ -28,7 +28,8 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
           changedPage: false,
           requiresObserve: false
         };
-      }
+      },
+      subscribeRun: () => () => undefined
     });
 
     await expect(
@@ -85,7 +86,8 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
         ok: true,
         code: 'OK',
         summary: 'ok'
-      })
+      }),
+      subscribeRun: () => () => undefined
     });
 
     await expect(
@@ -101,5 +103,40 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
       }
     });
     expect(calls).toEqual(['run_1']);
+  });
+
+  it('subscribes to run events from the run manager', () => {
+    const listeners: Array<(event: { runId: string; type: string }) => void> = [];
+    const host = new BackgroundRuntimeHost({
+      startRun: async () => ({ runId: 'run_1' }),
+      getSnapshot: () => ({ runId: 'run_1', mode: 'ask', status: 'observed' }),
+      cancelRun: async () => ({ runId: 'run_1', status: 'cancelled' }),
+      executeTool: async () => ({
+        ok: true,
+        code: 'OK',
+        summary: 'ok'
+      }),
+      decideApproval: async () => ({
+        ok: true,
+        code: 'OK',
+        summary: 'ok'
+      }),
+      subscribeRun: (_runId, listener) => {
+        listeners.push(listener);
+        return () => {
+          listeners.pop();
+        };
+      }
+    });
+    const received: unknown[] = [];
+    const unsubscribe = host.subscribeRun('run_1', (event) => {
+      received.push(event);
+    });
+
+    listeners[0]?.({ runId: 'run_1', type: 'run_started' });
+    unsubscribe();
+
+    expect(received).toEqual([{ runId: 'run_1', type: 'run_started' }]);
+    expect(listeners).toHaveLength(0);
   });
 });

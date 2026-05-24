@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { ToolRegistry } from '../../../../src/tools/core/tool-registry';
 import { ToolRouter } from '../../../../src/tools/core/tool-router';
+import { TOOL_NAMES } from '../../../../src/shared/constants/tool-names';
 
 describe('ToolRouter', () => {
   it('returns TOOL_NOT_FOUND when tool is missing', async () => {
@@ -161,9 +162,41 @@ describe('ToolRouter', () => {
       'bh_internal'
     ]);
     expect(router.listToolContracts('act').map((tool) => tool.name)).toEqual([
-      'bh_ask',
       'bh_act',
       'bh_internal'
+    ]);
+  });
+
+  it('uses an explicit Act mode allow-list instead of exposing every ask tool', () => {
+    const registry = new ToolRegistry();
+    const makeTool = (
+      name: string,
+      modes: Array<'ask' | 'debug' | 'form' | 'act' | 'internal'>
+    ) => ({
+      name,
+      title: name,
+      description: name,
+      modes,
+      risk: 'safe' as const,
+      argsSchema: z.object({}),
+      resultSchema: z.object({
+        ok: z.boolean(),
+        code: z.string(),
+        summary: z.string()
+      }),
+      execute: async () => ({
+        ok: true,
+        code: 'OK',
+        summary: name
+      })
+    });
+    registry.register(makeTool(TOOL_NAMES.PAGE_OBSERVE, ['ask', 'debug', 'form']));
+    registry.register(makeTool('bh_future_ask_tool', ['ask']));
+
+    const router = new ToolRouter(registry);
+
+    expect(router.listToolContracts('act').map((tool) => tool.name)).toEqual([
+      TOOL_NAMES.PAGE_OBSERVE
     ]);
   });
 

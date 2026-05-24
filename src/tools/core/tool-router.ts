@@ -5,6 +5,7 @@ import type { ToolMode } from '../../shared/schemas/tool.schema';
 import type { RunMode } from '../../shared/schemas/tool.schema';
 import type { ToolRisk } from '../../shared/schemas/tool-result.schema';
 import type { ToolContext } from './tool-context';
+import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import {
   TOOL_ARGS_INVALID,
   TOOL_EXECUTION_FAILED,
@@ -29,6 +30,8 @@ export type ToolPromptContract = {
   argsSchema: unknown;
 };
 
+const ACT_MODE_SHARED_TOOL_NAMES = new Set<string>([TOOL_NAMES.PAGE_OBSERVE]);
+
 export class ToolRouter {
   constructor(private readonly registry: ToolRegistry) {}
 
@@ -38,7 +41,7 @@ export class ToolRouter {
 
   listToolContracts(runMode?: RunMode): ToolPromptContract[] {
     return this.registry.list().filter((tool) =>
-      runMode ? isToolAvailableInRunMode(tool.modes, runMode) : true
+      runMode ? isToolAvailableInRunMode(tool.modes, runMode, tool.name) : true
     ).map((tool) => ({
       name: tool.name,
       title: tool.title,
@@ -59,7 +62,7 @@ export class ToolRouter {
       return failedToolResult(TOOL_NOT_FOUND, `Tool not found: ${input.tool}`);
     }
 
-    if (ctx.runMode && !isToolAvailableInRunMode(spec.modes, ctx.runMode)) {
+    if (ctx.runMode && !isToolAvailableInRunMode(spec.modes, ctx.runMode, spec.name)) {
       return failedToolResult(
         TOOL_MODE_NOT_ALLOWED,
         `Tool ${input.tool} is not available in ${ctx.runMode} mode`,
@@ -99,7 +102,8 @@ export class ToolRouter {
 
 export function isToolAvailableInRunMode(
   toolModes: ToolMode[],
-  runMode: RunMode
+  runMode: RunMode,
+  toolName?: string
 ): boolean {
   if (toolModes.includes('internal')) {
     return true;
@@ -113,7 +117,10 @@ export function isToolAvailableInRunMode(
   if (runMode === 'form') {
     return toolModes.includes('ask') || toolModes.includes('form');
   }
-  return toolModes.includes('ask') || toolModes.includes('act');
+  return (
+    toolModes.includes('act') ||
+    (toolName !== undefined && ACT_MODE_SHARED_TOOL_NAMES.has(toolName))
+  );
 }
 
 function normalizeError(error: unknown): string {

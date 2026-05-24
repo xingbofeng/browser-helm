@@ -1,5 +1,5 @@
 import { ERROR_CODES } from '../shared/constants/error-codes';
-import { TRACE_EVENT_NAMES } from '../shared/constants/event-names';
+import { APPROVAL_EVENT_NAMES, TRACE_EVENT_NAMES } from '../shared/constants/event-names';
 import type {
   DecideApprovalInput,
   RuntimeEvent,
@@ -98,7 +98,7 @@ export class FakeRuntimePort implements RuntimePort {
     if (snapshot.pendingApproval?.id !== input.requestId) {
       return {
         ok: false,
-        code: 'APPROVAL_REQUEST_NOT_FOUND',
+        code: ERROR_CODES.APPROVAL_REQUEST_NOT_FOUND,
         summary: `Approval request not found: ${input.requestId}`,
         error: {
           message: `Approval request not found: ${input.requestId}`
@@ -129,7 +129,7 @@ export class FakeRuntimePort implements RuntimePort {
         ...(snapshot.trace ?? []),
         {
           runId: input.runId,
-          type: denied ? 'approval_denied' : 'approval_approved',
+          type: denied ? APPROVAL_EVENT_NAMES.DENIED : APPROVAL_EVENT_NAMES.APPROVED,
           payload: {
             requestId: input.requestId,
             reason: input.reason
@@ -139,9 +139,11 @@ export class FakeRuntimePort implements RuntimePort {
     });
     this.emit(input.runId, {
       runId: input.runId,
-      type: TRACE_EVENT_NAMES.STATE_CHANGED,
+      type: denied ? APPROVAL_EVENT_NAMES.DENIED : APPROVAL_EVENT_NAMES.APPROVED,
       payload: {
-        reason: result.code
+        requestId: input.requestId,
+        reason: input.reason,
+        code: result.code
       }
     });
     return result;

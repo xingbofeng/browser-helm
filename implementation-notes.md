@@ -91,3 +91,176 @@
 
 **待确认**：
 - [ ] v0.4 正式实现时，再确认 CockpitApp 何时替换 legacy side panel 产品入口。
+
+## [v0.4 Cockpit UI 实现] - 2026-05-25
+
+**目标**：按照 roadmap 与 OpenSpec 完成 extension side panel Cockpit UI，覆盖页面观察、Ref、交互元素、表单字段、timeline、tool inspector、trace、approval、settings、run/stop 状态。
+
+**设计决策**：引入 `lucide-react` 作为按钮与状态图标来源，避免手写 SVG 并保持 UI 控件语义一致；Cockpit UI 拆分到 `src/ui/**`，entrypoint 只负责 runtime 注入和 URL 参数解析；UI 只依赖 RuntimePort / snapshot，不直接导入 Agent Kernel、ContextCompactor、ToolRouter、ModelClient 或 content script 内部模块。
+
+**偏差说明**：不写 ADR；真实浏览器验收只覆盖 E2E 难以覆盖的 extension host / 原生 side panel 场景，常规行为以 Vitest 与 POM E2E 自动化为准。
+
+**权衡分析**：
+- 方案一：继续在单个 sidepanel App 中累加 UI。优点是改动集中；缺点是难以测试、难以复用，也不符合 v0.4 组件拆分要求。
+- 方案二：按 shell、tabs、timeline、inspector、approval、settings、stores 和 lib 分层。优点是边界清晰、测试可拆；缺点是新增文件较多。
+- 选择方案二，因为 v0.4 需要覆盖多个状态和验收路径，组件化比单文件更容易保持类型与 E2E 稳定。
+
+**待确认**：
+- [ ] 后续视觉精修是否需要接入正式 Figma 设计稿。
+- [ ] 原生 side panel 的最终人工验收清单是否固定写入 debug checklist。
+
+## [v0.4 安全边界复查收口] - 2026-05-25
+
+**目标**：根据 review 反馈补强 iframe mutating RPC 与 Act mode 工具暴露边界。
+
+**设计决策**：保留现有 runtime action token，不另起一套授权机制；在 content handler 内增加最低限度 readiness 防线，即使带 token 也会阻止 disabled / mismatch / still requires approval 的 iframe mutation。Act mode 改为只允许 `act` 标记工具和显式共享工具，避免未来新增 `ask` 工具自动进入 Act。
+
+**偏差说明**：本次不重构 `PolicyEngine -> ApprovalManager -> runtime host` 全链路。原因：这属于更大的架构收敛，当前先修可达安全边界和可回归行为。
+
+**权衡分析**：
+- 方案一：只依赖工具层 readiness。优点是改动少；缺点是 content RPC 作为可变更页面 primitive 时缺少纵深防御。
+- 方案二：工具层与 content handler 都做最小 readiness。优点是绕过工具层时仍不会直接改页面；缺点是 handler 需要理解 action readiness。
+- 选择方案二，因为 iframe click/type 是页面 mutation 入口，需要在最靠近 DOM 的位置保留最后一道防线。
+
+**待确认**：
+- [ ] 后续是否将 policy / approval / readiness 串成单一架构链路并删除重复判断。
+
+## [v0.4 Cockpit 完成度缺口修复] - 2026-05-25
+
+**目标**：修复 review 指出的 v0.4 Cockpit UI 缺口，使 Settings、Tab 视图、stores、细粒度状态和窄面板视觉更贴近 roadmap 的 Complete Cockpit UI Prototype。
+
+**设计决策**：Settings 改为通过 UI 输入保存到 RuntimePort/settings store；CockpitApp 接入 agent/page-data/trace/approval/settings stores，但仍保留 React state 作为渲染层快照，避免一次性引入复杂订阅机制。四个 Tab 改为只渲染当前 active tab，Ref 与 Interactive tab 提供真实筛选。细粒度 run status 先扩展 snapshot/status 与 UI 映射，不改 AgentLoop 的完整状态机。
+
+**偏差说明**：本次没有把所有 runtime event 都升级为实时状态流。原因：当前 RuntimePort 的真实 subscribeRun 尚未完整事件化，v0.4 先保证 snapshot 能表达并驱动 UI，完整 streaming 状态留给后续 runtime 收敛。
+
+**权衡分析**：
+- 方案一：重写 CockpitApp 为完全 store-driven 订阅组件。优点是架构更纯；缺点是会扩大 v0.4 收口风险。
+- 方案二：实际 UI 使用 stores 作为状态边界，同时保留局部 React state 承载渲染。优点是改动可控、测试稳定；缺点是 store 订阅模型仍需后续增强。
+- 选择方案二，因为它能修复当前 roadmap 缺口，又避免在 UI 收口阶段重排所有组件状态。
+
+**待确认**：
+- [ ] 后续是否为 `RuntimePort.subscribeRun` 定义完整事件语义，驱动 thinking/executing/recovering 的实时切换。
+
+## [v0.4 Cockpit 设计稿对齐精修] - 2026-05-25
+
+**目标**：根据 docs/design 中 v0.31/v0.32 的四 Tab 风格和 GPT-Image2 新设计稿，精修 v0.4 Cockpit side panel 的交互密度、视觉层级、表格、状态卡和真实扩展截图验收。
+
+**设计决策**：采用暖色 operational dashboard 主题，四个 Tab 统一使用状态 pill、count badge、紧凑表格和详情卡；Settings 默认折叠，Approval 无 pending request 时不渲染空卡。原因：这更接近 v0.31/v0.32 截图里的右侧栏密度，也避免窄 side panel 被低频设置项占满。
+
+**偏差说明**：没有逐像素复刻 GPT-Image2 图中的左侧网页与 Chrome 外框。原因：产品实现对象是 extension side panel，本轮只改真实扩展 UI；左侧网页与浏览器壳仅作为设计参照。
+
+**权衡分析**：
+- 方案一：只改 CSS，不改 Tab 结构。优点是风险最小；缺点是仍然像列表，不符合设计稿中的表格和详情卡。
+- 方案二：同步改 Tab 结构、样式和 E2E POM。优点是视觉与交互都贴近设计稿；缺点是需要同步维护测试定位。
+- 选择方案二，因为用户明确要求交互和样式都向设计稿对齐，单纯换色不足以证明完成。
+
+**验证记录**：
+- `npx openspec validate implement-v0-4-cockpit-ui --strict`：passed。
+- `npm run typecheck`：passed。
+- `npm run lint`：passed。
+- `npm test`：93 files / 327 tests passed。
+- `npm run build`：passed。
+- `npm run test:e2e`：13 passed。
+- Chrome for Testing SOP：已加载 `.output/chrome-mv3`，通过 CDP 截图验证四个 Tab；520px 宽度下 `bodyScrollWidth=504`、`shellScrollWidth=504`、`shellClientWidth=504`，无页面级横向溢出。
+
+**待确认**：
+- [ ] 若后续拿到正式 Figma，需要再做一次像素级对齐。
+
+## [v0.4 Cockpit runtime 闭环修复] - 2026-05-25
+
+**目标**：修复 review 指出的 runtime timeline 空白和 Settings 保存丢失 API key 两个产品闭环问题，并补强自动化验收。
+
+**设计决策**：在 `RunManager` 内为真实 runtime 写入 `run_started`、`tool_started`、`tool_result`、失败/取消/审批状态事件，并把同一份 trace 带入 `RunSnapshot`。Settings 保存时将未输入的新 API key 视为“保留旧 key”，而不是清空 key。
+
+**偏差说明**：本次没有把 UI stores 升级成完整 Zustand/subscriber 架构；也没有把 `startRun` 改为异步流式 run lifecycle。原因：这两项会改变 RuntimePort 和 UI 数据流边界，适合单独提案处理；本次先闭合已确认的产品 bug。
+
+**权衡分析**：
+- 方案一：只修测试定位，不改 runtime trace。优点是快；缺点是 Timeline 仍然没有真实步骤。
+- 方案二：在 runtime manager 生成最小 trace 并补 E2E。优点是真实 side panel 可以看到步骤；缺点是 trace 语义仍是 snapshot 级，不是完整 streaming。
+- 选择方案二，因为它直接修复 v0.4 Cockpit 透明化缺口，且不扩大到 AgentLoop 重构。
+
+**验证记录**：
+- `npm run typecheck`：passed。
+- `npm run lint`：passed。
+- `npm test`：93 files / 329 tests passed。
+- `npm run build`：passed。
+- `npm run test:e2e`：13 passed。
+- `npx openspec validate implement-v0-4-cockpit-ui --strict`：passed。
+- Chrome for Testing SOP：已验证真实 side panel Step Timeline 显示 `Run started`、`Tool started`、`Tool result`，Trace 显示 3 条；截图为 `artifacts/v04-cockpit-timeline-settings-fix.png`。
+
+**待确认**：
+- [ ] 是否将 RuntimePort 改为真正 streaming/subscription 驱动，以覆盖 thinking/recovering 等中间状态。
+- [ ] 是否将 UI stores 从 `getState()` 原型升级为可订阅状态源。
+
+## [v0.4 Runtime streaming 与 UI store 订阅化] - 2026-05-25
+
+**目标**：一次性收口 review 中剩余的两个架构缺口：真实 RuntimePort 事件订阅、UI stores 可订阅并驱动 Cockpit 渲染。
+
+**设计决策**：Runtime streaming 使用 `chrome.runtime.connect({ name: BH_RUNTIME_SUBSCRIBE_RUN })` 建立 side panel 到 background 的长连接，background 通过 `RunManager.subscribeRun()` 推送 `RuntimeEvent`。`RunManager.startRun()` 改为创建 run 后立即返回 runId，初始 observe 在后台异步执行；UI 拿到 runId 后订阅事件，并在事件到达时刷新 snapshot。UI store 不新增 Zustand 依赖，使用 `useSyncExternalStore` + 本地 `SimpleStore.subscribe/setState` 实现 React 官方外部 store 契约。
+
+**偏差说明**：`thinking` / `recovering` 没有被人为造假触发。当前真实 runtime 已驱动 `observing`、`executing_tool`、`waiting_for_approval`、`cancelled`、`failed/error` 等实际存在的状态；`thinking` 和 `recovering` 需要等后续接入真正 AgentLoop/model/recovery 分支时由对应流程发出。
+
+**权衡分析**：
+- 方案一：引入 Zustand 并同步重写所有 UI 状态。优点是贴近 roadmap 命名；缺点是新增依赖，且当前 store 需求不复杂。
+- 方案二：用 `useSyncExternalStore` 实现可订阅 store。优点是无新增依赖、React 语义正确、改动可控；缺点是没有 Zustand devtools/middleware。
+- 选择方案二，因为它完成“stores -> UI render”的架构目标，同时避免为 prototype 引入不必要依赖。
+
+**验证记录**：
+- `npm run typecheck`：passed。
+- `npm run lint`：passed。
+- `npm test`：93 files / 331 tests passed。
+- `npm run build`：passed。
+- `npm run test:e2e`：13 passed。
+- `npx openspec validate implement-v0-4-cockpit-ui --strict`：passed。
+- Chrome for Testing SOP：真实 side panel 通过 runtime subscription 刷新，Step Timeline 显示 `Run started`、`Tool started`、`Tool result`，Trace 显示 3 条；截图为 `artifacts/v04-cockpit-streaming-stores-final.png`。
+
+**待确认**：
+- [ ] 后续 AgentLoop 接入 Cockpit 时，将 model thinking / recovery 分支映射到 `thinking` / `recovering` 状态。
+
+## [v0.4 Cockpit 柔和岛屿视觉收口] - 2026-05-25
+
+**目标**：在不扩大 v0.4 功能语义的前提下，将 Cockpit UI 调整为 GPT Image 2 设计稿中的柔和岛屿风格，并完成真实 extension host 截图验收。
+
+**设计决策**：把设计稿作为视觉参考而非功能需求；保留 v0.4 已有的观察、Ref、交互元素、表单字段、工具结果、trace、settings 和 approval 表达，不新增“自动执行/验证结果”等当前 runtime 不支持的能力。视觉上采用暖纸底、浅绿主状态、暖橙辅助状态、8px 卡片、CSS 绘制的小船/叶子/底部会话图标，避免引入新图片依赖。
+
+**偏差说明**：未逐字复刻设计稿中的功能文案。原因：设计稿生成时带入了超出 v0.4 的执行语义；本次仅复刻布局密度、色彩、卡片、tab、timeline 和 footer 的视觉语言。
+
+**权衡分析**：
+- 方案一：按设计稿文案直接实现。优点是表面更像图；缺点是会误导用户以为 v0.4 已具备完整动作执行和验证能力。
+- 方案二：视觉高保真、功能语义保守。优点是满足风格目标且不破坏 roadmap 边界；缺点是与生成图的部分文字不完全一致。
+- 选择方案二，因为 Cockpit 是真实产品 UI，不能用设计稿里的过度功能文案替代实际能力。
+
+**验证记录**：
+- `npm run typecheck`：passed。
+- `npm run lint`：passed。
+- `npm test`：93 files / 331 tests passed。
+- `npm run test:e2e`：13 passed。
+- `npx openspec validate implement-v0-4-cockpit-ui --strict`：passed。
+- Chrome for Testing SOP：已加载 `.output/chrome-mv3`，通过 CDP 截图验证 360px side panel；`bodyScrollWidth=344`、`bodyClientWidth=344`、`hasHorizontalOverflow=false`，Ref tab 点击后 `data-active-tab=refs`。截图位于 `/tmp/browser-helm-cockpit-island-final-360.png` 与 `/tmp/browser-helm-cockpit-island-final-ref-360.png`。
+
+**待确认**：
+- [ ] 若需要真正“像素级”生产对齐，后续应以固定尺寸 Figma 或标注稿替代生成图作为唯一基准。
+
+## [v0.4 Cockpit 最终收口修复] - 2026-05-25
+
+**目标**：修复 v0.4 完成度复查中剩余的 approval timeline、ToolInspector detail、auto observe 重复 run 和 settings policy 数据源问题。
+
+**设计决策**：approval decision 直接写入 `approval_approved` / `approval_denied` runtime event，不再只用泛化 `state_changed` 表达；ToolResult snapshot 增加 sanitized `detail`，由 ToolInspector 展示完整但脱敏的结果详情；targetTabId 自动观察只在疑似 iframe 数据尚未 ready 时重试；Settings 策略预留项统一从 settings store 传入。
+
+**偏差说明**：没有实现完整 trace replay 或 action resume。原因：roadmap 明确 v0.4 不做 trace replay，approval approve 在当前动作准备边界内只表示“审批通过，可继续”，不执行 submit/action executor。
+
+**权衡分析**：
+- 方案一：保留 `state_changed`，只改 UI label 推断。优点是改动少；缺点是 trace 语义不清晰。
+- 方案二：runtime 写明确 approval event。优点是 timeline、trace 和测试语义一致；缺点是需要同步 RunManager/FakeRuntimePort。
+- 选择方案二，因为 approval 是 v0.4 的核心安全透明度要求。
+
+**验证记录**：
+- `npx vitest run tests/node/runtime/run-manager.test.ts tests/node/ui/components/timeline-inspector.test.tsx tests/dom/ui/sidepanel/cockpit-app-interaction.test.tsx tests/node/ui/stores/settings-store.test.ts`：4 files / 21 tests passed。
+- `npm run typecheck`：passed。
+- `npm run lint`：passed。
+- `npm test`：93 files / 332 tests passed。
+- `npm run test:e2e`：13 passed。
+- `npx openspec validate implement-v0-4-cockpit-ui --strict`：passed。
+
+**待确认**：
+- [ ] v1.0 是否需要把 approval approve 后的 action resume 设计为独立显式流程。

@@ -108,9 +108,9 @@ export class PageObservationFlow {
     const tabId = await this.flowContext.shell().activeTabId();
     const sidePanelPage = await this.flowContext.sidePanel().open(tabId);
 
-    await expect(sidePanelPage.getByText(/forms\s+ready\s+2/u)).toBeVisible({
-      timeout: 8_000
-    });
+    await expect(
+      sidePanelPage.locator('.bh-toolResultCard > p').filter({ hasText: /检测到 2 个字段/u })
+    ).toBeVisible({ timeout: 8_000 });
   }
 
   async expectIframeActModeReadClickType(): Promise<void> {
@@ -273,7 +273,7 @@ export class PageObservationFlow {
   }
 }
 
-function findFrameRef(
+export function findFrameRef(
   refs:
     | Array<{
         refId: string;

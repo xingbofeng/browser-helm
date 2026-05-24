@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ExtensionRuntimePort } from '../../../src/runtime/extension-runtime-port';
-import { RUNTIME_MESSAGES } from '../../../src/shared/constants/event-names';
+import { RUNTIME_MESSAGES, TRACE_EVENT_NAMES } from '../../../src/shared/constants/event-names';
 
 describe('ExtensionRuntimePort', () => {
   afterEach(() => {
@@ -30,5 +30,54 @@ describe('ExtensionRuntimePort', () => {
       type: RUNTIME_MESSAGES.CANCEL_RUN,
       runId: 'run_1'
     });
+  });
+
+  it('subscribes to runtime run events through a named port', () => {
+    const listeners: Array<(message: unknown) => void> = [];
+    const disconnectListeners: Array<() => void> = [];
+    const postMessage = vi.fn();
+    const disconnect = vi.fn();
+    const connect = vi.fn().mockReturnValue({
+      postMessage,
+      disconnect,
+      onMessage: {
+        addListener: (listener: (message: unknown) => void) => listeners.push(listener),
+        removeListener: (listener: (message: unknown) => void) => {
+          const index = listeners.indexOf(listener);
+          if (index >= 0) {
+            listeners.splice(index, 1);
+          }
+        }
+      },
+      onDisconnect: {
+        addListener: (listener: () => void) => disconnectListeners.push(listener),
+        removeListener: (listener: () => void) => {
+          const index = disconnectListeners.indexOf(listener);
+          if (index >= 0) {
+            disconnectListeners.splice(index, 1);
+          }
+        }
+      }
+    });
+    vi.stubGlobal('chrome', {
+      runtime: {
+        connect
+      }
+    });
+    const port = new ExtensionRuntimePort();
+    const received: unknown[] = [];
+
+    const unsubscribe = port.subscribeRun('run_1', (event) => {
+      received.push(event);
+    });
+    listeners[0]?.({ runId: 'run_1', type: TRACE_EVENT_NAMES.RUN_STARTED });
+    listeners[0]?.({ runId: 'run_2', type: TRACE_EVENT_NAMES.RUN_STARTED });
+    unsubscribe();
+
+    expect(connect).toHaveBeenCalledWith({ name: RUNTIME_MESSAGES.SUBSCRIBE_RUN });
+    expect(postMessage).toHaveBeenCalledWith({ runId: 'run_1' });
+    expect(received).toEqual([{ runId: 'run_1', type: TRACE_EVENT_NAMES.RUN_STARTED }]);
+    expect(disconnect).toHaveBeenCalled();
+    expect(listeners).toHaveLength(0);
   });
 });

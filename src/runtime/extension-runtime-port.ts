@@ -58,8 +58,23 @@ export class ExtensionRuntimePort implements RuntimePort {
     return response.data;
   }
 
-  subscribeRun(_runId: string, _listener: (event: RuntimeEvent) => void): () => void {
-    return () => undefined;
+  subscribeRun(runId: string, listener: (event: RuntimeEvent) => void): () => void {
+    if (!globalThis.chrome?.runtime?.connect) {
+      return () => undefined;
+    }
+    const port = chrome.runtime.connect({ name: RUNTIME_MESSAGES.SUBSCRIBE_RUN });
+    const onMessage = (message: unknown) => {
+      if (!isRuntimeEvent(message) || message.runId !== runId) {
+        return;
+      }
+      listener(message);
+    };
+    port.onMessage.addListener(onMessage);
+    port.postMessage({ runId });
+    return () => {
+      port.onMessage.removeListener(onMessage);
+      port.disconnect();
+    };
   }
 
   async decideApproval(input: DecideApprovalInput): Promise<RuntimeToolExecutionResult> {
@@ -115,6 +130,10 @@ function isRunSnapshot(value: unknown): value is RunSnapshot {
 
 function isToolResult(value: unknown): value is RuntimeToolExecutionResult {
   return isRecord(value) && typeof value.ok === 'boolean' && typeof value.code === 'string';
+}
+
+function isRuntimeEvent(value: unknown): value is RuntimeEvent {
+  return isRecord(value) && typeof value.runId === 'string' && typeof value.type === 'string';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

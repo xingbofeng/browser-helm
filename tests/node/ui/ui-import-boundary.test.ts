@@ -12,6 +12,7 @@ describe('Cockpit UI import boundary', () => {
             files: ['src/ui/**/*.ts*'],
             imports: [
               'src/agent/kernel',
+              'src/agent/context',
               'src/tools/core',
               'src/agent/model',
               'src/page/messaging',

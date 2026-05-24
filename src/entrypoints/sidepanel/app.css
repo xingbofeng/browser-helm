@@ -405,3 +405,972 @@ button:disabled {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.bh-cockpitShell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px 10px 10px;
+  background:
+    radial-gradient(circle at 14px 16px, rgba(221, 196, 153, 0.2) 0 1px, transparent 2px),
+    linear-gradient(180deg, #fffaf0 0%, #f9eedb 100%);
+  background-size: 22px 22px, auto;
+  color: #2b261f;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  overflow-x: hidden;
+}
+
+.bh-cockpitShell *,
+.bh-cockpitShell *::before,
+.bh-cockpitShell *::after {
+  box-sizing: border-box;
+}
+
+.bh-cockpitHeader,
+.bh-cockpitTask,
+.bh-cockpitTabs,
+.bh-cockpitTimeline,
+.bh-cockpitInspector,
+.bh-cockpitApproval,
+.bh-cockpitSettings,
+.bh-cockpitFooterSlot {
+  min-width: 0;
+  border: 1px solid #eadcc8;
+  border-radius: 8px;
+  background: rgba(255, 253, 247, 0.9);
+  box-shadow: 0 8px 18px rgba(92, 61, 26, 0.055);
+}
+
+.bh-cockpitHeader {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: -8px -10px 0;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  background: rgba(255, 249, 238, 0.96);
+  backdrop-filter: blur(12px);
+  box-shadow: none;
+}
+
+.bh-cockpitHeader {
+  padding: 8px 12px;
+}
+
+.bh-cockpitTitleBar {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 22px 18px;
+  align-items: center;
+  gap: 8px;
+}
+
+.bh-brandMark {
+  display: inline-flex;
+  position: relative;
+  width: 25px;
+  height: 25px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-bottom: 3px solid #238062;
+  border-radius: 0 0 16px 16px;
+  background: linear-gradient(90deg, transparent 0 8px, #38443b 8px 10px, transparent 10px);
+  color: transparent;
+}
+
+.bh-brandMark::before {
+  position: absolute;
+  left: 9px;
+  top: 1px;
+  width: 0;
+  height: 0;
+  border-left: 9px solid transparent;
+  border-right: 0 solid transparent;
+  border-bottom: 16px solid #ffe1a6;
+  content: "";
+  filter: drop-shadow(0 0 0 #38443b);
+}
+
+.bh-brandMark::after {
+  position: absolute;
+  left: 5px;
+  bottom: 2px;
+  width: 17px;
+  height: 7px;
+  border: 1px solid #38443b;
+  border-top: 0;
+  border-radius: 0 0 14px 14px;
+  background: #f2b26f;
+  content: "";
+}
+
+.bh-cockpitHeader h1 {
+  margin: 0;
+  color: #2b261f;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.bh-cockpitHeader p {
+  display: none;
+}
+
+.bh-leafMark {
+  width: 17px;
+  height: 21px;
+  border: 2px solid #318b66;
+  border-radius: 90% 0 90% 0;
+  transform: rotate(25deg);
+}
+
+.bh-kebabMark {
+  width: 4px;
+  height: 18px;
+  background: radial-gradient(circle, #1f211d 0 2px, transparent 2px 6px);
+  background-size: 4px 6px;
+  background-repeat: repeat-y;
+}
+
+.bh-runState {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  border: 1px solid #b7dfbf;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: #e8f6e9;
+  color: #287249;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.bh-runState-failed {
+  border-color: #ffc4b6;
+  background: #fff1ec;
+  color: #b42300;
+}
+
+.bh-runState-waiting_for_approval {
+  border-color: #ffc979;
+  background: #fff6e4;
+  color: #9a4a00;
+}
+
+.bh-runState-cancelled {
+  border-color: #ded0c4;
+  background: #f7f1eb;
+  color: #6a5546;
+}
+
+.bh-chatPanel {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px 10px 10px;
+}
+
+.bh-runQuickControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.bh-runLabel {
+  color: #6b5a49;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.bh-chatPanel label,
+.bh-settingsPanel label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: #7d6554;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.bh-chatPanel input,
+.bh-cockpitTabs input,
+.bh-settingsPanel input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #ead6c0;
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: #fffdf9;
+  color: #2f241d;
+  font: inherit;
+}
+
+.bh-modeSegment {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid #ead6c0;
+  border-radius: 7px;
+  padding: 0;
+  background: #fffdf9;
+}
+
+.bh-modeSegment legend {
+  width: 100%;
+  padding: 0 0 5px;
+  color: #7d6554;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.bh-modeSegment button {
+  min-width: 0;
+  border: 0;
+  border-right: 1px solid #ead6c0;
+  border-radius: 0;
+  padding: 8px 6px;
+  background: transparent;
+  color: #4f4035;
+  font-size: 12px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bh-modeSegment button:last-child {
+  border-right: 0;
+}
+
+.bh-modeSegment button[aria-pressed="true"] {
+  background: #eef7ea;
+  box-shadow: inset 0 -3px 0 #65a96f;
+  color: #25734b;
+}
+
+.bh-runQuickControls button,
+.bh-cockpitTabs nav button,
+.bh-settingsPanel button,
+.bh-approvalDrawer button {
+  min-width: 0;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #ead6c0;
+  border-radius: 999px;
+  padding: 8px 13px;
+  background: #fffdf9;
+  color: #4a3425;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.bh-runQuickControls button:first-of-type {
+  border-color: #c9e3c9;
+  background: #eff8ea;
+  color: #287249;
+}
+
+.bh-runQuickControls button:last-of-type {
+  border-color: #f1c8b8;
+  background: #fff4ed;
+  color: #a84933;
+}
+
+.bh-runQuickControls button:not(:disabled):hover,
+.bh-cockpitTabs nav button:not(:disabled):hover,
+.bh-settingsPanel button:not(:disabled):hover,
+.bh-approvalDrawer button:not(:disabled):hover {
+  border-color: #ff6b1a;
+  background: #fff3e8;
+}
+
+.bh-cockpitTabs {
+  padding: 12px 10px;
+}
+
+.bh-cockpitTabs nav {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid #ead6c0;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  background: #fffdf9;
+}
+
+.bh-cockpitTabs nav button {
+  border: 0;
+  border-right: 1px solid #ead6c0;
+  border-radius: 0;
+  background: transparent;
+  color: #4f4035;
+}
+
+.bh-cockpitTabs nav button:last-child {
+  border-right: 0;
+}
+
+.bh-cockpitTabs nav button[aria-selected="true"] {
+  background: #e6f4e4;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.8);
+  color: #1d744a;
+}
+
+.bh-tabData {
+  display: grid;
+  gap: 10px;
+}
+
+.bh-tabDataHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.bh-statusPill,
+.bh-countBadge,
+.bh-statePill,
+.bh-chipList li {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.bh-statusPill {
+  border: 1px solid #b9dfba;
+  padding: 5px 8px;
+  background: #eaf8e9;
+  color: #236729;
+}
+
+.bh-statusPill-empty,
+.bh-statusPill-unsupported {
+  border-color: #ded0c4;
+  background: #f7f1eb;
+  color: #6a5546;
+}
+
+.bh-statusPill-partial {
+  border-color: #ffc979;
+  background: #fff6e4;
+  color: #9a4a00;
+}
+
+.bh-statusPill-error {
+  border-color: #ffc4b6;
+  background: #fff1ec;
+  color: #b42300;
+}
+
+.bh-countBadge {
+  border: 1px solid #ead6c0;
+  padding: 5px 8px;
+  background: #fffaf4;
+  color: #7d6554;
+}
+
+.bh-tabSummary {
+  margin: 0;
+  color: #735d4b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.bh-tabData p,
+.bh-tabData li,
+.bh-cockpitTimeline li,
+.bh-cockpitInspector p,
+.bh-settingsPanel li,
+.bh-approvalDrawer p {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.bh-filterBar {
+  display: grid;
+  gap: 8px;
+}
+
+.bh-chipRow,
+.bh-chipList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+
+.bh-chipRow button {
+  border: 1px solid #ead6c0;
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: #fffdf9;
+  color: #6a5546;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.bh-chipRow button[aria-pressed="true"] {
+  border-color: #88bd82;
+  background: #eef7ea;
+  color: #25734b;
+}
+
+.bh-metricGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.bh-metricCard {
+  min-width: 0;
+  border: 1px solid #ead6c0;
+  border-radius: 7px;
+  padding: 10px;
+  background: #fffdf9;
+  text-align: center;
+}
+
+.bh-metricCard span,
+.bh-metricCard small {
+  display: block;
+  color: #7d6554;
+  font-size: 11px;
+}
+
+.bh-metricCard strong {
+  display: block;
+  margin: 4px 0 2px;
+  color: #2f241d;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.bh-metricCard-success strong {
+  color: #218338;
+}
+
+.bh-metricCard-danger strong {
+  color: #a84933;
+}
+
+.bh-dataTableWrap {
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid #ead6c0;
+  border-radius: 7px;
+  background: #fffdf9;
+}
+
+.bh-dataTable {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.bh-dataTable th,
+.bh-dataTable td {
+  border-bottom: 1px solid #f0dfcf;
+  border-right: 1px solid #f0dfcf;
+  padding: 8px 9px;
+  vertical-align: top;
+  text-align: left;
+}
+
+.bh-dataTable th:last-child,
+.bh-dataTable td:last-child {
+  border-right: 0;
+}
+
+.bh-dataTable th {
+  background: #fff8ef;
+  color: #5c493b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.bh-dataTable tr:last-child td {
+  border-bottom: 0;
+}
+
+.bh-dataTable tr.is-selected td {
+  background: #f2f9ed;
+  box-shadow: inset 0 1px 0 #9ccd91, inset 0 -1px 0 #9ccd91;
+}
+
+.bh-dataTable td strong,
+.bh-detailPanel h3 {
+  color: #2f241d;
+}
+
+.bh-dataTable td span {
+  display: block;
+  margin-top: 2px;
+  color: #8b7564;
+  font-size: 11px;
+}
+
+.bh-dataTable code,
+.bh-detailPanel code {
+  border-radius: 4px;
+  padding: 1px 4px;
+  background: #fff2e1;
+  color: #8e4d1d;
+  font-size: 11px;
+}
+
+.bh-statePill {
+  padding: 4px 7px;
+}
+
+.bh-statePill.is-success {
+  background: #eaf8e9;
+  color: #236729;
+}
+
+.bh-statePill.is-danger {
+  background: #fff1ec;
+  color: #b42300;
+}
+
+.bh-mutedState {
+  color: #8b7564;
+  font-size: 11px;
+}
+
+.bh-detailPanel {
+  border: 1px solid #ead6c0;
+  border-radius: 7px;
+  padding: 10px;
+  background: #fffdf9;
+}
+
+.bh-detailPanel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.bh-detailPanel h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.bh-detailPanel dl {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.bh-detailPanel dl div {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.bh-detailPanel dt {
+  color: #8b7564;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.bh-detailPanel dd {
+  min-width: 0;
+  margin: 0;
+  color: #3f3127;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.bh-tabData ul,
+.bh-cockpitTimeline ul,
+.bh-settingsPanel ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.bh-cockpitTimeline,
+.bh-cockpitInspector,
+.bh-cockpitApproval,
+.bh-cockpitSettings,
+.bh-cockpitFooterSlot {
+  padding: 12px;
+}
+
+.bh-cockpitInspector {
+  order: 4;
+}
+
+.bh-cockpitTimeline {
+  order: 5;
+}
+
+.bh-cockpitApproval {
+  order: 6;
+}
+
+.bh-cockpitSettings {
+  order: 7;
+}
+
+.bh-cockpitFooterSlot {
+  order: 8;
+  padding: 8px 12px;
+  background: rgba(255, 249, 237, 0.94);
+}
+
+.bh-cockpitTimeline h2,
+.bh-cockpitInspector h2,
+.bh-cockpitSettings h2,
+.bh-approvalDrawer h2 {
+  margin: 0 0 10px;
+  color: #2f241d;
+  font-size: 14px;
+}
+
+.bh-cockpitTimeline {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.bh-cockpitInspector {
+  max-height: 280px;
+  overflow: auto;
+}
+
+.bh-cockpitInspector pre,
+.bh-cockpitTimeline pre {
+  max-width: 100%;
+  overflow: auto;
+  border-radius: 6px;
+  padding: 8px;
+  background: #fff8ef;
+  font-size: 11px;
+}
+
+.bh-stepTimeline ol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  align-items: start;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+}
+
+.bh-stepTimeline li {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  text-align: center;
+}
+
+.bh-stepTimeline li::before {
+  position: absolute;
+  top: 11px;
+  left: -50%;
+  width: 100%;
+  border-top: 1px dashed #8abb96;
+  content: "";
+}
+
+.bh-stepTimeline li:first-child::before {
+  display: none;
+}
+
+.bh-stepTimeline li span {
+  display: inline-flex;
+  position: relative;
+  z-index: 1;
+  width: 27px;
+  height: 27px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #9fd2ab;
+  border-radius: 999px;
+  background: #edf8ed;
+  color: #1d744a;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.bh-stepTimeline li strong {
+  min-width: 0;
+  color: #3f3127;
+  font-size: 11px;
+}
+
+.bh-stepTimeline li small {
+  color: #8b7564;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.bh-traceLog {
+  margin-top: 10px;
+  border-top: 1px solid #f0dfcf;
+  padding-top: 10px;
+}
+
+.bh-traceLog summary,
+.bh-toolResultCard summary {
+  cursor: pointer;
+  color: #8e4d1d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.bh-toolResultCard {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #b9dfba;
+  border-radius: 7px;
+  padding: 10px;
+  background: #f2fbf0;
+}
+
+.bh-toolResultCard.is-danger {
+  border-color: #ffc4b6;
+  background: #fff1ec;
+}
+
+.bh-toolResultCard header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.bh-toolResultCard h3,
+.bh-toolResultCard p {
+  margin: 0;
+}
+
+.bh-toolResultCard h3 {
+  color: #236729;
+  font-size: 13px;
+}
+
+.bh-toolResultCard.is-danger h3 {
+  color: #b42300;
+}
+
+.bh-toolResultCard header span {
+  border-radius: 999px;
+  padding: 4px 7px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #236729;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.bh-toolCode {
+  color: #6a5546;
+}
+
+.bh-chipList {
+  list-style: none;
+}
+
+.bh-chipList li {
+  padding: 4px 7px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #5c493b;
+}
+
+.bh-approvalDrawer {
+  display: grid;
+  gap: 9px;
+  border: 1px solid #ffbd87;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff7ec;
+}
+
+.bh-approvalDrawer button:first-of-type {
+  border-color: #2f9a45;
+  background: #eaf8e9;
+  color: #236729;
+}
+
+.bh-approvalDrawer button:last-of-type {
+  border-color: #ff8d7a;
+  background: #fff1ec;
+  color: #b42300;
+}
+
+.bh-settingsPanel {
+  display: grid;
+  gap: 9px;
+}
+
+.bh-settingsPanel details {
+  display: grid;
+  gap: 9px;
+}
+
+.bh-settingsPanel details[open] {
+  gap: 9px;
+}
+
+.bh-settingsPanel summary {
+  display: flex;
+  cursor: pointer;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #2f241d;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.bh-settingsPanel summary small {
+  min-width: 0;
+  color: #7d6554;
+  font-size: 11px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bh-settingsPanel details > label,
+.bh-settingsPanel details > ul,
+.bh-settingsPanel details > button {
+  margin-top: 9px;
+}
+
+.bh-settingsPanel p {
+  min-height: 1em;
+  margin: 0;
+  color: #7d6554;
+  font-size: 12px;
+}
+
+.bh-cockpitFooter {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto 18px;
+  align-items: center;
+  gap: 8px;
+  color: #6b5a49;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.bh-cockpitFooter strong {
+  display: block;
+  max-width: 100%;
+  color: #2f241d;
+  font-size: 11px;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bh-shellIcon {
+  position: relative;
+  width: 21px;
+  height: 14px;
+  border: 1px solid #5f8b6a;
+  border-radius: 10px 10px 7px 7px;
+  background:
+    radial-gradient(circle at 6px 5px, #f6d189 0 2px, transparent 2px),
+    linear-gradient(180deg, #eef7ea, #d8ead5);
+}
+
+.bh-shellIcon::before,
+.bh-shellIcon::after {
+  position: absolute;
+  bottom: -3px;
+  width: 6px;
+  height: 5px;
+  border: 1px solid #5f8b6a;
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  background: #fff7ea;
+  content: "";
+}
+
+.bh-shellIcon::before {
+  left: 3px;
+}
+
+.bh-shellIcon::after {
+  right: 3px;
+}
+
+.bh-footerVersion {
+  border: 1px solid #c9e3c9;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: #eff8ea;
+  color: #287249;
+}
+
+.bh-footerGear {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #7d6554;
+  border-radius: 50%;
+  background: radial-gradient(circle, transparent 0 3px, #7d6554 3px 4px, transparent 4px);
+}
+
+@media (min-width: 700px) {
+  .bh-cockpitShell {
+    grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.9fr);
+    align-items: start;
+  }
+
+  .bh-cockpitHeader,
+  .bh-cockpitTask,
+  .bh-cockpitTabs {
+    grid-column: 1 / 2;
+  }
+
+  .bh-cockpitTimeline,
+  .bh-cockpitInspector,
+  .bh-cockpitApproval,
+  .bh-cockpitSettings {
+    grid-column: 2 / 3;
+  }
+}
+
+@media (max-width: 430px) {
+  .bh-cockpitShell {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .bh-runQuickControls {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .bh-runQuickControls button {
+    width: 100%;
+  }
+
+  .bh-cockpitTimeline,
+  .bh-cockpitInspector {
+    max-height: none;
+  }
+}

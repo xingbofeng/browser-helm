@@ -339,7 +339,7 @@ export class AgentLoop {
 
       const risk = toolContract?.risk ?? 'safe';
       const toolAllowed =
-        !toolContract || isToolAvailableInRunMode(toolContract.modes, runMode);
+        !toolContract || isToolAvailableInRunMode(toolContract.modes, runMode, toolCall.tool);
       let toolResult: Awaited<ReturnType<ToolRouter['execute']>>;
       if (toolAllowed) {
         const approvalEvaluation = policyEngine.evaluate({

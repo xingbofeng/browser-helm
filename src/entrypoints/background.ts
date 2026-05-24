@@ -5,7 +5,7 @@ import {
   notifySidePanelsActiveTab,
   notifySidePanelsTargetTabChanged
 } from '../background/runtime/side-panel-target';
-import { SIDE_PANEL_MESSAGES } from '../shared/constants/event-names';
+import { RUNTIME_MESSAGES, SIDE_PANEL_MESSAGES } from '../shared/constants/event-names';
 
 export default defineBackground(() => {
   const host = new BackgroundRuntimeHost();
@@ -14,6 +14,25 @@ export default defineBackground(() => {
   void bindSidePanelToActiveTab();
 
   chrome.runtime.onConnect.addListener((port) => {
+    if (port.name === RUNTIME_MESSAGES.SUBSCRIBE_RUN) {
+      let unsubscribe: (() => void) | undefined;
+      const handleSubscribe = (message: unknown) => {
+        const runId = parseRunSubscription(message);
+        if (!runId) {
+          return;
+        }
+        unsubscribe?.();
+        unsubscribe = host.subscribeRun(runId, (event) => {
+          port.postMessage(event);
+        });
+      };
+      port.onMessage.addListener(handleSubscribe);
+      port.onDisconnect.addListener(() => {
+        unsubscribe?.();
+        port.onMessage.removeListener(handleSubscribe);
+      });
+      return;
+    }
     if (port.name !== SIDE_PANEL_MESSAGES.TARGET_PORT) {
       return;
     }
@@ -42,3 +61,11 @@ export default defineBackground(() => {
     return true;
   });
 });
+
+function parseRunSubscription(message: unknown): string | undefined {
+  if (!message || typeof message !== 'object') {
+    return undefined;
+  }
+  const runId = (message as { runId?: unknown }).runId;
+  return typeof runId === 'string' && runId.length > 0 ? runId : undefined;
+}

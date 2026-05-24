@@ -14,7 +14,8 @@ export const RUNTIME_MESSAGES = {
   GET_SNAPSHOT: 'BH_RUNTIME_GET_SNAPSHOT',
   CANCEL_RUN: 'BH_RUNTIME_CANCEL_RUN',
   EXECUTE_TOOL: 'BH_RUNTIME_EXECUTE_TOOL',
-  DECIDE_APPROVAL: 'BH_RUNTIME_DECIDE_APPROVAL'
+  DECIDE_APPROVAL: 'BH_RUNTIME_DECIDE_APPROVAL',
+  SUBSCRIBE_RUN: 'BH_RUNTIME_SUBSCRIBE_RUN'
 } as const;
 
 export const SIDE_PANEL_MESSAGES = {
@@ -42,6 +43,12 @@ export const TRACE_EVENT_NAMES = {
   STATE_CHANGED: 'state_changed'
 } as const;
 
+export const APPROVAL_EVENT_NAMES = {
+  APPROVED: 'approval_approved',
+  DENIED: 'approval_denied',
+  EXPIRED: 'approval_expired'
+} as const;
+
 export type ContentRpcMessageName =
   (typeof CONTENT_RPC_MESSAGES)[keyof typeof CONTENT_RPC_MESSAGES];
 export type RuntimeMessageName =
@@ -50,3 +57,5 @@ export type SidePanelMessageName =
   (typeof SIDE_PANEL_MESSAGES)[keyof typeof SIDE_PANEL_MESSAGES];
 export type TraceEventName =
   (typeof TRACE_EVENT_NAMES)[keyof typeof TRACE_EVENT_NAMES];
+export type ApprovalEventName =
+  (typeof APPROVAL_EVENT_NAMES)[keyof typeof APPROVAL_EVENT_NAMES];

@@ -5,6 +5,10 @@ import { createPageDataStore } from '../../../../src/ui/stores/page-data-store';
 describe('page data store', () => {
   it('derives tab statuses from structured page data', () => {
     const store = createPageDataStore();
+    let notifications = 0;
+    const unsubscribe = store.subscribe(() => {
+      notifications += 1;
+    });
 
     store.getState().setSnapshot({
       runId: 'run_1',
@@ -25,6 +29,8 @@ describe('page data store', () => {
       interactive: 'unsupported',
       forms: 'error'
     });
+    expect(notifications).toBe(1);
+    unsubscribe();
   });
 });
 

@@ -1,0 +1,30 @@
+import { test } from '@playwright/test';
+
+import { CockpitUiFlow } from '../../flows/cockpit-ui-flow';
+
+test('renders v0.4 cockpit tabs and stops the active run', async () => {
+  const flow = await CockpitUiFlow.start();
+  try {
+    await flow.expectCockpitAutoObservationAndStop();
+  } finally {
+    await flow.close();
+  }
+});
+
+test('renders approval drawer for a pending runtime request', async () => {
+  const flow = await CockpitUiFlow.start();
+  try {
+    await flow.expectApprovalDrawerFromPendingRuntimeRequest();
+  } finally {
+    await flow.close();
+  }
+});
+
+test('masks provider API key in settings', async () => {
+  const flow = await CockpitUiFlow.start();
+  try {
+    await flow.expectSettingsMaskProviderKey();
+  } finally {
+    await flow.close();
+  }
+});

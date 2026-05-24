@@ -1,3 +1,5 @@
+import { ERROR_CODES } from '../../shared/constants/error-codes';
+
 export type ParseFrameRefInput = {
   refId: string;
   frameId?: number | undefined;
@@ -12,7 +14,9 @@ export type ParsedFrameRef =
     }
   | {
       ok: false;
-      code: 'FRAME_REF_INVALID' | 'FRAME_REF_MISMATCH';
+      code:
+        | typeof ERROR_CODES.FRAME_REF_INVALID
+        | typeof ERROR_CODES.FRAME_REF_MISMATCH;
       message: string;
     };
 
@@ -23,7 +27,7 @@ export function parseFrameRef(input: ParseFrameRefInput): ParsedFrameRef {
   if (!match) {
     return {
       ok: false,
-      code: 'FRAME_REF_INVALID',
+      code: ERROR_CODES.FRAME_REF_INVALID,
       message: `Invalid iframe ref: ${input.refId}`
     };
   }
@@ -33,7 +37,7 @@ export function parseFrameRef(input: ParseFrameRefInput): ParsedFrameRef {
   if (!Number.isInteger(frameId) || innerRefId.length === 0) {
     return {
       ok: false,
-      code: 'FRAME_REF_INVALID',
+      code: ERROR_CODES.FRAME_REF_INVALID,
       message: `Invalid iframe ref: ${input.refId}`
     };
   }
@@ -41,7 +45,7 @@ export function parseFrameRef(input: ParseFrameRefInput): ParsedFrameRef {
   if (input.frameId !== undefined && input.frameId !== frameId) {
     return {
       ok: false,
-      code: 'FRAME_REF_MISMATCH',
+      code: ERROR_CODES.FRAME_REF_MISMATCH,
       message: `Frame id ${input.frameId} does not match ${frameId}`
     };
   }

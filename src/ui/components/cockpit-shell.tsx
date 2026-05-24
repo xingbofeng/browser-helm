@@ -8,6 +8,7 @@ type CockpitShellProps = {
   inspector: ReactNode;
   approval?: ReactNode;
   settings?: ReactNode;
+  footer?: ReactNode;
 };
 
 export function CockpitShell(props: CockpitShellProps) {
@@ -20,6 +21,7 @@ export function CockpitShell(props: CockpitShellProps) {
       <aside className="bh-cockpitInspector">{props.inspector}</aside>
       {props.approval ? <section className="bh-cockpitApproval">{props.approval}</section> : null}
       {props.settings ? <section className="bh-cockpitSettings">{props.settings}</section> : null}
+      {props.footer ? <section className="bh-cockpitFooterSlot">{props.footer}</section> : null}
     </main>
   );
 }

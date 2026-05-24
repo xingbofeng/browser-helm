@@ -8,24 +8,37 @@ type ApprovalStoreState = {
   decision?: ApprovalStatus | undefined;
   decisionError?: string | undefined;
   setPending: (request: ApprovalRequest) => void;
+  clearPending: () => void;
   startDecision: (decision: ApprovalStatus) => void;
   failDecision: (message: string) => void;
 };
 
 export function createApprovalStore() {
-  const state: ApprovalStoreState = {
+  const store = createSimpleStore<ApprovalStoreState>({
     setPending: (request) => {
-      state.pending = request;
-      state.decisionError = undefined;
+      store.setState({
+        pending: request,
+        decisionError: undefined
+      });
+    },
+    clearPending: () => {
+      store.setState({
+        pending: undefined,
+        decision: undefined
+      });
     },
     startDecision: (decision) => {
-      state.decision = decision;
-      state.decisionError = undefined;
+      store.setState({
+        decision,
+        decisionError: undefined
+      });
     },
     failDecision: (message) => {
-      state.decision = undefined;
-      state.decisionError = message;
+      store.setState({
+        decision: undefined,
+        decisionError: message
+      });
     }
-  };
-  return createSimpleStore(state);
+  });
+  return store;
 }

@@ -126,4 +126,68 @@ describe('content-rpc-handler iframe actions', () => {
     });
     expect((document.getElementById('email') as HTMLInputElement).value).toBe('');
   });
+
+  it('blocks tokened iframe click when readiness says the target is disabled', () => {
+    document.body.innerHTML = `
+      <button id="delete" type="button" disabled>删除账号</button>
+    `;
+    let clicked = false;
+    document.getElementById('delete')?.addEventListener('click', () => {
+      clicked = true;
+    });
+    const handler = new ContentRpcHandler(document);
+    const snapshot = handler.handle({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
+    if (!snapshot.ok || !('snapshot' in snapshot)) {
+      throw new Error('expected snapshot');
+    }
+    const buttonRef = snapshot.snapshot.elements.find(
+      (element) => element.name === '删除账号'
+    )?.refId;
+
+    expect(
+      handler.handle({
+        type: CONTENT_RPC_MESSAGES.IFRAME_CLICK,
+        frameId: 4,
+        refId: buttonRef,
+        actionToken: IFRAME_ACTION_TOKEN
+      })
+    ).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.ELEMENT_DISABLED
+    });
+    expect(clicked).toBe(false);
+  });
+
+  it('blocks tokened iframe type when readiness says the target still requires approval', () => {
+    document.body.innerHTML = `
+      <label>Password <input id="password" type="password" autocomplete="current-password" /></label>
+    `;
+    const handler = new ContentRpcHandler(document);
+    const snapshot = handler.handle({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
+    if (!snapshot.ok || !('snapshot' in snapshot)) {
+      throw new Error('expected snapshot');
+    }
+    const passwordRef = snapshot.snapshot.elements.find(
+      (element) => element.tagName === 'input'
+    )?.refId;
+
+    expect(
+      handler.handle({
+        type: CONTENT_RPC_MESSAGES.IFRAME_TYPE,
+        frameId: 4,
+        refId: passwordRef,
+        text: 'super-secret',
+        actionToken: IFRAME_ACTION_TOKEN,
+        valuePreview: {
+          masked: true,
+          preview: '[MASKED]',
+          reason: 'password'
+        }
+      })
+    ).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.APPROVAL_REQUIRED
+    });
+    expect((document.getElementById('password') as HTMLInputElement).value).toBe('');
+  });
 });

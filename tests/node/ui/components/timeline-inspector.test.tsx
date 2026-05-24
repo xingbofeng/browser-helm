@@ -32,7 +32,13 @@ describe('timeline and inspector components', () => {
           summary: 'Requires approval',
           requiresApproval: true,
           requiresObserve: true,
-          changedPage: false
+          changedPage: false,
+          detail: {
+            data: {
+              visible: true,
+              token: 'plain-token'
+            }
+          }
         }}
         argsPreview={{
           password: 'secret',
@@ -44,8 +50,10 @@ describe('timeline and inspector components', () => {
     expect(html).toContain('bh_iframe_type');
     expect(html).toContain('APPROVAL_REQUIRED');
     expect(html).toContain('需要用户确认');
+    expect(html).toContain('visible');
     expect(html).toContain('[MASKED]');
     expect(html).not.toContain('secret');
+    expect(html).not.toContain('plain-token');
   });
 
   it('renders trace detail without replay controls', () => {

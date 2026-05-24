@@ -2,7 +2,7 @@ import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import { ChromeContentRpcClient } from '../../page/messaging/content-rpc-client';
 import { buildStructuredPageData } from '../../page/structured/structured-page-data';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
-import { TRACE_EVENT_NAMES } from '../../shared/constants/event-names';
+import { APPROVAL_EVENT_NAMES, TRACE_EVENT_NAMES } from '../../shared/constants/event-names';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import type { Observation } from '../../shared/schemas/observation.schema';
 import type { ToolResult } from '../../shared/schemas/tool-result.schema';
@@ -28,6 +28,7 @@ type RunManagerDeps = {
 export class RunManager {
   private nextId = 1;
   private readonly approvalManager = new ApprovalManager();
+  private readonly listeners = new Map<string, Set<(event: RuntimeEvent) => void>>();
   private readonly records = new Map<
     string,
     {
@@ -44,17 +45,39 @@ export class RunManager {
     const runId = `run_${this.nextId}`;
     this.nextId += 1;
     const mode = input.mode ?? 'ask';
+    const record: {
+      mode: RunMode;
+      tabId?: number | undefined;
+      trace: RuntimeEvent[];
+    } = {
+      mode,
+      trace: []
+    };
+    this.records.set(runId, record);
+    this.appendTrace(record, {
+      runId,
+      type: TRACE_EVENT_NAMES.RUN_STARTED,
+      payload: {
+        task: input.task,
+        mode
+      }
+    });
     this.snapshots.set(runId, {
       runId,
       mode,
-      status: 'created'
+      status: 'observing',
+      trace: record.trace
     });
 
     const tabId = input.tabId ?? (await this.getActiveTabId());
     if (!tabId) {
-      this.records.set(runId, {
-        mode,
-        trace: []
+      this.appendTrace(record, {
+        runId,
+        type: TRACE_EVENT_NAMES.RUN_FAILED,
+        payload: {
+          code: ERROR_CODES.CONTENT_SCRIPT_UNAVAILABLE,
+          summary: 'No active browser tab is available'
+        }
       });
       this.snapshots.set(runId, {
         runId,
@@ -64,23 +87,95 @@ export class RunManager {
         error: {
           code: ERROR_CODES.CONTENT_SCRIPT_UNAVAILABLE,
           message: 'No active browser tab is available'
-        }
+        },
+        trace: record.trace
       });
       return { runId };
     }
 
-    this.records.set(runId, {
-      mode,
-      tabId,
-      trace: []
+    record.tabId = tabId;
+    void this.observeInitial(runId, record, tabId);
+    return { runId };
+  }
+
+  subscribeRun(runId: string, listener: (event: RuntimeEvent) => void): () => void {
+    const listeners = this.listeners.get(runId) ?? new Set();
+    listeners.add(listener);
+    this.listeners.set(runId, listeners);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) {
+        this.listeners.delete(runId);
+      }
+    };
+  }
+
+  private async observeInitial(
+    runId: string,
+    record: {
+      mode: RunMode;
+      tabId?: number | undefined;
+      trace: RuntimeEvent[];
+    },
+    tabId: number
+  ): Promise<void> {
+    this.appendTrace(record, {
+      runId,
+      type: TRACE_EVENT_NAMES.TOOL_STARTED,
+      payload: {
+        tool: TOOL_NAMES.PAGE_OBSERVE,
+        args: {}
+      }
     });
     const router = this.createToolRouter(tabId);
-    const result = await router.execute(
-      { tool: TOOL_NAMES.PAGE_OBSERVE, args: {} },
-      { runId, stepId: `${runId}:observe`, runMode: mode }
+    let result: ToolResult;
+    try {
+      result = await router.execute(
+        { tool: TOOL_NAMES.PAGE_OBSERVE, args: {} },
+        { runId, stepId: `${runId}:observe`, runMode: record.mode }
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Initial observation failed';
+      this.appendTrace(record, {
+        runId,
+        type: TRACE_EVENT_NAMES.RUN_FAILED,
+        payload: {
+          code: ERROR_CODES.RUNTIME_UNAVAILABLE,
+          summary: message
+        }
+      });
+      this.snapshots.set(runId, {
+        ...this.getSnapshot(runId),
+        status: 'error',
+        refs: [],
+        error: {
+          code: ERROR_CODES.RUNTIME_UNAVAILABLE,
+          message
+        },
+        trace: record.trace
+      });
+      return;
+    }
+    if (this.getSnapshot(runId).status === 'cancelled') {
+      return;
+    }
+    this.appendTrace(record, {
+      runId,
+      type: TRACE_EVENT_NAMES.TOOL_RESULT,
+      payload: {
+        tool: TOOL_NAMES.PAGE_OBSERVE,
+        ok: result.ok,
+        code: result.code,
+        summary: result.summary,
+        changedPage: result.changedPage,
+        requiresObserve: result.requiresObserve,
+        requiresApproval: result.requiresApproval
+      }
+    });
+    this.snapshots.set(
+      runId,
+      this.snapshotFromToolResult(runId, record.mode, result, record.trace)
     );
-    this.snapshots.set(runId, this.snapshotFromToolResult(runId, mode, result));
-    return { runId };
   }
 
   async executeTool(input: ExecuteToolInput): Promise<ToolResult> {
@@ -115,6 +210,20 @@ export class RunManager {
       return result;
     }
 
+    this.appendTrace(record, {
+      runId: input.runId,
+      type: TRACE_EVENT_NAMES.TOOL_STARTED,
+      payload: {
+        tool: input.tool,
+        args: redactedArgs
+      }
+    });
+    this.snapshots.set(input.runId, {
+      ...this.getSnapshot(input.runId),
+      status: 'executing_tool',
+      trace: record.trace
+    });
+
     const router = this.createToolRouter(record.tabId);
     const result = await router.execute(
       {
@@ -127,6 +236,19 @@ export class RunManager {
         runMode: record.mode
       }
     );
+    this.appendTrace(record, {
+      runId: input.runId,
+      type: TRACE_EVENT_NAMES.TOOL_RESULT,
+      payload: {
+        tool: input.tool,
+        ok: result.ok,
+        code: result.code,
+        summary: result.summary,
+        changedPage: result.changedPage,
+        requiresObserve: result.requiresObserve,
+        requiresApproval: result.requiresApproval
+      }
+    });
 
     if (result.requiresApproval) {
       const request = this.approvalManager.create({
@@ -138,7 +260,7 @@ export class RunManager {
         reason: result.approval?.reason ?? result.summary,
         actionPreview: result.approval?.actionPreview
       });
-      record.trace.push({
+      this.appendTrace(record, {
         runId: input.runId,
         type: TRACE_EVENT_NAMES.APPROVAL_REQUIRED,
         payload: {
@@ -196,15 +318,17 @@ export class RunManager {
 
     if (input.decision === 'denied') {
       const result = userDeniedApprovalResult(input.reason ?? 'User denied approval');
-      record?.trace.push({
-        runId: input.runId,
-        type: TRACE_EVENT_NAMES.STATE_CHANGED,
-        payload: {
-          from: 'waiting_for_approval',
-          to: 'failed',
-          reason: result.code
-        }
-      });
+      if (record) {
+        this.appendTrace(record, {
+          runId: input.runId,
+          type: APPROVAL_EVENT_NAMES.DENIED,
+          payload: {
+            requestId: input.requestId,
+            reason: input.reason ?? result.summary,
+            code: result.code
+          }
+        });
+      }
       this.snapshots.set(input.runId, {
         ...this.getSnapshot(input.runId),
         status: 'failed',
@@ -222,15 +346,17 @@ export class RunManager {
       changedPage: false,
       requiresObserve: false
     };
-    record?.trace.push({
-      runId: input.runId,
-      type: TRACE_EVENT_NAMES.STATE_CHANGED,
-      payload: {
-        from: 'waiting_for_approval',
-        to: 'running',
-        reason: 'approval_approved'
-      }
-    });
+    if (record) {
+      this.appendTrace(record, {
+        runId: input.runId,
+        type: APPROVAL_EVENT_NAMES.APPROVED,
+        payload: {
+          requestId: input.requestId,
+          reason: 'Approval approved',
+          code: result.code
+        }
+      });
+    }
     this.snapshots.set(input.runId, {
       ...this.getSnapshot(input.runId),
       status: 'observed',
@@ -244,13 +370,15 @@ export class RunManager {
   cancelRun(runId: string): Promise<{ runId: string; status: 'cancelled' }> {
     const current = this.getSnapshot(runId);
     const record = this.records.get(runId);
-    record?.trace.push({
-      runId,
-      type: TRACE_EVENT_NAMES.RUN_CANCELLED,
-      payload: {
-        reason: 'user_cancelled'
-      }
-    });
+    if (record) {
+      this.appendTrace(record, {
+        runId,
+        type: TRACE_EVENT_NAMES.RUN_CANCELLED,
+        payload: {
+          reason: 'user_cancelled'
+        }
+      });
+    }
     const snapshot: RunSnapshot = {
       ...current,
       status: 'cancelled',
@@ -300,7 +428,8 @@ export class RunManager {
   private snapshotFromToolResult(
     runId: string,
     mode: RunMode,
-    result: ToolResult
+    result: ToolResult,
+    trace: RuntimeEvent[]
   ): RunSnapshot {
     const toolResult = {
       tool: TOOL_NAMES.PAGE_OBSERVE,
@@ -319,7 +448,8 @@ export class RunManager {
         error: {
           code: result.code,
           message: result.error?.message ?? result.summary
-        }
+        },
+        trace
       };
     }
 
@@ -342,8 +472,21 @@ export class RunManager {
       },
       refs,
       structuredPageData,
-      toolResult
+      toolResult,
+      trace
     };
+  }
+
+  private appendTrace(
+    record: {
+      trace: RuntimeEvent[];
+    },
+    event: RuntimeEvent
+  ): void {
+    record.trace.push(event);
+    for (const listener of this.listeners.get(event.runId) ?? []) {
+      listener(event);
+    }
   }
 }
 
@@ -356,8 +499,39 @@ function snapshotToolResult(
     ok: result.ok,
     code: result.code,
     summary: result.summary,
+    detail: sanitizeToolResultDetail(result),
     changedPage: result.changedPage,
     requiresObserve: result.requiresObserve,
     requiresApproval: result.requiresApproval
   };
+}
+
+const sensitiveDetailKeyPattern = /api.?key|password|token|secret|otp|one.?time|text/i;
+
+function sanitizeToolResultDetail(result: ToolResult): unknown {
+  return sanitizeDetailValue({
+    data: result.data,
+    error: result.error,
+    approval: result.approval
+  }, '');
+}
+
+function sanitizeDetailValue(value: unknown, key: string): unknown {
+  if (typeof value === 'string') {
+    return sensitiveDetailKeyPattern.test(key) ? '[MASKED]' : value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeDetailValue(item, key));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([entryKey, entryValue]) => [
+        entryKey,
+        sensitiveDetailKeyPattern.test(entryKey)
+          ? '[MASKED]'
+          : sanitizeDetailValue(entryValue, entryKey)
+      ])
+    );
+  }
+  return value;
 }

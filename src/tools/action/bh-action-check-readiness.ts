@@ -3,6 +3,7 @@ import type { z } from 'zod';
 import { checkResolvedActionReadiness } from '../../page/dom/action-readiness';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
 import {
   actionIntentSchema,
   actionReadinessSchema
@@ -44,7 +45,7 @@ export function bhActionCheckReadiness(
 
       return {
         ok: true,
-        code: 'OK',
+        code: ERROR_CODES.OK,
         summary: readiness.reason,
         data: actionReadinessSchema.parse(readiness),
         changedPage: false,
@@ -77,7 +78,7 @@ function unresolvedReadiness(
   args: z.infer<typeof argsSchema>,
   response: Awaited<ReturnType<ContentRpcClient['request']>>
 ) {
-  const code = response.ok ? 'OBSERVATION_FAILED' : response.code;
+  const code = response.ok ? ERROR_CODES.OBSERVATION_FAILED : response.code;
   const message = response.ok
     ? 'Content RPC did not return a resolved ref'
     : response.message;
@@ -86,7 +87,7 @@ function unresolvedReadiness(
     code,
     reason: message,
     risk: args.kind === 'submit' ? 'high' as const : 'medium' as const,
-    staleRefs: code === 'REF_STALE',
+    staleRefs: code === ERROR_CODES.REF_STALE,
     changedPage: false,
     requiresObserve: true,
     wouldRequireApproval: false,

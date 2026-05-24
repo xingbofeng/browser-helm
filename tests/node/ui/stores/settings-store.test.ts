@@ -38,4 +38,33 @@ describe('settings store', () => {
       }
     ]);
   });
+
+  it('preserves the loaded API key when saving provider settings without a new key', async () => {
+    const saved: unknown[] = [];
+    const store = createSettingsStore({
+      getProviderSettings: async () => ({
+        baseUrl: 'https://api.example.com/v1',
+        model: 'gpt-test',
+        apiKey: 'sk-existing-secret'
+      }),
+      setProviderSettings: async (settings) => {
+        saved.push(settings);
+      }
+    });
+
+    await store.getState().load();
+    await store.getState().save({
+      baseUrl: 'https://api.next.example.com/v1',
+      model: 'gpt-next'
+    });
+
+    expect(store.getState().maskedApiKey).toBe('sk-...cret');
+    expect(saved).toEqual([
+      {
+        baseUrl: 'https://api.next.example.com/v1',
+        model: 'gpt-next',
+        apiKey: 'sk-existing-secret'
+      }
+    ]);
+  });
 });

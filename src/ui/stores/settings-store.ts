@@ -22,29 +22,37 @@ type SettingsStoreState = {
 };
 
 const policyPlaceholders: PolicyPlaceholder[] = [
-  { id: 'read_only_default', label: '默认只读' },
-  { id: 'confirm_before_submit', label: '提交前确认' },
-  { id: 'domain_blocklist', label: 'domain 禁用' },
-  { id: 'debug_network_read', label: 'debug/network 读取' }
+  { id: 'read_only_default', label: '默认只读', status: 'reserved' },
+  { id: 'confirm_before_submit', label: '提交前确认', status: 'reserved' },
+  { id: 'domain_blocklist', label: 'Domain 禁用', status: 'reserved' },
+  { id: 'debug_network_read', label: 'Debug/Network 读取', status: 'reserved' }
 ];
 
 export function createSettingsStore(runtime: SettingsRuntime) {
-  const state: SettingsStoreState = {
+  const store = createSimpleStore<SettingsStoreState>({
     policyPlaceholders,
     load: async () => {
       const settings = await runtime.getProviderSettings();
-      state.settings = settings;
-      state.maskedApiKey = settings?.apiKey
-        ? maskSensitiveValue(settings.apiKey)
-        : undefined;
+      store.setState({
+        settings,
+        maskedApiKey: settings?.apiKey ? maskSensitiveValue(settings.apiKey) : undefined
+      });
     },
     save: async (settings) => {
-      await runtime.setProviderSettings(settings);
-      state.settings = settings;
-      state.maskedApiKey = settings.apiKey
-        ? maskSensitiveValue(settings.apiKey)
-        : undefined;
+      const current = store.getState().settings;
+      const nextSettings = {
+        ...settings,
+        ...(settings.apiKey ? { apiKey: settings.apiKey } : {}),
+        ...(!settings.apiKey && current?.apiKey
+          ? { apiKey: current.apiKey }
+          : {})
+      };
+      await runtime.setProviderSettings(nextSettings);
+      store.setState({
+        settings: nextSettings,
+        maskedApiKey: nextSettings.apiKey ? maskSensitiveValue(nextSettings.apiKey) : undefined
+      });
     }
-  };
-  return createSimpleStore(state);
+  });
+  return store;
 }

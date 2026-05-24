@@ -4,6 +4,7 @@ import { ExtensionRuntimePort } from '../../runtime/extension-runtime-port';
 import type { RuntimePort } from '../../runtime/runtime-port';
 import type { RunSnapshot } from '../../runtime/runtime-messages';
 import { SIDE_PANEL_MESSAGES } from '../../shared/constants/event-names';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
 import type { StructuredPageData } from '../../shared/schemas/structured-page-data.schema';
 import { runModeLabels, type RunMode } from '../../shared/schemas/tool.schema';
 import '../../entrypoints/sidepanel/app.css';
@@ -590,10 +591,10 @@ function toolResultHints(toolResult: RunSnapshot['toolResult'] | undefined): str
     return [];
   }
   const hints: string[] = [];
-  if (toolResult.requiresApproval || toolResult.code === 'APPROVAL_REQUIRED') {
+  if (toolResult.requiresApproval || toolResult.code === ERROR_CODES.APPROVAL_REQUIRED) {
     hints.push('需要用户确认后再继续');
   }
-  if (toolResult.code === 'USER_DENIED_APPROVAL') {
+  if (toolResult.code === ERROR_CODES.USER_DENIED_APPROVAL) {
     hints.push('用户拒绝了审批');
   }
   if (toolResult.requiresObserve) {

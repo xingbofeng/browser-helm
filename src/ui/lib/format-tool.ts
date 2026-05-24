@@ -1,4 +1,5 @@
 import type { RuntimeToolResultSnapshot } from '../../runtime/runtime-messages';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
 
 const sensitiveKeyPattern = /api.?key|password|token|secret|otp|one.?time/i;
 
@@ -9,7 +10,7 @@ export function formatToolResultFlags(
     return [];
   }
   const flags: string[] = [];
-  if (toolResult.requiresApproval || toolResult.code === 'APPROVAL_REQUIRED') {
+  if (toolResult.requiresApproval || toolResult.code === ERROR_CODES.APPROVAL_REQUIRED) {
     flags.push('需要用户确认');
   }
   if (toolResult.requiresObserve) {

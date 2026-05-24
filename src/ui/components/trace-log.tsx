@@ -8,15 +8,17 @@ type TraceLogProps = {
 export function TraceLog({ events }: TraceLogProps) {
   return (
     <section className="bh-traceLog">
-      <h2>Trace / 调试日志</h2>
-      <ul>
-        {events.map((event, index) => (
-          <li key={`${event.runId}:${index}`}>
-            <strong>{event.type}</strong>
-            <pre>{jsonPreview(event.payload ?? {})}</pre>
-          </li>
-        ))}
-      </ul>
+      <details>
+        <summary>Trace / 调试日志（{events.length} 条）</summary>
+        <ul>
+          {events.map((event, index) => (
+            <li key={`${event.runId}:${index}`}>
+              <strong>{event.type}</strong>
+              <pre>{jsonPreview(event.payload ?? {})}</pre>
+            </li>
+          ))}
+        </ul>
+      </details>
     </section>
   );
 }

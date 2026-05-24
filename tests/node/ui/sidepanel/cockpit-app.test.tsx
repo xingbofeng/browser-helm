@@ -33,13 +33,15 @@ describe('CockpitApp', () => {
       />
     );
 
-    expect(html).toContain('BrowserHelm Cockpit');
+    expect(html).toContain('BrowserHelm');
+    expect(html).toContain('v0.4');
+    expect(html).toContain('v0.4 页面数据驾驶舱');
     expect(html).toContain('页面观察');
     expect(html).toContain('Ref 映射');
     expect(html).toContain('交互元素');
     expect(html).toContain('表单字段');
-    expect(html).toContain('Timeline');
-    expect(html).toContain('Tool Inspector');
+    expect(html).toContain('执行时间线');
+    expect(html).toContain('工具结果');
     expect(html).toContain('Settings');
   });
 });

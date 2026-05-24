@@ -9,6 +9,7 @@ describe('ChatPanel', () => {
       <ChatPanel
         task="观察当前页面"
         mode="act"
+        runState="idle"
         busy={false}
         canStop={true}
         onTaskChange={() => undefined}

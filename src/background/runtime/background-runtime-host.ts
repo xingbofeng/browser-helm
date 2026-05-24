@@ -1,4 +1,5 @@
 import {
+  type RuntimeEvent,
   runtimeRequestSchema,
   type RuntimeResponse
 } from '../../runtime/runtime-messages';
@@ -8,7 +9,7 @@ import { RunManager } from './run-manager';
 
 type RuntimeRunManager = Pick<
   RunManager,
-  'startRun' | 'getSnapshot' | 'cancelRun' | 'executeTool' | 'decideApproval'
+  'startRun' | 'getSnapshot' | 'cancelRun' | 'executeTool' | 'decideApproval' | 'subscribeRun'
 >;
 
 export class BackgroundRuntimeHost {
@@ -51,5 +52,9 @@ export class BackgroundRuntimeHost {
           data: await this.runManager.decideApproval(parsed.data.input)
         };
     }
+  }
+
+  subscribeRun(runId: string, listener: (event: RuntimeEvent) => void): () => void {
+    return this.runManager.subscribeRun(runId, listener);
   }
 }

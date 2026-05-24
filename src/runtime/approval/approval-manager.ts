@@ -2,6 +2,8 @@ import type {
   ApprovalDecision,
   ApprovalRequest
 } from '../../shared/schemas/approval.schema';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
+import { APPROVAL_EVENT_NAMES } from '../../shared/constants/event-names';
 import type { ToolRisk } from '../../shared/schemas/tool-result.schema';
 
 type CreateApprovalRequestInput = {
@@ -21,12 +23,14 @@ type ApprovalDecisionResult =
     }
   | {
       ok: false;
-      code: 'APPROVAL_REQUEST_NOT_FOUND' | 'APPROVAL_REQUEST_NOT_PENDING';
+      code:
+        | typeof ERROR_CODES.APPROVAL_REQUEST_NOT_FOUND
+        | typeof ERROR_CODES.APPROVAL_REQUEST_NOT_PENDING;
       message: string;
     };
 
 type ApprovalAuditEvent = {
-  type: 'approval_approved' | 'approval_denied' | 'approval_expired';
+  type: (typeof APPROVAL_EVENT_NAMES)[keyof typeof APPROVAL_EVENT_NAMES];
   requestId: string;
   runId: string;
   stepId: string;
@@ -70,14 +74,14 @@ export class ApprovalManager {
     if (!request) {
       return {
         ok: false,
-        code: 'APPROVAL_REQUEST_NOT_FOUND',
+        code: ERROR_CODES.APPROVAL_REQUEST_NOT_FOUND,
         message: `Approval request not found: ${decision.requestId}`
       };
     }
     if (request.status !== 'pending') {
       return {
         ok: false,
-        code: 'APPROVAL_REQUEST_NOT_PENDING',
+        code: ERROR_CODES.APPROVAL_REQUEST_NOT_PENDING,
         message: `Approval request is not pending: ${decision.requestId}`
       };
     }
@@ -91,8 +95,8 @@ export class ApprovalManager {
     this.auditEvents.push({
       type:
         decision.decision === 'approved'
-          ? 'approval_approved'
-          : 'approval_denied',
+          ? APPROVAL_EVENT_NAMES.APPROVED
+          : APPROVAL_EVENT_NAMES.DENIED,
       requestId: updated.id,
       runId: updated.runId,
       stepId: updated.stepId,
@@ -110,14 +114,14 @@ export class ApprovalManager {
     if (!request) {
       return {
         ok: false,
-        code: 'APPROVAL_REQUEST_NOT_FOUND',
+        code: ERROR_CODES.APPROVAL_REQUEST_NOT_FOUND,
         message: `Approval request not found: ${requestId}`
       };
     }
     if (request.status !== 'pending') {
       return {
         ok: false,
-        code: 'APPROVAL_REQUEST_NOT_PENDING',
+        code: ERROR_CODES.APPROVAL_REQUEST_NOT_PENDING,
         message: `Approval request is not pending: ${requestId}`
       };
     }
@@ -129,7 +133,7 @@ export class ApprovalManager {
     };
     this.requests.set(updated.id, updated);
     this.auditEvents.push({
-      type: 'approval_expired',
+      type: APPROVAL_EVENT_NAMES.EXPIRED,
       requestId: updated.id,
       runId: updated.runId,
       stepId: updated.stepId,

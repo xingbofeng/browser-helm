@@ -92,6 +92,7 @@ export type RuntimeToolResultSnapshot = {
   ok: boolean;
   code: string;
   summary: string;
+  detail?: unknown;
   changedPage?: boolean | undefined;
   requiresObserve?: boolean | undefined;
   requiresApproval?: boolean | undefined;
@@ -102,13 +103,19 @@ export type RunSnapshot = {
   mode: RunMode;
   status:
     | 'created'
+    | 'observing'
+    | 'thinking'
+    | 'executing_tool'
     | 'observed'
     | 'empty'
     | 'error'
     | 'failed'
+    | 'finished'
     | 'cancelled'
     | 'not_found'
-    | 'waiting_for_approval';
+    | 'waiting_for_approval'
+    | 'waiting_for_user'
+    | 'recovering';
   observation?: RuntimeObservationSnapshot;
   refs?: RuntimeRefSnapshot[];
   structuredPageData?: StructuredPageData;

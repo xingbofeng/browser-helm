@@ -34,15 +34,20 @@ export function checkResolvedActionReadiness(
   target: ResolvedRefElement
 ): ActionReadiness {
   if (!target.visible) {
-    return blockedReadiness(intent, 'ELEMENT_NOT_ACTIONABLE', 'Target is not visible', target);
+    return blockedReadiness(
+      intent,
+      ERROR_CODES.ELEMENT_NOT_ACTIONABLE,
+      'Target is not visible',
+      target
+    );
   }
   if (target.disabled) {
-    return blockedReadiness(intent, 'ELEMENT_DISABLED', 'Target is disabled', target);
+    return blockedReadiness(intent, ERROR_CODES.ELEMENT_DISABLED, 'Target is disabled', target);
   }
   if (intent.kind === 'type' && !isTypeTarget(target)) {
     return blockedReadiness(
       intent,
-      'ACTION_TARGET_MISMATCH',
+      ERROR_CODES.ACTION_TARGET_MISMATCH,
       'Type action requires a text-like target',
       target
     );

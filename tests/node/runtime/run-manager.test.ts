@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { RunManager } from '../../../src/background/runtime/run-manager';
 import type { ContentRpcClient } from '../../../src/page/messaging/content-rpc-client';
 import { ERROR_CODES } from '../../../src/shared/constants/error-codes';
-import { CONTENT_RPC_MESSAGES, TRACE_EVENT_NAMES } from '../../../src/shared/constants/event-names';
+import {
+  APPROVAL_EVENT_NAMES,
+  CONTENT_RPC_MESSAGES,
+  TRACE_EVENT_NAMES
+} from '../../../src/shared/constants/event-names';
 import { TOOL_NAMES } from '../../../src/shared/constants/tool-names';
 
 describe('RunManager', () => {
@@ -45,7 +49,7 @@ describe('RunManager', () => {
     });
 
     const started = await manager.startRun({ task: '观察页面', mode: 'form' });
-    const snapshot = manager.getSnapshot(started.runId);
+    const snapshot = await waitForSnapshot(manager, started.runId, 'observed');
 
     expect(snapshot).toMatchObject({
       runId: started.runId,
@@ -83,6 +87,23 @@ describe('RunManager', () => {
         code: ERROR_CODES.OK
       }
     });
+    expect(snapshot.trace?.map((event) => event.type)).toEqual([
+      TRACE_EVENT_NAMES.RUN_STARTED,
+      TRACE_EVENT_NAMES.TOOL_STARTED,
+      TRACE_EVENT_NAMES.TOOL_RESULT
+    ]);
+    expect(snapshot.trace?.every((event) => event.runId === started.runId)).toBe(true);
+    expect(payloadRecord(snapshot.trace?.[0]?.payload)).toMatchObject({
+      task: '观察页面',
+      mode: 'form'
+    });
+    expect(payloadRecord(snapshot.trace?.[1]?.payload)).toMatchObject({
+      tool: TOOL_NAMES.PAGE_OBSERVE
+    });
+    expect(payloadRecord(snapshot.trace?.[2]?.payload)).toMatchObject({
+      tool: TOOL_NAMES.PAGE_OBSERVE,
+      code: ERROR_CODES.OK
+    });
   });
 
   it('stores structured content unavailable errors from page tools', async () => {
@@ -100,8 +121,9 @@ describe('RunManager', () => {
     });
 
     const started = await manager.startRun({ task: '观察页面' });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'error');
 
-    expect(manager.getSnapshot(started.runId)).toMatchObject({
+    expect(snapshot).toMatchObject({
       status: 'error',
       mode: 'ask',
       error: {
@@ -183,6 +205,22 @@ describe('RunManager', () => {
         requiresObserve: true
       }
     });
+    const trace = manager.getSnapshot(started.runId).trace ?? [];
+    const iframeToolStarted = trace.find(
+      (event) =>
+        event.type === TRACE_EVENT_NAMES.TOOL_STARTED &&
+        payloadRecord(event.payload).tool === TOOL_NAMES.IFRAME_CLICK
+    );
+    const iframeToolResult = trace.find(
+      (event) =>
+        event.type === TRACE_EVENT_NAMES.TOOL_RESULT &&
+        payloadRecord(event.payload).tool === TOOL_NAMES.IFRAME_CLICK
+    );
+    expect(iframeToolStarted).toBeTruthy();
+    expect(payloadRecord(iframeToolResult?.payload)).toMatchObject({
+      tool: TOOL_NAMES.IFRAME_CLICK,
+      code: ERROR_CODES.OK
+    });
   });
 
   it('creates approval request for high-risk iframe tools and deny returns USER_DENIED_APPROVAL', async () => {
@@ -250,7 +288,7 @@ describe('RunManager', () => {
     expect(manager.getSnapshot(started.runId).trace).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: TRACE_EVENT_NAMES.APPROVAL_REQUIRED }),
-        expect.objectContaining({ type: TRACE_EVENT_NAMES.STATE_CHANGED })
+        expect.objectContaining({ type: APPROVAL_EVENT_NAMES.DENIED })
       ])
     );
   });
@@ -356,6 +394,11 @@ describe('RunManager', () => {
         requiresObserve: false
       }
     });
+    expect(manager.getSnapshot(started.runId).trace).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: APPROVAL_EVENT_NAMES.APPROVED })
+      ])
+    );
   });
 
   it('cancels a run and prevents later tool execution', async () => {
@@ -447,4 +490,25 @@ function observationResponse() {
       warnings: []
     }
   };
+}
+
+function payloadRecord(payload: unknown): Record<string, unknown> {
+  return typeof payload === 'object' && payload !== null
+    ? payload as Record<string, unknown>
+    : {};
+}
+
+async function waitForSnapshot(
+  manager: RunManager,
+  runId: string,
+  status: ReturnType<RunManager['getSnapshot']>['status']
+) {
+  for (let index = 0; index < 20; index += 1) {
+    const snapshot = manager.getSnapshot(runId);
+    if (snapshot.status === status) {
+      return snapshot;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return manager.getSnapshot(runId);
 }

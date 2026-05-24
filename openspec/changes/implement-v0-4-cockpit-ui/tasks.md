@@ -1,6 +1,6 @@
 ## 1. 依赖与结构
 
-- [ ] 1.1 将 `lucide-react` 加入依赖，并记录引入必要性。
+- [x] 1.1 将 `lucide-react` 加入依赖，并记录引入必要性。
 - [x] 1.2 建立 `src/ui/sidepanel/`、`src/ui/components/`、`src/ui/approval/`、`src/ui/stores/`、`src/ui/lib/`、`src/ui/styles/` 目录骨架。
 - [x] 1.3 将 `src/entrypoints/sidepanel/app.tsx` 收敛为 entrypoint/wrapper，不再承载主体 Cockpit UI。
 - [x] 1.4 建立 UI import boundary 测试，禁止 `src/ui/**` 直接 import AgentLoop、ToolRouter、ModelClient 或 content script 内部模块。
@@ -62,7 +62,7 @@
 - [x] 6.4 实现 ToolInspector、ToolArgsView 和 ToolResultView。
 - [x] 6.5 为 TraceLog / selected event detail 编写测试，覆盖完整 trace 展示但不提供 replay。
 - [x] 6.6 实现 TraceLog 或等价 trace detail 区域。
-- [ ] 6.7 编写测试确保完整 ToolResult / Trace 展示不会改变 Agent context summary 行为。
+- [x] 6.7 编写测试确保完整 ToolResult / Trace 展示不会改变 Agent context summary 行为。
 
 ## 7. Approval UI
 
@@ -85,20 +85,20 @@
 
 ## 9. E2E 与真实浏览器验收
 
-- [ ] 9.1 设计 v0.4 E2E flow，保持 spec / flow / page / component object 分层，不在 spec 中直接写复杂 locator。
-- [ ] 9.2 新增 E2E 覆盖 Cockpit 四个 tab 展示、Run Mode start、Stop cancellation、approval drawer 和 settings masking。
-- [ ] 9.3 运行并修复 `npm run test:e2e` 中与 v0.4 相关的 POM 回归。
-- [ ] 9.4 按 Chrome for Testing debug SOP 补充验收 E2E 难以覆盖的原生 side panel 宿主场景：窄宽度、滚动、resize、approval drawer 可用性和 settings masking。
-- [ ] 9.5 若 SOP 验收发现 UI 与 E2E 行为不一致，优先补自动化测试或记录明确环境差异。
+- [x] 9.1 设计 v0.4 E2E flow，保持 spec / flow / page / component object 分层，不在 spec 中直接写复杂 locator。
+- [x] 9.2 新增 E2E 覆盖 Cockpit 四个 tab 展示、Run Mode start、Stop cancellation、approval drawer 和 settings masking。
+- [x] 9.3 运行并修复 `npm run test:e2e` 中与 v0.4 相关的 POM 回归。
+- [x] 9.4 按 Chrome for Testing debug SOP 补充验收 E2E 难以覆盖的原生 side panel 宿主场景：窄宽度、滚动、resize、approval drawer 可用性和 settings masking。
+- [x] 9.5 若 SOP 验收发现 UI 与 E2E 行为不一致，优先补自动化测试或记录明确环境差异。
 
 ## 10. 文档、验证与收口
 
-- [ ] 10.1 更新 `CONTEXT.md` 中与 v0.4 相关的领域术语，仅保留产品语言，不记录实现细节。
-- [ ] 10.2 更新 roadmap 或 implementation notes，记录 lucide 依赖、组件拆分、真实浏览器验收边界和不写 ADR 的决策。
+- [x] 10.1 更新 `CONTEXT.md` 中与 v0.4 相关的领域术语，仅保留产品语言，不记录实现细节。
+- [x] 10.2 更新 roadmap 或 implementation notes，记录 lucide 依赖、组件拆分、真实浏览器验收边界和不写 ADR 的决策。
 - [x] 10.3 运行 `npm run typecheck`。
-- [ ] 10.4 运行 `npm run lint`。
-- [ ] 10.5 运行相关 Vitest：runtime、stores、UI components、approval、settings。
-- [ ] 10.6 运行 `npm run build`。
-- [ ] 10.7 运行 `npm run test:e2e`。
-- [ ] 10.8 运行 `npx openspec validate implement-v0-4-cockpit-ui --strict`。
-- [ ] 10.9 最终复查是否存在可以删除的冗余 UI 状态、未使用变量或无需求驱动抽象。
+- [x] 10.4 运行 `npm run lint`。
+- [x] 10.5 运行相关 Vitest：runtime、stores、UI components、approval、settings。
+- [x] 10.6 运行 `npm run build`。
+- [x] 10.7 运行 `npm run test:e2e`。
+- [x] 10.8 运行 `npx openspec validate implement-v0-4-cockpit-ui --strict`。
+- [x] 10.9 最终复查是否存在可以删除的冗余 UI 状态、未使用变量或无需求驱动抽象。

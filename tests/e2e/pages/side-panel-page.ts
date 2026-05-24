@@ -19,6 +19,24 @@ export class SidePanelPage {
     return this.page;
   }
 
+  async openRun(runId: string): Promise<Page> {
+    this.page = await this.context.newPage();
+    await this.page.goto(`chrome-extension://${this.extensionId}/sidepanel.html?runId=${runId}`);
+    return this.page;
+  }
+
+  async setProviderSettings(settings: {
+    baseUrl: string;
+    model: string;
+    apiKey: string;
+  }): Promise<void> {
+    const page = this.pageObject;
+    await page.evaluate(async (providerSettings) => {
+      await chrome.storage.local.set({ providerSettings });
+    }, settings);
+    await page.reload();
+  }
+
   async runOnTab(input: {
     tabId: number;
     task: string;
@@ -49,12 +67,23 @@ export class SidePanelPage {
         throw new Error(failureMessage(started, 'Unable to start run'));
       }
 
-      const snapshot: unknown = await chrome.runtime.sendMessage({
-        type: runtimeMessages.GET_SNAPSHOT,
-        runId: started.data.runId
-      });
-      if (!isSuccess<RunSnapshot>(snapshot)) {
-        throw new Error(failureMessage(snapshot, 'Unable to read run snapshot'));
+      let snapshot: RuntimeSuccess<RunSnapshot> | undefined;
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        const nextSnapshot: unknown = await chrome.runtime.sendMessage({
+          type: runtimeMessages.GET_SNAPSHOT,
+          runId: started.data.runId
+        });
+        if (!isSuccess<RunSnapshot>(nextSnapshot)) {
+          throw new Error(failureMessage(nextSnapshot, 'Unable to read run snapshot'));
+        }
+        snapshot = nextSnapshot;
+        if (!['created', 'observing', 'thinking', 'executing_tool'].includes(snapshot.data.status)) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      if (!snapshot) {
+        throw new Error('Unable to read run snapshot');
       }
       return snapshot.data;
     }, { ...input, runtimeMessages: RUNTIME_MESSAGES });

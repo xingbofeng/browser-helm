@@ -1,6 +1,7 @@
 import { buildA11ySnapshot } from '../a11y/a11y-snapshot';
 import { RefMap } from '../a11y/ref-map';
-import { resolveRef } from '../a11y/ref-resolver';
+import { resolveRef, type ResolvedRefElement } from '../a11y/ref-resolver';
+import { checkResolvedActionReadiness } from '../dom/action-readiness';
 import { buildObservation } from '../observe/build-observation';
 import { readPageMetadata } from '../observe/page-metadata';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
@@ -94,6 +95,18 @@ export class ContentRpcHandler {
         if (!response.ok || !('ref' in response)) {
           return response;
         }
+        const readiness = checkResolvedActionReadiness(
+          {
+            kind: 'click',
+            refId: message.refId,
+            source: 'runtime'
+          },
+          response.ref as ResolvedRefElement
+        );
+        const blocked = this.blockedIframeReadiness(readiness);
+        if (blocked) {
+          return blocked;
+        }
         const element = this.resolveElement(message.refId);
         if (!element.ok) {
           return element;
@@ -113,6 +126,19 @@ export class ContentRpcHandler {
         const response = this.readIframeTarget(message.refId);
         if (!response.ok || !('ref' in response)) {
           return response;
+        }
+        const readiness = checkResolvedActionReadiness(
+          {
+            kind: 'type',
+            refId: message.refId,
+            source: 'runtime',
+            valuePreview: message.valuePreview
+          },
+          response.ref as ResolvedRefElement
+        );
+        const blocked = this.blockedIframeReadiness(readiness);
+        if (blocked) {
+          return blocked;
         }
         const element = this.resolveElement(message.refId);
         if (!element.ok) {
@@ -164,6 +190,28 @@ export class ContentRpcHandler {
       code: ERROR_CODES.IFRAME_ACTION_UNAUTHORIZED,
       message: 'Iframe mutations must be routed through the runtime tool boundary'
     };
+  }
+
+  private blockedIframeReadiness(
+    readiness: ReturnType<typeof checkResolvedActionReadiness>
+  ): ContentRpcResponse | undefined {
+    if (!readiness.canAct) {
+      return {
+        ok: false,
+        code: readiness.code,
+        message: readiness.reason,
+        detail: readiness
+      };
+    }
+    if (readiness.wouldRequireApproval) {
+      return {
+        ok: false,
+        code: ERROR_CODES.APPROVAL_REQUIRED,
+        message: readiness.reason,
+        detail: readiness
+      };
+    }
+    return undefined;
   }
 
   private resolveElement(refId: string):

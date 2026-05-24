@@ -26,23 +26,25 @@ type AgentStoreState = {
 };
 
 export function createAgentStore() {
-  const state: AgentStoreState = {
+  const store = createSimpleStore<AgentStoreState>({
     mode: 'ask',
     displayState: 'idle',
     startRun: (input) => {
-      state.runId = input.runId;
-      state.mode = input.mode;
-      state.displayState = 'observing';
+      store.setState({
+        runId: input.runId,
+        mode: input.mode,
+        displayState: 'observing'
+      });
     },
     setDisplayState: (displayState) => {
-      state.displayState = displayState;
+      store.setState({ displayState });
     },
     selectStep: (stepId) => {
-      state.selectedStepId = stepId;
+      store.setState({ selectedStepId: stepId });
     },
     cancelRun: () => {
-      state.displayState = 'cancelled';
+      store.setState({ displayState: 'cancelled' });
     }
-  };
-  return createSimpleStore(state);
+  });
+  return store;
 }

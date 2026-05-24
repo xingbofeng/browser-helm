@@ -16,26 +16,30 @@ type TraceStoreState = {
 };
 
 const labels: Record<string, string> = {
-  run_started: 'Run started',
-  approval_required: 'Approval required',
-  run_cancelled: 'Run cancelled'
+  run_started: 'Run 开始',
+  approval_required: '等待审批',
+  run_cancelled: '用户停止'
 };
 
 export function createTraceStore() {
-  const state: TraceStoreState = {
+  const store = createSimpleStore<TraceStoreState>({
     events: [],
     items: [],
     setEvents: (events) => {
-      state.events = events;
-      state.items = events.map((event, index) => ({
-        id: `${event.runId}:${index}`,
-        event,
-        label: labels[event.type] ?? event.type
-      }));
+      store.setState({
+        events,
+        items: events.map((event, index) => ({
+          id: `${event.runId}:${index}`,
+          event,
+          label: labels[event.type] ?? event.type
+        }))
+      });
     },
     selectEvent: (id) => {
-      state.selectedEvent = state.items.find((item) => item.id === id)?.event;
+      store.setState((state) => ({
+        selectedEvent: state.items.find((item) => item.id === id)?.event
+      }));
     }
-  };
-  return createSimpleStore(state);
+  });
+  return store;
 }
