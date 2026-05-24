@@ -1,0 +1,11 @@
+{
+  "ok": false,
+  "code": "APPROVAL_REQUIRED",
+  "summary": "Requires approval before execution",
+  "requiresApproval": true,
+  "approval": {
+    "reason": "High-risk action",
+    "risk": "high",
+    "actionPreview": "Submit checkout form"
+  }
+}

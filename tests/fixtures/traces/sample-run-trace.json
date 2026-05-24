@@ -1,0 +1,20 @@
+[
+  {
+    "id": "evt_1",
+    "runId": "run_fixture",
+    "type": "run_started",
+    "timestamp": 1710000000000,
+    "schemaVersion": "1.0.0",
+    "payload": {
+      "task": "Fixture run",
+      "maxSteps": 3,
+      "metadata": {
+        "schemaVersion": "1.0.0",
+        "promptVersion": "v0.1.0",
+        "toolSchemaVersion": "v0.1.0",
+        "contextPolicyVersion": "v0.1.0",
+        "model": "mock-model"
+      }
+    }
+  }
+]

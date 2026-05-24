@@ -1,0 +1,7 @@
+{
+  "type": "tool_call",
+  "tool": "bh_mock_page_observe",
+  "args": {
+    "page": "current"
+  }
+}

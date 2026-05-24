@@ -17,7 +17,7 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
-    "types": ["chrome"]
+    "types": ["chrome", "node"]
   },
-  "include": ["src", "wxt.config.ts", "eslint.config.js"]
+  "include": ["src", "tests", "scripts", "wxt.config.ts", "eslint.config.js"]
 }

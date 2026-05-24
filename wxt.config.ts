@@ -1,8 +1,8 @@
 import { defineConfig } from 'wxt';
-import react from '@wxt-dev/module-react';
 
 export default defineConfig({
-  modules: [react()],
+  srcDir: 'src',
+  modules: ['@wxt-dev/module-react'],
   manifest: {
     name: 'BrowserHelm',
     description: 'Local-first a11y-first browser agent cockpit.',

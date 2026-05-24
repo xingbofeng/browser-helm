@@ -20,10 +20,22 @@ export default tseslint.config(
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_'
+        }
+      ],
       '@typescript-eslint/no-explicit-any': 'warn'
     }
   },
   {
-    ignores: ['.output/**', 'dist/**', 'node_modules/**']
+    files: ['tests/**/*.ts'],
+    rules: {
+      '@typescript-eslint/require-await': 'off'
+    }
+  },
+  {
+    ignores: ['.output/**', '.wxt/**', 'dist/**', 'node_modules/**', 'eslint.config.js']
   }
 );
