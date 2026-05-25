@@ -5,7 +5,13 @@ const SENSITIVE_PATTERNS = [
   /api\s*key/iu,
   /apikey/iu,
   /otp/iu,
-  /one-time-code/iu
+  /one-time-code/iu,
+  /e-?mail|邮箱|邮件/iu,
+  /phone|tel|mobile|手机号|电话/iu,
+  /name|first.?name|last.?name|full.?name|姓名|名字|姓氏/iu,
+  /address|street|city|province|postal|zip|地址|住址/iu,
+  /card|credit|cc-?number|银行卡|信用卡/iu,
+  /ssn|social.?security|身份证|证件/iu
 ];
 
 export function isSensitiveField(element: HTMLElement): boolean {

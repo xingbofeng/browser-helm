@@ -23,7 +23,7 @@ export class PolicyEngine {
       return {
         allow: false,
         requiresApproval: true,
-        reason: 'Approval required by policy'
+        reason: 'Approval required by policy before execution; action was not executed'
       };
     }
     return {

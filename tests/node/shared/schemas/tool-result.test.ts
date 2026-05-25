@@ -25,7 +25,7 @@ describe('toolResultSchema', () => {
     const result = toolResultSchema.parse({
       ok: false,
       code: 'APPROVAL_REQUIRED',
-      summary: 'Requires approval before execution',
+      summary: 'Approval required before execution; action was not executed',
       requiresApproval: true,
       approval: {
         reason: 'High-risk submit action',

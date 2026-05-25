@@ -37,3 +37,40 @@ v0.2 到 v0.33 已经具备页面观察、Ref 映射、交互元素、表单字�
 - 影响 `src/storage/`：复用既有 settings store，不让 UI 直接散写 chrome.storage key。
 - 新增依赖 `lucide-react`。
 - 测试影响包括 `tests/dom/ui/**`、`tests/node/runtime/**`、`tests/e2e/**`，以及 Chrome for Testing SOP 补充验收记录。
+
+---
+
+## Archive Information
+
+**Archived:** 2026-05-25 16:40
+**Duration:** 1 day
+**Outcome:** Successfully implemented
+
+### Files Modified
+- `src/entrypoints/sidepanel/app.tsx`
+- `src/ui/**`
+- `src/runtime/**`
+- `src/background/runtime/**`
+- `src/storage/**`
+- `tests/node/**`
+- `tests/dom/**`
+- `tests/e2e/**`
+- `openspec/specs/**`
+
+### Specs Updated
+- `openspec/specs/agent-kernel/spec.md`
+- `openspec/specs/approval-runtime-hook/spec.md`
+- `openspec/specs/cockpit-approval-ui/spec.md`
+- `openspec/specs/cockpit-settings/spec.md`
+- `openspec/specs/cockpit-ui/spec.md`
+- `openspec/specs/page-observation/spec.md`
+- `openspec/specs/run-mode-gate/spec.md`
+
+### Verification
+- `npm run typecheck`
+- `npm run lint`
+- `npm test`
+- `npm run build`
+- `npm run test:e2e`
+- `npx openspec validate implement-v0-4-cockpit-ui --strict`
+- `npx openspec validate --all --strict`

@@ -25,7 +25,7 @@ describe('policy-engine', () => {
       .toMatchObject({
         allow: false,
         requiresApproval: true,
-        reason: 'Approval required by policy'
+        reason: 'Approval required by policy before execution; action was not executed'
       });
   });
 

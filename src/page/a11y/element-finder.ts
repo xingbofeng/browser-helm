@@ -24,7 +24,7 @@ export function isVisibleElement(element: Element): boolean {
     return false;
   }
   const style = element.getAttribute('style')?.toLowerCase() ?? '';
-  return !style.includes('display: none') && !style.includes('visibility: hidden');
+  return !/display\s*:\s*none/u.test(style) && !/visibility\s*:\s*hidden/u.test(style);
 }
 
 export function isDisabledElement(element: Element): boolean {

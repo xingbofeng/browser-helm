@@ -138,7 +138,7 @@ describe('RunManager', () => {
     });
   });
 
-  it('executes iframe tools through ToolRouter in act mode and stores tool result contract', async () => {
+  it('blocks high-risk iframe tools before ToolRouter execution', async () => {
     const calls: string[] = [];
     const manager = new RunManager({
       getActiveTabId: async () => 42,
@@ -176,6 +176,7 @@ describe('RunManager', () => {
     });
 
     const started = await manager.startRun({ task: '点击 iframe', mode: 'act' });
+    await waitForSnapshot(manager, started.runId, 'observed');
     const result = await manager.executeTool({
       runId: started.runId,
       tool: TOOL_NAMES.IFRAME_CLICK,
@@ -184,42 +185,71 @@ describe('RunManager', () => {
       }
     });
 
-    expect(calls).toEqual([
-      CONTENT_RPC_MESSAGES.PAGE_OBSERVE,
-      CONTENT_RPC_MESSAGES.IFRAME_READ,
-      CONTENT_RPC_MESSAGES.IFRAME_CLICK
-    ]);
+    expect(calls).toEqual([CONTENT_RPC_MESSAGES.PAGE_OBSERVE]);
     expect(result).toMatchObject({
-      ok: true,
-      code: ERROR_CODES.OK,
-      changedPage: true,
-      requiresObserve: true
+      ok: false,
+      code: ERROR_CODES.APPROVAL_REQUIRED,
+      requiresApproval: true
     });
     expect(manager.getSnapshot(started.runId)).toMatchObject({
-      status: 'observed',
+      status: 'waiting_for_approval',
       toolResult: {
         tool: TOOL_NAMES.IFRAME_CLICK,
-        ok: true,
-        code: ERROR_CODES.OK,
-        changedPage: true,
-        requiresObserve: true
+        ok: false,
+        code: ERROR_CODES.APPROVAL_REQUIRED,
+        requiresApproval: true
+      },
+      pendingApproval: {
+        tool: TOOL_NAMES.IFRAME_CLICK,
+        risk: 'high'
       }
     });
     const trace = manager.getSnapshot(started.runId).trace ?? [];
-    const iframeToolStarted = trace.find(
-      (event) =>
-        event.type === TRACE_EVENT_NAMES.TOOL_STARTED &&
-        payloadRecord(event.payload).tool === TOOL_NAMES.IFRAME_CLICK
+    expect(trace).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: TRACE_EVENT_NAMES.APPROVAL_REQUIRED })
+      ])
     );
-    const iframeToolResult = trace.find(
-      (event) =>
-        event.type === TRACE_EVENT_NAMES.TOOL_RESULT &&
-        payloadRecord(event.payload).tool === TOOL_NAMES.IFRAME_CLICK
-    );
-    expect(iframeToolStarted).toBeTruthy();
-    expect(payloadRecord(iframeToolResult?.payload)).toMatchObject({
-      tool: TOOL_NAMES.IFRAME_CLICK,
-      code: ERROR_CODES.OK
+    expect(
+      trace.some(
+        (event) =>
+          event.type === TRACE_EVENT_NAMES.TOOL_STARTED &&
+          payloadRecord(event.payload).tool === TOOL_NAMES.IFRAME_CLICK
+      )
+    ).toBe(false);
+  });
+
+  it('executes safe page observe tools through ToolRouter', async () => {
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        expect(message.type).toBe(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
+        return observationResponse();
+      })
+    });
+
+    const started = await manager.startRun({ task: '观察页面', mode: 'act' });
+    await waitForSnapshot(manager, started.runId, 'observed');
+    const result = await manager.executeTool({
+      runId: started.runId,
+      tool: TOOL_NAMES.PAGE_OBSERVE,
+      args: {}
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      code: ERROR_CODES.OK,
+      changedPage: false,
+      requiresObserve: false
+    });
+    expect(manager.getSnapshot(started.runId)).toMatchObject({
+      status: 'observed',
+      pendingApproval: undefined,
+      toolResult: {
+        tool: TOOL_NAMES.PAGE_OBSERVE,
+        ok: true,
+        code: ERROR_CODES.OK
+      }
     });
   });
 
@@ -250,6 +280,7 @@ describe('RunManager', () => {
     });
 
     const started = await manager.startRun({ task: '删除账号', mode: 'act' });
+    await waitForSnapshot(manager, started.runId, 'observed');
     const approvalRequired = await manager.executeTool({
       runId: started.runId,
       tool: TOOL_NAMES.IFRAME_CLICK,
@@ -315,6 +346,7 @@ describe('RunManager', () => {
     });
 
     const started = await manager.startRun({ task: '输入密码', mode: 'act' });
+    await waitForSnapshot(manager, started.runId, 'observed');
     await manager.executeTool({
       runId: started.runId,
       tool: TOOL_NAMES.IFRAME_TYPE,
@@ -342,12 +374,16 @@ describe('RunManager', () => {
     });
   });
 
-  it('approves pending approval and resumes the run without executing the action in v0.33', async () => {
+  it('approves pending approval by recording the decision without executing the action', async () => {
+    let clicked = false;
     const manager = new RunManager({
       getActiveTabId: async () => 42,
       createContentRpcClient: () => rpcClient(async (message) => {
         if (message.type === CONTENT_RPC_MESSAGES.PAGE_OBSERVE) {
           return observationResponse();
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.IFRAME_CLICK) {
+          clicked = true;
         }
         return {
           ok: true,
@@ -364,6 +400,7 @@ describe('RunManager', () => {
     });
 
     const started = await manager.startRun({ task: '删除账号', mode: 'act' });
+    await waitForSnapshot(manager, started.runId, 'observed');
     await manager.executeTool({
       runId: started.runId,
       tool: TOOL_NAMES.IFRAME_CLICK,
@@ -383,6 +420,7 @@ describe('RunManager', () => {
       ok: true,
       code: ERROR_CODES.OK
     });
+    expect(approved.summary).toContain('no action was automatically executed');
     expect(manager.getSnapshot(started.runId)).toMatchObject({
       status: 'observed',
       pendingApproval: undefined,
@@ -399,6 +437,7 @@ describe('RunManager', () => {
         expect.objectContaining({ type: APPROVAL_EVENT_NAMES.APPROVED })
       ])
     );
+    expect(clicked).toBe(false);
   });
 
   it('cancels a run and prevents later tool execution', async () => {

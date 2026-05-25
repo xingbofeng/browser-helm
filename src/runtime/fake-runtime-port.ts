@@ -109,7 +109,9 @@ export class FakeRuntimePort implements RuntimePort {
     const result = {
       ok: !denied,
       code: denied ? ERROR_CODES.USER_DENIED_APPROVAL : ERROR_CODES.OK,
-      summary: denied ? input.reason ?? 'User denied approval' : 'Approval approved',
+      summary: denied
+        ? input.reason ?? 'User denied approval'
+        : 'Approval recorded; no action was automatically executed in this version.',
       changedPage: false,
       requiresObserve: false
     };

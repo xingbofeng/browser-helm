@@ -7,9 +7,13 @@ import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import type { Observation } from '../../shared/schemas/observation.schema';
 import type { ToolResult } from '../../shared/schemas/tool-result.schema';
 import { ApprovalManager } from '../../runtime/approval/approval-manager';
+import { PolicyEngine } from '../../agent/policy/policy-engine';
 import { redactToolArgs } from '../../tools/core/tool-args-redaction';
 import { ToolRouter } from '../../tools/core/tool-router';
-import { userDeniedApprovalResult } from '../../tools/core/tool-result-factory';
+import {
+  approvalRequiredResult,
+  userDeniedApprovalResult
+} from '../../tools/core/tool-result-factory';
 import { createToolRegistry } from '../../tools';
 import type {
   DecideApprovalInput,
@@ -28,6 +32,7 @@ type RunManagerDeps = {
 export class RunManager {
   private nextId = 1;
   private readonly approvalManager = new ApprovalManager();
+  private readonly policyEngine = new PolicyEngine();
   private readonly listeners = new Map<string, Set<(event: RuntimeEvent) => void>>();
   private readonly records = new Map<
     string,
@@ -210,6 +215,47 @@ export class RunManager {
       return result;
     }
 
+    const router = this.createToolRouter(record.tabId);
+    const contract = router.getToolContract(input.tool, record.mode);
+    if (contract) {
+      const policy = this.policyEngine.evaluate({
+        risk: contract.risk,
+        wouldRequireApproval: false
+      });
+      if (!policy.allow && policy.requiresApproval) {
+        const result = approvalRequiredResult({
+          reason: policy.reason,
+          risk: contract.risk,
+          actionPreview: `${contract.title} (${input.tool})`
+        });
+        const request = this.approvalManager.create({
+          runId: input.runId,
+          stepId: `${input.runId}:${input.tool}`,
+          tool: input.tool,
+          argsPreview: redactedArgs,
+          risk: contract.risk,
+          reason: result.approval?.reason ?? result.summary,
+          actionPreview: result.approval?.actionPreview
+        });
+        this.appendTrace(record, {
+          runId: input.runId,
+          type: TRACE_EVENT_NAMES.APPROVAL_REQUIRED,
+          payload: {
+            request,
+            summary: `${request.reason}; action was not executed`
+          }
+        });
+        this.snapshots.set(input.runId, {
+          ...this.getSnapshot(input.runId),
+          status: 'waiting_for_approval',
+          toolResult: snapshotToolResult(input.tool, result),
+          pendingApproval: request,
+          trace: record.trace
+        });
+        return result;
+      }
+    }
+
     this.appendTrace(record, {
       runId: input.runId,
       type: TRACE_EVENT_NAMES.TOOL_STARTED,
@@ -224,7 +270,6 @@ export class RunManager {
       trace: record.trace
     });
 
-    const router = this.createToolRouter(record.tabId);
     const result = await router.execute(
       {
         tool: input.tool,
@@ -342,7 +387,7 @@ export class RunManager {
     const result: ToolResult = {
       ok: true,
       code: ERROR_CODES.OK,
-      summary: 'Approval approved; run can resume',
+      summary: 'Approval recorded; no action was automatically executed in this version.',
       changedPage: false,
       requiresObserve: false
     };
@@ -352,7 +397,7 @@ export class RunManager {
         type: APPROVAL_EVENT_NAMES.APPROVED,
         payload: {
           requestId: input.requestId,
-          reason: 'Approval approved',
+          reason: result.summary,
           code: result.code
         }
       });

@@ -67,7 +67,7 @@ describe('structured page data schemas', () => {
     });
     const unsupportedTab = tabDataSchema.parse({
       status: 'unsupported',
-      summary: 'v0.3 尚未实现完整表单字段读取',
+      summary: '当前观察未包含表单字段数据；请使用 v0.32 表单读取能力获取字段快照',
       count: 0,
       items: [],
       updatedAt: '2026-05-24T05:00:00.000Z',
@@ -130,7 +130,7 @@ describe('structured page data schemas', () => {
       },
       forms: {
         status: 'unsupported',
-        summary: 'v0.3 尚未实现完整表单字段读取',
+        summary: '当前观察未包含表单字段数据；请使用 v0.32 表单读取能力获取字段快照',
         count: 0,
         items: [],
         updatedAt: '2026-05-24T05:00:00.000Z',

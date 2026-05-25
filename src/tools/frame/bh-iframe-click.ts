@@ -32,7 +32,7 @@ export function bhIframeClick(
     title: 'Click Iframe Target',
     description: 'Clicks an iframe target after readiness and approval checks',
     modes: ['act'],
-    risk: 'medium',
+    risk: 'high',
     argsSchema,
     resultSchema: toolResultSchema,
     async execute(args) {

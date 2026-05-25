@@ -11,7 +11,7 @@ describe('content-rpc-handler iframe actions', () => {
   it('reads, clicks, and types iframe-routed targets inside the current frame', () => {
     document.body.innerHTML = `
       <button id="toggle" type="button">展开详情</button>
-      <input id="email" name="email" type="email" />
+      <input id="company" name="company" type="text" />
       <script></script>
     `;
     let clicked = false;
@@ -60,19 +60,19 @@ describe('content-rpc-handler iframe actions', () => {
         type: CONTENT_RPC_MESSAGES.IFRAME_TYPE,
         frameId: 4,
         refId: inputRef,
-        text: 'hello@example.com',
+        text: 'BrowserHelm',
         actionToken: IFRAME_ACTION_TOKEN,
         valuePreview: {
           masked: false,
-          preview: 'hello@example.com'
+          preview: 'non-empty'
         }
       })
     ).toMatchObject({
       ok: true,
       changedPage: true
     });
-    expect((document.getElementById('email') as HTMLInputElement).value).toBe(
-      'hello@example.com'
+    expect((document.getElementById('company') as HTMLInputElement).value).toBe(
+      'BrowserHelm'
     );
   });
 

@@ -133,11 +133,6 @@ export class PageObservationFlow {
       role: 'button',
       name: '展开详情'
     });
-    const navigateRef = findFrameRef(snapshot.refs, {
-      role: 'button',
-      name: '模拟 frame 导航'
-    });
-
     const read = await sidePanel.executeTool({
       runId: snapshot.runId,
       tool: TOOL_NAMES.IFRAME_READ,
@@ -162,11 +157,11 @@ export class PageObservationFlow {
       }
     });
     expect(click).toMatchObject({
-      ok: true,
-      changedPage: true,
-      requiresObserve: true
+      ok: false,
+      code: ERROR_CODES.APPROVAL_REQUIRED,
+      requiresApproval: true
     });
-    await expect(fixture.page.frameLocator('iframe').locator('body')).toHaveAttribute(
+    await expect(fixture.page.frameLocator('iframe').locator('body')).not.toHaveAttribute(
       'data-details',
       'open'
     );
@@ -178,39 +173,20 @@ export class PageObservationFlow {
         refId: `frame_${emailRef.frameId}:${emailRef.innerRefId}`,
         text: 'hello@example.com',
         valuePreview: {
-          masked: false,
-          preview: 'hello@example.com'
+          masked: true,
+          preview: '[MASKED]',
+          reason: 'email'
         }
       }
     });
     expect(type).toMatchObject({
-      ok: true,
-      changedPage: true,
-      requiresObserve: true
+      ok: false,
+      code: ERROR_CODES.APPROVAL_REQUIRED,
+      requiresApproval: true
     });
     await expect(
       fixture.page.frameLocator('iframe').locator('input[name="email"]')
-    ).toHaveValue('hello@example.com');
-
-    await sidePanel.executeTool({
-      runId: snapshot.runId,
-      tool: TOOL_NAMES.IFRAME_CLICK,
-      args: {
-        refId: `frame_${navigateRef.frameId}:${navigateRef.innerRefId}`
-      }
-    });
-    const stale = await sidePanel.executeTool({
-      runId: snapshot.runId,
-      tool: TOOL_NAMES.IFRAME_READ,
-      args: {
-        refId: `frame_${emailRef.frameId}:${emailRef.innerRefId}`
-      }
-    });
-    expect(stale).toMatchObject({
-      ok: false,
-      code: ERROR_CODES.REF_STALE,
-      requiresObserve: true
-    });
+    ).toHaveValue('');
   }
 
   async expectRuntimeApprovalDenyForIframeTool(): Promise<void> {

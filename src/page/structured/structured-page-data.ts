@@ -77,7 +77,7 @@ export function buildStructuredPageData(
       status: forms?.status ?? 'unsupported',
       summary: forms
         ? summarizeForms(forms.fields, forms.submit)
-        : 'v0.3 尚未实现完整表单字段读取；该能力归属 v0.32',
+        : '当前观察未包含表单字段数据；请使用 v0.32 表单读取能力获取字段快照',
       count: forms?.fields.length ?? 0,
       items: forms?.fields ?? [],
       updatedAt,

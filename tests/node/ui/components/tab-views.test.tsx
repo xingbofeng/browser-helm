@@ -109,8 +109,8 @@ describe('Cockpit tab views', () => {
               type: 'email',
               required: true,
               disabled: false,
-              sensitive: false,
-              valuePreview: 'user@example.com',
+              sensitive: true,
+              valuePreview: '[MASKED]',
               validation: {
                 valid: false,
                 message: '请输入有效邮箱'

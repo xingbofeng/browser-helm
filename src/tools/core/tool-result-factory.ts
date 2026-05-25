@@ -43,7 +43,7 @@ export function approvalRequiredResult(input: {
   return {
     ok: false,
     code: ERROR_CODES.APPROVAL_REQUIRED,
-    summary: 'Requires approval before execution',
+    summary: 'Approval required before execution; action was not executed',
     requiresApproval: true,
     approval: {
       reason: input.reason,

@@ -5,27 +5,49 @@ import { describe, expect, it } from 'vitest';
 import { isSensitiveField, maskSensitiveValue } from '../../../../src/page/dom/sensitive-field';
 
 describe('sensitive-field', () => {
-  it('marks password, token, secret, api key, and otp fields as sensitive', () => {
+  it('marks secrets and common PII fields as sensitive', () => {
     document.body.innerHTML = `
       <input id="password" type="password" value="secret" />
       <input id="token" name="accessToken" value="token-value" />
       <input id="secret" aria-label="Client Secret" value="secret-value" />
       <input id="api" name="apiKey" value="sk-test" />
       <input id="otp" autocomplete="one-time-code" value="123456" />
+      <input id="email" type="email" name="email" value="me@example.com" />
+      <input id="phone" name="phone" value="1234567890" />
+      <input id="name" autocomplete="name" value="Ada Lovelace" />
+      <input id="address" name="shippingAddress" value="1 Main St" />
+      <input id="card" name="cardNumber" value="4111111111111111" />
+      <input id="ssn" name="ssn" value="123-45-6789" />
+      <input id="cnid" aria-label="身份证" value="110101199003070011" />
+      <input id="bank" placeholder="银行卡号" value="6222000000000000" />
     `;
 
-    for (const id of ['password', 'token', 'secret', 'api', 'otp']) {
+    for (const id of [
+      'password',
+      'token',
+      'secret',
+      'api',
+      'otp',
+      'email',
+      'phone',
+      'name',
+      'address',
+      'card',
+      'ssn',
+      'cnid',
+      'bank'
+    ]) {
       expect(isSensitiveField(field(`#${id}`))).toBe(true);
     }
   });
 
   it('does not mark ordinary fields as sensitive', () => {
     document.body.innerHTML = `
-      <input id="email" type="email" name="email" value="me@example.com" />
+      <input id="company" name="company" value="BrowserHelm" />
       <textarea id="note">hello</textarea>
     `;
 
-    expect(isSensitiveField(field('#email'))).toBe(false);
+    expect(isSensitiveField(field('#company'))).toBe(false);
     expect(isSensitiveField(field('#note'))).toBe(false);
   });
 

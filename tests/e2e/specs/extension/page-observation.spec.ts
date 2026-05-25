@@ -38,7 +38,7 @@ test('refreshes side panel after delayed iframe form render', async () => {
   }
 });
 
-test('routes iframe read click and type in act mode without submit', async () => {
+test('routes iframe read and blocks high-risk click/type before mutation', async () => {
   const flow = await PageObservationFlow.start();
   try {
     await flow.expectIframeActModeReadClickType();

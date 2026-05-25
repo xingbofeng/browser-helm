@@ -264,3 +264,20 @@
 
 **待确认**：
 - [ ] v1.0 是否需要把 approval approve 后的 action resume 设计为独立显式流程。
+
+## [review 安全收口修复] - 2026-05-25
+
+**目标**：按 review 意见收口当前主干的 P0/P1 安全与语义问题，包括 runtime 工具执行前 approval 阻断、approval approve 文案、表单值脱敏、字段 role/visible、system prompt 注入防线与 forms fallback 文案。
+
+**设计决策**：选择在 `RunManager.executeTool` 中先读取 Tool contract 并调用 `PolicyEngine`，对 high-risk 工具直接创建 approval request，不进入 `ToolRouter.execute()`；`bh_iframe_click` / `bh_iframe_type` 标记为 high-risk，使页面 mutation 默认先审批。表单 `valuePreview` 默认只暴露 `empty` / `non-empty` 或 `[MASKED]`，checkbox/radio 保留 checked/unchecked。
+
+**偏差说明**：本次暂不实现静态 `IFRAME_ACTION_TOKEN` 的 nonce 化。原因：nonce 需要串联 tool、runtime/content RPC 与 replay 防护，适合单独设计和验证；本轮先修 runtime 前置 policy guard 和敏感值边界。
+
+**权衡分析**：
+- 方案一：继续依赖工具内部 readiness 返回 `APPROVAL_REQUIRED`。优点是改动少；缺点是 runtime 层仍会调用高风险工具 `execute()`，不满足前置阻断。
+- 方案二：runtime 先按 Tool contract risk 进行 policy guard。优点是 high-risk 工具不会被执行；缺点是部分动态 readiness 细节要等用户继续执行后再检查。
+- 选择方案二，因为 review 重点是执行前必须阻断，且审批通过当前也不自动 resume/execute。
+
+**待确认**：
+- [ ] 后续为 iframe action token 设计每次 action 的 nonce / expiry / request binding，替代静态 `IFRAME_ACTION_TOKEN`。
+- [ ] 若需要让“批准后继续执行”避免重复审批，需要补一条已批准 action 的显式消费语义和测试。

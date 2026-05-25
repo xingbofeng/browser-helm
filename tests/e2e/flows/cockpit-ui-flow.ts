@@ -54,7 +54,7 @@ export class CockpitUiFlow {
 
     const approvalPage = await sidePanel.openRun(snapshot.runId);
     await new CockpitPanel(approvalPage).expectApprovalDrawer({
-      action: 'Click frame_',
+      action: 'Click Iframe Target',
       code: ERROR_CODES.APPROVAL_REQUIRED
     });
   }

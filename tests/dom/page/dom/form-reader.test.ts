@@ -23,10 +23,51 @@ describe('form-reader', () => {
       name: 'email',
       type: 'email',
       required: true,
-      sensitive: false
+      sensitive: true,
+      valuePreview: '[MASKED]'
     });
     expect(email?.submit?.disabled).toBe(false);
     expect(email?.submit?.refId).toMatch(/^ref_/u);
+  });
+
+  it('uses field-specific roles and DOM visibility in snapshots', () => {
+    document.body.innerHTML = `
+      <form>
+        <input id="agree" name="agree" type="checkbox" checked />
+        <input id="plan" name="plan" type="radio" />
+        <input id="volume" name="volume" type="range" />
+        <select id="country" name="country"><option selected>中国</option></select>
+        <input id="avatar" name="avatar" type="file" style="display:none" />
+      </form>
+    `;
+
+    const refMap = createRefMap();
+    const result = readFormFields(document, refMap);
+    const byName = new Map(result.fields.map((field) => [field.name, field]));
+
+    expect(byName.get('agree')).toMatchObject({
+      type: 'checkbox',
+      valuePreview: 'checked'
+    });
+    expect(byName.get('plan')).toMatchObject({
+      type: 'radio',
+      valuePreview: 'unchecked'
+    });
+    expect(byName.get('volume')?.refId).toMatch(/^ref_/u);
+    expect(byName.get('country')?.valuePreview).toBe('non-empty');
+    expect(result.fields.map((field) => ({
+      name: field.name,
+      ref: field.refId
+    }))).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'avatar' })
+    ]));
+
+    const refSummary = createRefSummary(result, refMap);
+    expect(refSummary.get('agree')).toMatchObject({ role: 'checkbox', visible: true });
+    expect(refSummary.get('plan')).toMatchObject({ role: 'radio', visible: true });
+    expect(refSummary.get('volume')).toMatchObject({ role: 'slider', visible: true });
+    expect(refSummary.get('country')).toMatchObject({ role: 'combobox', visible: true });
+    expect(refSummary.get('avatar')).toMatchObject({ role: 'button', visible: false });
   });
 
   it('returns fields even when there is no form tag', () => {
@@ -106,4 +147,11 @@ function createRefMap(): RefMap {
     documentId: 'doc-1',
     origin: 'https://demo.example.com'
   });
+}
+
+function createRefSummary(result: ReturnType<typeof readFormFields>, refMap: RefMap) {
+  const byRef = new Map(refMap.summary().map((ref) => [ref.refId, ref]));
+  return new Map(
+    result.fields.map((field) => [field.name, byRef.get(field.refId)])
+  );
 }

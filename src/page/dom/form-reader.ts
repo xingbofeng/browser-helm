@@ -101,7 +101,7 @@ function readFieldSnapshot(
     role: fieldRole(element),
     name: label.label,
     tagName: element.tagName.toLowerCase(),
-    visible: true,
+    visible: isVisibleElement(element),
     disabled: validation.disabled
   });
 
@@ -124,7 +124,31 @@ function readFieldSnapshot(
 
 function fieldRole(element: HTMLElement): string {
   if (element instanceof HTMLSelectElement) {
-    return 'combobox';
+    return element.multiple || element.size > 1 ? 'listbox' : 'combobox';
+  }
+  if (element instanceof HTMLTextAreaElement) {
+    return 'textbox';
+  }
+  if (element instanceof HTMLInputElement) {
+    const type = (element.getAttribute('type') ?? 'text').toLowerCase();
+    if (type === 'checkbox') {
+      return 'checkbox';
+    }
+    if (type === 'radio') {
+      return 'radio';
+    }
+    if (type === 'range') {
+      return 'slider';
+    }
+    if (type === 'file') {
+      return 'button';
+    }
+    if (type === 'number') {
+      return 'spinbutton';
+    }
+    if (type === 'search') {
+      return 'searchbox';
+    }
   }
   return 'textbox';
 }

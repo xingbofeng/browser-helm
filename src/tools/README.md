@@ -15,8 +15,8 @@
 | `bh_page_observe` | Page Observe | `page/` | `ask`, `debug`, `form` | `safe` | 无 | 读取当前页面 bounded observation，并生成裁剪后的 structured context summary。 |
 | `bh_frame_list` | Frame List | `frame/` | `debug`, `form`, `act` | `safe` | 无 | 列出当前页面 frame id、URL 和顶层/子 frame 关系，用于 iframe 表单与动态 widget 排障。 |
 | `bh_iframe_read` | Read Iframe Target | `frame/` | `debug`, `act` | `low` | `refId`, `frameId?` | 只读读取 iframe 内 stable ref 摘要，不触发 approval，不修改页面。 |
-| `bh_iframe_click` | Click Iframe Target | `frame/` | `act` | `medium` | `refId`, `frameId?` | 对 iframe 内目标执行受控点击，执行前强制 readiness 和 approval policy。 |
-| `bh_iframe_type` | Type In Iframe Target | `frame/` | `act` | `medium` | `refId`, `frameId?`, `text`, `valuePreview` | 对 iframe 内文本目标执行受控输入，敏感值只进入 mask preview。 |
+| `bh_iframe_click` | Click Iframe Target | `frame/` | `act` | `high` | `refId`, `frameId?` | 对 iframe 内目标执行受控点击，执行前强制 runtime approval、readiness 和 action token。 |
+| `bh_iframe_type` | Type In Iframe Target | `frame/` | `act` | `high` | `refId`, `frameId?`, `text`, `valuePreview` | 对 iframe 内文本目标执行受控输入，执行前强制 runtime approval，敏感值只进入 mask preview。 |
 | `bh_a11y_snapshot` | A11y Snapshot | `a11y/` | `ask`, `debug`, `form` | `safe` | 无 | 捕获当前页面 a11y-like 快照，返回带 stable refs 的候选元素。 |
 | `bh_a11y_find_interactive` | Find Interactive Elements | `a11y/` | `debug`, `form` | `safe` | 无 | 读取当前页面 v0.31 交互元素列表，包含 ref、role、name 和只读状态。 |
 | `bh_a11y_refresh_refs` | Refresh Refs | `a11y/` | `ask`, `debug`, `form` | `safe` | 无 | 页面结构变化后刷新 ref map，重新建立 ref 到元素的映射。 |

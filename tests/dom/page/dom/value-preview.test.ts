@@ -5,19 +5,25 @@ import { describe, expect, it } from 'vitest';
 import { readValuePreview } from '../../../../src/page/dom/value-preview';
 
 describe('value-preview', () => {
-  it('limits ordinary text-like field previews to 32 characters', () => {
+  it('summarizes ordinary text-like field previews without exposing values', () => {
     document.body.innerHTML = `<input id="name" value="abcdefghijklmnopqrstuvwxyz1234567890" />`;
 
-    expect(readValuePreview(field('#name'))).toHaveLength(32);
+    expect(readValuePreview(field('#name'))).toBe('[MASKED]');
   });
 
-  it('limits textarea previews to 80 characters', () => {
+  it('summarizes textarea previews without exposing values', () => {
     document.body.innerHTML = `<textarea id="bio">${'x'.repeat(120)}</textarea>`;
 
-    expect(readValuePreview(field('#bio'))).toHaveLength(80);
+    expect(readValuePreview(field('#bio'))).toBe('non-empty');
   });
 
-  it('uses state preview for checkbox, radio, and select fields', () => {
+  it('returns empty for blank text-like field previews', () => {
+    document.body.innerHTML = `<input id="company" value="" />`;
+
+    expect(readValuePreview(field('#company'))).toBe('empty');
+  });
+
+  it('uses state preview for checkbox and radio fields', () => {
     document.body.innerHTML = `
       <input id="terms" type="checkbox" checked />
       <input id="plan" type="radio" />
@@ -26,13 +32,17 @@ describe('value-preview', () => {
 
     expect(readValuePreview(field('#terms'))).toBe('checked');
     expect(readValuePreview(field('#plan'))).toBe('unchecked');
-    expect(readValuePreview(field('#city'))).toBe('杭州');
+    expect(readValuePreview(field('#city'))).toBe('[MASKED]');
   });
 
   it('masks sensitive field previews before exposing the value', () => {
-    document.body.innerHTML = `<input id="password" type="password" value="super-secret-password" />`;
+    document.body.innerHTML = `
+      <input id="password" type="password" value="super-secret-password" />
+      <input id="email" type="email" value="me@example.com" />
+    `;
 
     expect(readValuePreview(field('#password'))).toBe('[MASKED]');
+    expect(readValuePreview(field('#email'))).toBe('[MASKED]');
   });
 });
 
