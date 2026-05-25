@@ -12,9 +12,10 @@ import { TOOL_NAMES } from '../../../src/shared/constants/tool-names';
 
 describe('RunManager', () => {
   it('starts a run by observing the target tab through registered page tools', async () => {
+    const calls: string[] = [];
     const rpc: ContentRpcClient = {
       async request(message) {
-        expect(message.type).toBe(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
+        calls.push(message.type);
         return {
           ok: true,
           observation: {
@@ -87,12 +88,13 @@ describe('RunManager', () => {
         code: ERROR_CODES.OK
       }
     });
-    expect(snapshot.trace?.map((event) => event.type)).toEqual([
+    expect(snapshot.trace?.slice(0, 3).map((event) => event.type)).toEqual([
       TRACE_EVENT_NAMES.RUN_STARTED,
       TRACE_EVENT_NAMES.TOOL_STARTED,
       TRACE_EVENT_NAMES.TOOL_RESULT
     ]);
-    expect(snapshot.trace?.every((event) => event.runId === started.runId)).toBe(true);
+    expect(calls).toContain(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
+    expect(snapshot.trace?.slice(0, 3).every((event) => event.runId === started.runId)).toBe(true);
     expect(payloadRecord(snapshot.trace?.[0]?.payload)).toMatchObject({
       task: '观察页面',
       mode: 'form'
@@ -251,6 +253,36 @@ describe('RunManager', () => {
         code: ERROR_CODES.OK
       }
     });
+  });
+
+  it('enriches real runtime snapshots with AgentLoop form diagnostics', async () => {
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        expect(message.type).toBe(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
+        return observationResponse();
+      })
+    });
+
+    const started = await manager.startRun({ task: '诊断表单', mode: 'form' });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'observed');
+
+    expect(snapshot).toMatchObject({
+      classification: {
+        mode: 'form'
+      },
+      plan: {
+        mode: 'form'
+      },
+      debugReport: {
+        title: 'Form Doctor 诊断报告'
+      },
+      canInterrupt: true,
+      canReviseGoal: true
+    });
+    expect(snapshot.findings?.map((finding) => finding.title)).toContain(
+      '必填字段为空'
+    );
   });
 
   it('creates approval request for high-risk iframe tools and deny returns USER_DENIED_APPROVAL', async () => {
@@ -526,6 +558,36 @@ function observationResponse() {
           disabled: false
         }
       ],
+      formFields: {
+        status: 'ready',
+        fields: [
+          {
+            refId: 'frame_7:ref_300',
+            label: '邮箱',
+            name: 'email',
+            type: 'email',
+            required: true,
+            disabled: false,
+            sensitive: false,
+            valuePreview: 'empty',
+            validation: {
+              valid: false,
+              message: '请填写邮箱',
+              ariaInvalid: true
+            },
+            warnings: []
+          }
+        ],
+        submit: {
+          disabled: true,
+          reason: {
+            kind: 'inferred',
+            message: '必填字段为空',
+            fieldRefId: 'frame_7:ref_300'
+          }
+        },
+        warnings: []
+      },
       warnings: []
     }
   };

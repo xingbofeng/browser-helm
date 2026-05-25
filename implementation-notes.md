@@ -281,3 +281,26 @@
 **待确认**：
 - [ ] 后续为 iframe action token 设计每次 action 的 nonce / expiry / request binding，替代静态 `IFRAME_ACTION_TOKEN`。
 - [ ] 若需要让“批准后继续执行”避免重复审批，需要补一条已批准 action 的显式消费语义和测试。
+
+## [v1.0 Page Inspector + Form Doctor 实现推进] - 2026-05-25
+
+**目标**：按 OpenSpec `implement-v1-0-page-inspector-form-doctor` 实现 v1.0 的只读诊断闭环骨架：TaskClassifier、Mode System、ToolSelector、Runtime Capability、Form Doctor findings、Page Health、Goal/Plan、RecoveryPolicy、DebugReport、approval runtime formalization 和 Cockpit 诊断概览。
+
+**设计决策**：保持 v1.0 默认只读诊断。AgentLoop 先分类任务、解析 mode、按 capability/risk 裁剪工具，再把 classification、capabilities、tool selection、plan update、recovery action、findings 和 DebugReport 写入 trace。Form Doctor findings 从只读表单字段和 submit summary 汇总 evidence/confidence；DebugReport 面向用户，完整 ToolResult 仍留在 trace。Act mode prompt 明确只做动作准备、readiness、risk、policy 和 approval boundary，不执行 fill/verify/submit。
+
+**偏差说明**：真实 extension side panel 当前仍主要由 RunManager snapshot 驱动，还没有把 AgentLoop 诊断产物完整桥接到 runtime snapshot lifecycle，因此 v1.0 的真实 E2E 展示仍保留为后续任务。已先扩展 RunSnapshot/FakeRuntimePort 和 Cockpit 诊断概览组件，避免 UI 测试伪造超出现有 runtime 的行为。
+
+**权衡分析**：
+- 方案一：直接在 E2E 中断言 v1.0 诊断 UI。优点是看起来闭环更快；缺点是当前 runtime 不会真实产生这些 AgentLoop 产物，会导致测试与产品路径脱节。
+- 方案二：先完成 AgentLoop/契约/UI 组件层，真实 E2E 等 AgentLoop -> Runtime snapshot 桥接后再收口。优点是语义诚实、边界清楚；缺点是 v1.0 仍有 E2E 待办。
+- 选择方案二，因为 v1.0 是安全和诊断能力，不应该用假数据掩盖真实 runtime 集成缺口。
+
+**验证记录**：
+- `npx vitest run tests/node/agent/kernel/agent-loop.test.ts tests/node/agent/context/context-builder.test.ts tests/node/agent/prompts/prompt-builder.test.ts tests/node/runtime/fake-runtime-port.test.ts tests/node/ui/components/diagnosis-overview.test.tsx tests/node/ui/styles/cockpit-css.test.ts tests/node/agent/goal/goal-plan.test.ts tests/node/agent/report/findings-report.test.ts tests/node/agent/recovery/recovery-policy.test.ts`：9 files / 41 tests passed。
+- `npm run typecheck`：passed。
+- `npm run lint`：passed。
+- `npx openspec validate implement-v1-0-page-inspector-form-doctor --strict`：passed。
+
+**待确认**：
+- [ ] 是否将 AgentLoop 作为 RunManager 的主执行路径，或保留 RunManager 为页面观察/runtime API，另建 AgentRuntimeBridge。
+- [ ] v1.0 E2E 是否接受先覆盖 RuntimePort/FakeRuntimePort + Cockpit 组件，真实 extension host 等桥接完成后再补。

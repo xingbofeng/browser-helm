@@ -29,6 +29,7 @@
 | `bh_form_find_missing_required` | Find Missing Required Fields | `form/` | `form` | `safe` | 无 | 找出 required 且当前值为空的字段。 |
 | `bh_form_find_validation_errors` | Find Validation Errors | `form/` | `form` | `safe` | 无 | 找出 validation failed 或 aria-invalid 的字段。 |
 | `bh_form_find_disabled_submit_reason` | Find Disabled Submit Reason | `form/` | `form` | `safe` | 无 | 读取 disabled submit 的已确认、推断或无法判断原因。 |
+| `bh_debug_collect_page_health` | Collect Page Health | `debug/` | `debug` | `safe` | 无 | 收集 v1.0 只读页面健康浅层摘要，不使用 CDP。 |
 
 ## 目录约定
 
@@ -41,6 +42,7 @@
 | `a11y/` | a11y-like snapshot、stable ref map 和 ref 解析工具。 |
 | `element/` | 单元素检查和状态读取工具；v0.31 开始补齐。 |
 | `form/` | 表单读取和诊断工具；v0.32 开始补齐。 |
+| `debug/` | 页面健康浅层诊断工具；v1.0 开始补齐，不承接 CDP deep tools。 |
 | `core/` | 工具注册、路由、结果工厂、错误和上下文类型。 |
 
 ## 新增工具要求

@@ -40,7 +40,14 @@ export const TRACE_EVENT_NAMES = {
   CONTEXT_COMPACTED: 'context_compacted',
   CONTEXT_SUMMARY: 'context_summary',
   APPROVAL_REQUIRED: 'approval_required',
-  STATE_CHANGED: 'state_changed'
+  STATE_CHANGED: 'state_changed',
+  TASK_CLASSIFIED: 'task_classified',
+  TOOLS_SELECTED: 'tools_selected',
+  CAPABILITIES_RESOLVED: 'capabilities_resolved',
+  PLAN_UPDATED: 'plan_updated',
+  RECOVERY_ACTION: 'recovery_action',
+  FINDINGS_REPORTED: 'findings_reported',
+  DEBUG_REPORT_CREATED: 'debug_report_created'
 } as const;
 
 export const APPROVAL_EVENT_NAMES = {

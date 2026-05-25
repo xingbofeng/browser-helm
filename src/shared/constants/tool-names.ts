@@ -7,6 +7,7 @@ export const TOOL_NAMES = {
   AGENT_ASK_USER: 'bh_agent_ask_user',
   AGENT_FAIL: 'bh_agent_fail',
   AGENT_FINISH: 'bh_agent_finish',
+  DEBUG_COLLECT_PAGE_HEALTH: 'bh_debug_collect_page_health',
   ELEMENT_INSPECT: 'bh_element_inspect',
   ELEMENT_READ_STATE: 'bh_element_read_state',
   FORM_FIND_DISABLED_SUBMIT_REASON: 'bh_form_find_disabled_submit_reason',

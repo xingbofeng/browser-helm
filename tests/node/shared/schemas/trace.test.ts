@@ -88,4 +88,54 @@ describe('traceEventSchema', () => {
       })
     ).toThrowError();
   });
+
+  it('accepts v1.0 diagnosis trace events', () => {
+    const base = {
+      id: 'evt_v1',
+      runId: 'run_1',
+      timestamp: 1710000000000,
+      schemaVersion: '1.0.0'
+    };
+    const classified = traceEventSchema.parse({
+      ...base,
+      type: 'task_classified',
+      payload: {
+        classification: {
+          mode: 'form',
+          taskType: 'form',
+          reason: '用户询问表单为什么不能提交',
+          confidence: 'high',
+          matchedSignals: ['表单']
+        }
+      }
+    });
+    const report = traceEventSchema.parse({
+      ...base,
+      id: 'evt_report',
+      type: 'debug_report_created',
+      payload: {
+        report: {
+          title: '表单诊断报告',
+          findings: [
+            {
+              title: '缺少邮箱',
+              explanation: 'Email 是必填字段',
+              evidence: [
+                {
+                  source: 'form',
+                  summary: 'Email required empty',
+                  refId: 'ref_1'
+                }
+              ],
+              confidence: 'high'
+            }
+          ],
+          recommendations: ['填写 Email 后重试']
+        }
+      }
+    });
+
+    expect(classified.type).toBe('task_classified');
+    expect(report.type).toBe('debug_report_created');
+  });
 });

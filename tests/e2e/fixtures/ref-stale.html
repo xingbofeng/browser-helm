@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Ref 失效示例</title>
+  </head>
+  <body>
+    <h1>动态操作区</h1>
+    <button id="stale-target">会被替换的按钮</button>
+    <script>
+      window.setTimeout(() => {
+        const target = document.querySelector('#stale-target');
+        if (target) {
+          target.outerHTML = '<button id="fresh-target">新的按钮</button>';
+        }
+      }, 100);
+    </script>
+  </body>
+</html>

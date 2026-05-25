@@ -8,6 +8,7 @@ import { ApprovalDrawer } from '../approval/approval-drawer';
 import { ChatPanel } from '../components/chat-panel';
 import { CockpitFooter } from '../components/cockpit-footer';
 import { CockpitShell } from '../components/cockpit-shell';
+import { DiagnosisOverview } from '../components/diagnosis-overview';
 import { FormFieldsTab } from '../components/form-fields-tab';
 import { InteractiveElementsTab } from '../components/interactive-elements-tab';
 import { PageObservationTab } from '../components/page-observation-tab';
@@ -270,10 +271,13 @@ export function CockpitApp({ runtime, targetTabId, initialRunId }: CockpitAppPro
         </>
       }
       inspector={
-        <ToolInspector
-          toolResult={snapshot?.toolResult}
-          argsPreview={snapshot?.pendingApproval?.argsPreview}
-        />
+        <>
+          <DiagnosisOverview snapshot={snapshot} />
+          <ToolInspector
+            toolResult={snapshot?.toolResult}
+            argsPreview={snapshot?.pendingApproval?.argsPreview}
+          />
+        </>
       }
       approval={
         approvalState.pending || approvalResult ? (

@@ -15,6 +15,44 @@ import { TOOL_NAMES } from '../../../../src/shared/constants/tool-names';
 import { z } from 'zod';
 
 describe('agent-loop', () => {
+  it.each([
+    ['ask', '观察页面'],
+    ['debug', '检查 console 错误'],
+    ['form', '诊断表单为什么不能提交'],
+    ['act', '准备点击提交按钮']
+  ] as const)('finishes %s mode with v1 classification and plan traces', async (mode, task) => {
+    const registry = new ToolRegistry();
+    const loop = new AgentLoop({
+      modelClient: new MockModelClient([
+        JSON.stringify({
+          type: 'finish',
+          message: `${mode} done`
+        })
+      ]),
+      decisionParser: new DecisionParser(),
+      toolRouter: new ToolRouter(registry),
+      contextBuilder: new ContextBuilder(),
+      traceRecorder: new InMemoryTraceRecorder()
+    });
+
+    const result = await loop.run({
+      task,
+      mode,
+      maxSteps: 1
+    });
+
+    expect(result.status).toBe('finished');
+    expect(result.trace.some((event) => event.type === TRACE_EVENT_NAMES.TASK_CLASSIFIED))
+      .toBe(true);
+    expect(result.trace.some((event) => event.type === TRACE_EVENT_NAMES.PLAN_UPDATED))
+      .toBe(true);
+    if (mode === 'debug' || mode === 'form') {
+      expect(
+        result.trace.some((event) => event.type === TRACE_EVENT_NAMES.DEBUG_REPORT_CREATED)
+      ).toBe(true);
+    }
+  });
+
   it('fails with MAX_STEPS_EXCEEDED when no finish is produced', async () => {
     const registry = new ToolRegistry();
     const loop = new AgentLoop({
@@ -234,7 +272,7 @@ describe('agent-loop', () => {
     expect(runStarted.payload.metadata.runMode).toBe('form');
   });
 
-  it('passes registered tool names into context builder', async () => {
+  it('passes selected tool contracts and mode classification into context builder', async () => {
     const registry = new ToolRegistry();
     registry.register({
       name: 'bh_mock_page_observe',
@@ -254,12 +292,32 @@ describe('agent-loop', () => {
         summary: 'Observed page'
       })
     });
+    registry.register({
+      name: 'bh_mock_high_risk_ask',
+      title: 'High Risk Ask',
+      description: 'High risk ask tool',
+      modes: ['ask'],
+      risk: 'high',
+      argsSchema: z.object({}),
+      resultSchema: z.object({
+        ok: z.boolean(),
+        code: z.string(),
+        summary: z.string()
+      }),
+      execute: async () => ({
+        ok: true,
+        code: 'OK',
+        summary: 'should not be selected'
+      })
+    });
 
     const contextBuilder = new ContextBuilder();
     let capturedToolNames: string[] | undefined;
+    let capturedModeReason: string | undefined;
     const originalBuild = contextBuilder.build.bind(contextBuilder);
     contextBuilder.build = (input) => {
-      capturedToolNames = input.toolNames;
+      capturedToolNames = input.tools?.map((tool) => tool.name);
+      capturedModeReason = input.modeReason;
       return originalBuild(input);
     };
 
@@ -282,6 +340,66 @@ describe('agent-loop', () => {
     });
 
     expect(capturedToolNames).toEqual(['bh_mock_page_observe']);
+    expect(capturedModeReason).toContain('先诊断');
+  });
+
+  it('blocks hidden tools before execution when runtime capability is unavailable', async () => {
+    const registry = new ToolRegistry();
+    let executed = false;
+    registry.register({
+      name: 'bh_debug_unavailable',
+      title: 'Unavailable Debug',
+      description: 'Debug tool requiring shallow debug capability',
+      modes: ['debug'],
+      risk: 'safe',
+      argsSchema: z.object({}),
+      resultSchema: z.object({
+        ok: z.boolean(),
+        code: z.string(),
+        summary: z.string()
+      }),
+      execute: async () => {
+        executed = true;
+        return {
+          ok: true,
+          code: 'OK',
+          summary: 'should not execute'
+        };
+      }
+    });
+
+    const loop = new AgentLoop({
+      modelClient: new MockModelClient([
+        JSON.stringify({
+          type: 'tool_call',
+          tool: 'bh_debug_unavailable',
+          args: {}
+        })
+      ]),
+      decisionParser: new DecisionParser(),
+      toolRouter: new ToolRouter(registry),
+      contextBuilder: new ContextBuilder(),
+      traceRecorder: new InMemoryTraceRecorder(),
+      runtimeCapabilities: {
+        hasActiveTab: true,
+        hasDebuggerPermission: false,
+        hasClipboardPermission: false,
+        hasDownloadsPermission: false,
+        hostPermissions: [],
+        shallowDebugAvailable: false,
+        cdp: 'reserved'
+      }
+    });
+
+    const result = await loop.run({
+      task: '检查页面错误',
+      mode: 'debug',
+      maxSteps: 1
+    });
+
+    expect(executed).toBe(false);
+    expect(result.status).toBe('failed');
+    expect(result.errorCode).toBe(ERROR_CODES.TOOL_MODE_NOT_ALLOWED);
   });
 
   it('fails gracefully when model client throws', async () => {
@@ -517,6 +635,268 @@ describe('agent-loop', () => {
       throw new Error('expected run_failed event');
     }
     expect(runFailed.payload.retryable).toBe(true);
+  });
+
+  it('continues after a recoverable tool failure and records recovery action', async () => {
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'bh_mock_stale_ref',
+      title: 'Stale Ref',
+      description: 'Returns a recoverable stale ref failure',
+      modes: ['ask'],
+      risk: 'safe',
+      argsSchema: z.object({}),
+      resultSchema: z.object({
+        ok: z.boolean(),
+        code: z.string(),
+        summary: z.string(),
+        error: z.object({
+          message: z.string(),
+          detail: z.object({
+            retryable: z.boolean()
+          })
+        }),
+        nextHints: z.array(z.string())
+      }),
+      execute: async () => ({
+        ok: false,
+        code: 'REF_STALE',
+        summary: 'ref is stale',
+        error: {
+          message: 'ref is stale',
+          detail: {
+            retryable: true
+          }
+        },
+        nextHints: ['重新观察页面后继续']
+      })
+    });
+
+    const loop = new AgentLoop({
+      modelClient: new MockModelClient([
+        JSON.stringify({
+          type: 'tool_call',
+          tool: 'bh_mock_stale_ref',
+          args: {}
+        }),
+        JSON.stringify({
+          type: 'finish',
+          message: 'recovered'
+        })
+      ]),
+      decisionParser: new DecisionParser(),
+      toolRouter: new ToolRouter(registry),
+      contextBuilder: new ContextBuilder(),
+      traceRecorder: new InMemoryTraceRecorder()
+    });
+
+    const result = await loop.run({
+      task: 'Recover stale ref',
+      maxSteps: 3
+    });
+    const recoveryAction = result.trace.find(
+      (event) => event.type === TRACE_EVENT_NAMES.RECOVERY_ACTION
+    );
+    const recoveringTurn = result.trace.find(
+      (event) =>
+        event.type === TRACE_EVENT_NAMES.TURN_FINISHED &&
+        event.payload.status === 'recovering'
+    );
+    const recoveryPlan = result.trace
+      .filter((event) => event.type === TRACE_EVENT_NAMES.PLAN_UPDATED)
+      .find(
+        (event) =>
+          event.type === TRACE_EVENT_NAMES.PLAN_UPDATED &&
+          event.payload.plan.steps.some(
+            (step) =>
+              step.id === 'observe' &&
+              step.status === 'current' &&
+              step.evidence?.includes('REF_STALE')
+          )
+      );
+
+    expect(result.status).toBe('finished');
+    expect(result.message).toBe('recovered');
+    expect(result.trace.some((event) => event.type === 'run_failed')).toBe(false);
+    expect(recoveryAction).toBeDefined();
+    if (!recoveryAction || recoveryAction.type !== TRACE_EVENT_NAMES.RECOVERY_ACTION) {
+      throw new Error('expected recovery_action event');
+    }
+    expect(recoveryAction.payload.recovery.action.type).toBe('re_observe');
+    expect(recoveringTurn).toBeDefined();
+    expect(recoveryPlan).toBeDefined();
+  });
+
+  it('fails with a limitation when recovery budget is exhausted', async () => {
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'bh_mock_repeated_stale_ref',
+      title: 'Repeated Stale Ref',
+      description: 'Always returns a recoverable stale ref failure',
+      modes: ['ask'],
+      risk: 'safe',
+      argsSchema: z.object({}),
+      resultSchema: z.object({
+        ok: z.boolean(),
+        code: z.string(),
+        summary: z.string(),
+        error: z.object({
+          message: z.string(),
+          detail: z.object({
+            retryable: z.boolean()
+          })
+        }),
+        nextHints: z.array(z.string())
+      }),
+      execute: async () => ({
+        ok: false,
+        code: 'REF_STALE',
+        summary: 'ref is still stale',
+        error: {
+          message: 'ref is still stale',
+          detail: {
+            retryable: true
+          }
+        },
+        nextHints: ['重新观察页面后继续']
+      })
+    });
+
+    const loop = new AgentLoop({
+      modelClient: new MockModelClient([
+        JSON.stringify({
+          type: 'tool_call',
+          tool: 'bh_mock_repeated_stale_ref',
+          args: {}
+        }),
+        JSON.stringify({
+          type: 'tool_call',
+          tool: 'bh_mock_repeated_stale_ref',
+          args: {}
+        })
+      ]),
+      decisionParser: new DecisionParser(),
+      toolRouter: new ToolRouter(registry),
+      contextBuilder: new ContextBuilder(),
+      traceRecorder: new InMemoryTraceRecorder()
+    });
+
+    const result = await loop.run({
+      task: 'Recover stale ref twice',
+      maxSteps: 3
+    });
+    const recoveryActions = result.trace.filter(
+      (event) => event.type === TRACE_EVENT_NAMES.RECOVERY_ACTION
+    );
+    const lastRecovery = recoveryActions.at(-1);
+
+    expect(result.status).toBe('failed');
+    expect(result.errorCode).toBe('REF_STALE');
+    expect(recoveryActions).toHaveLength(2);
+    expect(lastRecovery).toBeDefined();
+    if (!lastRecovery || lastRecovery.type !== TRACE_EVENT_NAMES.RECOVERY_ACTION) {
+      throw new Error('expected recovery_action event');
+    }
+    expect(lastRecovery.payload.recovery.action.type).toBe('fail');
+    expect(lastRecovery.payload.recovery.limitation).toContain('exhausted');
+  });
+
+  it('emits Form Doctor findings and DebugReport before finishing form runs', async () => {
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'bh_form_read_fields',
+      title: 'Read Form Fields',
+      description: 'Reads form fields',
+      modes: ['form'],
+      risk: 'safe',
+      argsSchema: z.object({}),
+      resultSchema: z.object({
+        ok: z.boolean(),
+        code: z.string(),
+        summary: z.string(),
+        data: z.unknown()
+      }),
+      execute: async () => ({
+        ok: true,
+        code: 'OK',
+        summary: 'Read 1 fields',
+        data: {
+          status: 'ready',
+          fields: [
+            {
+              refId: 'ref_email',
+              label: 'Email',
+              name: 'email',
+              type: 'email',
+              required: true,
+              disabled: false,
+              sensitive: false,
+              valuePreview: 'empty',
+              validation: {
+                valid: false,
+                message: '请填写邮箱',
+                ariaInvalid: true
+              },
+              warnings: []
+            }
+          ],
+          count: 1,
+          submit: {
+            disabled: true,
+            reason: {
+              kind: 'inferred',
+              message: '必填字段为空',
+              fieldRefId: 'ref_email'
+            }
+          },
+          warnings: []
+        }
+      })
+    });
+
+    const loop = new AgentLoop({
+      modelClient: new MockModelClient([
+        JSON.stringify({
+          type: 'tool_call',
+          tool: 'bh_form_read_fields',
+          args: {}
+        }),
+        JSON.stringify({
+          type: 'finish',
+          message: 'form report ready'
+        })
+      ]),
+      decisionParser: new DecisionParser(),
+      toolRouter: new ToolRouter(registry),
+      contextBuilder: new ContextBuilder(),
+      traceRecorder: new InMemoryTraceRecorder()
+    });
+
+    const result = await loop.run({
+      task: '诊断这个表单为什么不能提交',
+      mode: 'form',
+      maxSteps: 3
+    });
+    const findings = result.trace.find(
+      (event) => event.type === TRACE_EVENT_NAMES.FINDINGS_REPORTED
+    );
+    const report = result.trace.find(
+      (event) => event.type === TRACE_EVENT_NAMES.DEBUG_REPORT_CREATED
+    );
+
+    expect(result.status).toBe('finished');
+    expect(findings).toBeDefined();
+    expect(report).toBeDefined();
+    if (!findings || findings.type !== TRACE_EVENT_NAMES.FINDINGS_REPORTED) {
+      throw new Error('expected findings_reported event');
+    }
+    if (!report || report.type !== TRACE_EVENT_NAMES.DEBUG_REPORT_CREATED) {
+      throw new Error('expected debug_report_created event');
+    }
+    expect(findings.payload.findings.map((finding) => finding.title)).toContain(
+      '必填字段为空'
+    );
+    expect(report.payload.report.title).toBe('Form Doctor 诊断报告');
   });
 
   it('treats bh_agent_finish tool_call as a finished run', async () => {

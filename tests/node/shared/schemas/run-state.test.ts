@@ -5,6 +5,10 @@ import { loopSessionStatusSchema } from '../../../../src/shared/schemas/run-stat
 describe('loopSessionStatusSchema', () => {
   it('accepts v0.1 statuses', () => {
     expect(loopSessionStatusSchema.parse('running')).toBe('running');
+    expect(loopSessionStatusSchema.parse('recovering')).toBe('recovering');
+    expect(loopSessionStatusSchema.parse('waiting_for_user')).toBe(
+      'waiting_for_user'
+    );
     expect(loopSessionStatusSchema.parse('waiting_for_approval')).toBe(
       'waiting_for_approval'
     );

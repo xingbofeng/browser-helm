@@ -42,6 +42,26 @@ export class CockpitPanel {
     }
   }
 
+  async expectDiagnosisOverview(expected: {
+    modeText: string;
+    reportTitle: string;
+    finding?: string;
+    limitation?: string;
+  }): Promise<void> {
+    const overview = this.page.getByLabel('Diagnosis overview');
+    await expect(overview).toBeVisible();
+    await expect(overview.getByText(expected.modeText)).toBeVisible();
+    await expect(overview.getByText(expected.reportTitle)).toBeVisible();
+    if (expected.finding) {
+      await expect(overview.getByText(expected.finding)).toBeVisible();
+    }
+    if (expected.limitation) {
+      await expect(overview.getByText(expected.limitation)).toBeVisible();
+    }
+    await expect(overview.getByText('可中断')).toBeVisible();
+    await expect(overview.getByText('可修改目标')).toBeVisible();
+  }
+
   async expectSettingsMasking(expected: { baseUrl: string; model: string }): Promise<void> {
     await this.openSettings();
     await expect(this.page.getByRole('textbox', { name: 'Base URL' })).toHaveValue(

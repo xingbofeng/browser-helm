@@ -28,3 +28,21 @@ test('masks provider API key in settings', async () => {
     await flow.close();
   }
 });
+
+test('renders v1 Form Doctor diagnosis from real runtime snapshot', async () => {
+  const flow = await CockpitUiFlow.start();
+  try {
+    await flow.expectV1FormDoctorDiagnosis();
+  } finally {
+    await flow.close();
+  }
+});
+
+test('renders v1 Page Inspector diagnosis from real runtime snapshot', async () => {
+  const flow = await CockpitUiFlow.start();
+  try {
+    await flow.expectV1PageInspectorDiagnosis();
+  } finally {
+    await flow.close();
+  }
+});

@@ -1057,6 +1057,38 @@ button:disabled {
   overflow: auto;
 }
 
+.bh-diagnosisOverview {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.bh-diagnosisOverview ol,
+.bh-diagnosisOverview ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bh-diagnosisOverview li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid #ead6c0;
+  border-radius: 6px;
+  padding: 7px 8px;
+  background: #fffdf9;
+  font-size: 12px;
+}
+
+.bh-diagnosisOverview li strong,
+.bh-diagnosisOverview li span {
+  overflow-wrap: anywhere;
+}
+
 .bh-cockpitInspector pre,
 .bh-cockpitTimeline pre {
   max-width: 100%;

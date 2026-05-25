@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head>
+    <title>页面健康错误示例</title>
+  </head>
+  <body>
+    <h1>页面健康错误示例</h1>
+    <p>该页面用于 Page Inspector 读取 console 与 network 浅层信号。</p>
+    <script>
+      window.__browserHelmConsoleErrors = [
+        { message: 'Cannot read property profile of undefined', source: 'console' },
+        { message: 'Payment widget failed to initialize', source: 'runtime' }
+      ];
+      window.__browserHelmNetworkFailures = [
+        { url: '/api/profile', status: 500, method: 'GET' },
+        { url: '/api/options', errorText: 'Failed to fetch', method: 'POST' }
+      ];
+      console.error('Payment widget failed to initialize');
+    </script>
+  </body>
+</html>

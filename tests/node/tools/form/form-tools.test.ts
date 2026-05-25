@@ -105,6 +105,30 @@ describe('v0.32 form read-only tools', () => {
     expect(errors.data).toMatchObject({ count: 1, fields: [emailField] });
   });
 
+  it('treats v1.0 empty value previews as missing required fields', async () => {
+    const fieldWithPresencePreview = {
+      ...emailField,
+      valuePreview: 'empty'
+    };
+    const missing = await bhFormFindMissingRequired(
+      formRpc({
+        fields: [fieldWithPresencePreview]
+      })
+    ).execute(
+      {},
+      {
+        runId: 'run_1',
+        stepId: 'step_1',
+        runMode: 'form'
+      }
+    );
+
+    expect(missing.data).toMatchObject({
+      count: 1,
+      fields: [fieldWithPresencePreview]
+    });
+  });
+
   it('finds disabled submit reason with inferred kind in form mode', async () => {
     const result = await bhFormFindDisabledSubmitReason(formRpc()).execute(
       {},
@@ -120,7 +144,13 @@ describe('v0.32 form read-only tools', () => {
   });
 });
 
-function formRpc(): ContentRpcClient {
+function formRpc(
+  formFields: {
+    fields?: unknown[];
+    submit?: unknown;
+    status?: string;
+  } = {}
+): ContentRpcClient {
   return {
     async request(message) {
       expect(message.type).toBe(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
@@ -136,10 +166,10 @@ function formRpc(): ContentRpcClient {
           pageStateSummary: '页面包含表单',
           refSummary: [],
           formFields: {
-            status: 'ready',
-            fields: [emailField, passwordField],
-            count: 2,
-            submit: emailField.submit,
+            status: formFields.status ?? 'ready',
+            fields: formFields.fields ?? [emailField, passwordField],
+            count: formFields.fields?.length ?? 2,
+            submit: formFields.submit ?? emailField.submit,
             warnings: []
           },
           warnings: []

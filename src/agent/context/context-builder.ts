@@ -9,6 +9,8 @@ import type { ModelMessage } from '../../shared/schemas/model-message.schema';
 import { buildSystemPrompt } from '../prompts/system-prompt';
 import type { ToolPromptContract } from '../../tools/core/tool-router';
 import type { RunMode } from '../../shared/schemas/tool.schema';
+import type { TaskClassification } from '../../shared/schemas/mode-system.schema';
+import type { PlanProgressSummary } from '../../shared/schemas/goal-plan.schema';
 
 export type BuildContextInput = {
   task: string;
@@ -18,6 +20,10 @@ export type BuildContextInput = {
   toolNames?: string[];
   tools?: ToolPromptContract[];
   runMode?: RunMode;
+  modeReason?: string;
+  classification?: TaskClassification;
+  planProgress?: PlanProgressSummary;
+  reportSummary?: string;
 };
 
 export type BuiltContext = {
@@ -41,6 +47,14 @@ export class ContextBuilder {
       input.successCriteria && input.successCriteria.length > 0
         ? `SuccessCriteria: ${input.successCriteria.join(' | ')}`
         : undefined,
+      input.modeReason ? `ModeReason: ${input.modeReason}` : undefined,
+      input.classification
+        ? `Classification: ${input.classification.mode} (${input.classification.confidence}) - ${input.classification.reason}`
+        : undefined,
+      input.planProgress
+        ? `PlanProgress: done=${input.planProgress.done.join(', ') || 'none'}; current=${input.planProgress.current ?? 'none'}; pending=${input.planProgress.pending.join(', ') || 'none'}`
+        : undefined,
+      input.reportSummary ? `ReportSummary: ${input.reportSummary}` : undefined,
       compacted.contextText ? `RecentSteps:\n${compacted.contextText}` : undefined
     ].filter((line): line is string => typeof line === 'string');
 

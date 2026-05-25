@@ -4,6 +4,14 @@ import type { StructuredPageData } from '../shared/schemas/structured-page-data.
 import { runModeSchema, type RunMode } from '../shared/schemas/tool.schema';
 import { RUNTIME_MESSAGES } from '../shared/constants/event-names';
 import type { ApprovalRequest } from '../shared/schemas/approval.schema';
+import type { AgentFinding, DebugReport } from '../shared/schemas/diagnosis.schema';
+import type {
+  GoalState,
+  PlanState
+} from '../shared/schemas/goal-plan.schema';
+import type { TaskClassification } from '../shared/schemas/mode-system.schema';
+import type { RecoveryState } from '../shared/schemas/recovery.schema';
+import type { RuntimeCapabilities } from '../shared/schemas/runtime-capabilities.schema';
 import type { ToolResult } from '../shared/schemas/tool-result.schema';
 import type { ProviderSettings } from '../storage/interfaces/settings-store';
 
@@ -119,6 +127,17 @@ export type RunSnapshot = {
   observation?: RuntimeObservationSnapshot;
   refs?: RuntimeRefSnapshot[];
   structuredPageData?: StructuredPageData;
+  classification?: TaskClassification;
+  modeReason?: string;
+  capabilities?: RuntimeCapabilities;
+  capabilityLimitations?: string[];
+  goal?: GoalState;
+  plan?: PlanState;
+  recovery?: RecoveryState;
+  findings?: AgentFinding[];
+  debugReport?: DebugReport;
+  canInterrupt?: boolean;
+  canReviseGoal?: boolean;
   toolResult?: RuntimeToolResultSnapshot;
   pendingApproval?: ApprovalRequest | undefined;
   trace?: RuntimeEvent[] | undefined;

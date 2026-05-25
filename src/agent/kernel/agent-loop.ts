@@ -13,8 +13,26 @@ import type { ApprovalRequest } from '../../shared/schemas/approval.schema';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { TRACE_EVENT_NAMES } from '../../shared/constants/event-names';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
+import { resolveRunMode } from '../modes/mode-system';
+import { selectToolsForRun } from '../modes/tool-selector';
 import { PolicyEngine } from '../policy/policy-engine';
+import { RecoveryBudget } from '../recovery/recovery-policy';
+import {
+  buildPlanState,
+  updatePlanForToolResult,
+  buildPlanProgressSummary
+} from '../planning/plan-builder';
+import { initializeGoalState } from '../goal/goal-state';
+import {
+  buildDebugReport,
+  buildFormDoctorFindings
+} from '../report/findings-report';
+import { resolveRuntimeCapabilities } from '../../runtime/capabilities/runtime-capabilities';
 import { approvalRequiredResult } from '../../tools/core/tool-result-factory';
+import { failedToolResult } from '../../tools/core/tool-result-factory';
+import { formReadFieldsPayloadSchema } from '../../shared/schemas/structured-page-data.schema';
+import type { RunMode } from '../../shared/schemas/tool.schema';
+import type { RuntimeCapabilities } from '../../shared/schemas/runtime-capabilities.schema';
 import {
   redactDecisionForTrace,
   redactModelOutputText,
@@ -31,6 +49,7 @@ type AgentLoopDeps = {
     model: string;
     providerBaseUrl?: string;
   };
+  runtimeCapabilities?: RuntimeCapabilities;
 };
 
 const TRACE_SCHEMA_VERSION = '1.0.0';
@@ -44,10 +63,39 @@ export class AgentLoop {
   async run(input: AgentRunInput): Promise<AgentRunResult> {
     const runId = createRunId();
     const maxSteps = input.maxSteps ?? 3;
-    const runMode = input.mode ?? 'ask';
+    const resolvedMode = resolveRunMode({
+      task: input.task,
+      ...(input.mode ? { explicitMode: input.mode } : {})
+    });
+    const runMode = resolvedMode.mode;
+    const runtimeCapabilities =
+      this.deps.runtimeCapabilities ??
+      resolveRuntimeCapabilities({
+        hasActiveTab: true,
+        shallowDebugAvailable: true
+      });
+    const toolSelection = selectToolsForRun({
+      mode: runMode,
+      task: input.task,
+      tools: this.deps.toolRouter.listToolContracts(runMode),
+      capabilities: runtimeCapabilities
+    });
     const controller = new RunController(maxSteps);
     const stepRunner = new StepRunner();
     const policyEngine = new PolicyEngine();
+    const recoveryBudget = new RecoveryBudget();
+    const goalState = initializeGoalState({
+      task: input.task,
+      mode: runMode,
+      ...(input.goal ? { goal: input.goal } : {}),
+      ...(input.successCriteria ? { successCriteria: input.successCriteria } : {})
+    });
+    let planState = buildPlanState({
+      id: `plan_${runId}`,
+      mode: runMode,
+      task: input.task,
+      updatedAt: Date.now()
+    });
     const session = createLoopSession({
       runId,
       task: input.task
@@ -80,6 +128,52 @@ export class AgentLoop {
       }
     });
 
+    appendTrace(this.deps.traceRecorder, {
+      id: createEventId(runId, 0, TRACE_EVENT_NAMES.TASK_CLASSIFIED),
+      runId,
+      type: TRACE_EVENT_NAMES.TASK_CLASSIFIED,
+      timestamp: Date.now(),
+      schemaVersion: TRACE_SCHEMA_VERSION,
+      payload: {
+        classification: resolvedMode.classification
+      }
+    });
+
+    appendTrace(this.deps.traceRecorder, {
+      id: createEventId(runId, 0, TRACE_EVENT_NAMES.CAPABILITIES_RESOLVED),
+      runId,
+      type: TRACE_EVENT_NAMES.CAPABILITIES_RESOLVED,
+      timestamp: Date.now(),
+      schemaVersion: TRACE_SCHEMA_VERSION,
+      payload: {
+        capabilities: runtimeCapabilities,
+        limitations: []
+      }
+    });
+
+    appendTrace(this.deps.traceRecorder, {
+      id: createEventId(runId, 0, TRACE_EVENT_NAMES.TOOLS_SELECTED),
+      runId,
+      type: TRACE_EVENT_NAMES.TOOLS_SELECTED,
+      timestamp: Date.now(),
+      schemaVersion: TRACE_SCHEMA_VERSION,
+      payload: {
+        selection: toolSelection
+      }
+    });
+
+    appendTrace(this.deps.traceRecorder, {
+      id: createEventId(runId, 0, TRACE_EVENT_NAMES.PLAN_UPDATED),
+      runId,
+      type: TRACE_EVENT_NAMES.PLAN_UPDATED,
+      timestamp: Date.now(),
+      schemaVersion: TRACE_SCHEMA_VERSION,
+      payload: {
+        plan: planState,
+        goal: goalState
+      }
+    });
+
     for (let stepIndex = 0; controller.canRunStep(stepIndex); stepIndex += 1) {
       session.status = controller.status;
       const { stepId, startedAt } = stepRunner.createStepFrame(stepIndex);
@@ -91,8 +185,13 @@ export class AgentLoop {
         ...(input.successCriteria ? { successCriteria: input.successCriteria } : {}),
         turns: session.turns,
         toolNames: this.deps.toolRouter.listToolNames(),
-        tools: this.deps.toolRouter.listToolContracts(runMode),
-        runMode
+        tools: this.deps.toolRouter
+          .listToolContracts(runMode)
+          .filter((tool) => toolSelection.visibleTools.includes(tool.name)),
+        runMode,
+        modeReason: resolvedMode.reason,
+        classification: resolvedMode.classification,
+        planProgress: buildPlanProgressSummary(planState)
       });
 
       appendTrace(this.deps.traceRecorder, {
@@ -258,6 +357,13 @@ export class AgentLoop {
             status: 'finished'
           }
         });
+        this.emitTerminalReport({
+          runId,
+          stepId,
+          stepIndex,
+          runMode,
+          session
+        });
         appendTrace(this.deps.traceRecorder, {
           id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.RUN_FINISHED),
           runId,
@@ -338,10 +444,19 @@ export class AgentLoop {
       });
 
       const risk = toolContract?.risk ?? 'safe';
+      const hiddenTool = toolSelection.hiddenTools.find(
+        (tool) => tool.tool === toolCall.tool
+      );
       const toolAllowed =
         !toolContract || isToolAvailableInRunMode(toolContract.modes, runMode, toolCall.tool);
       let toolResult: Awaited<ReturnType<ToolRouter['execute']>>;
-      if (toolAllowed) {
+      if (hiddenTool && risk !== 'high') {
+        toolResult = failedToolResult(
+          ERROR_CODES.TOOL_MODE_NOT_ALLOWED,
+          `Tool ${toolCall.tool} is hidden for this run: ${hiddenTool.reason}`,
+          false
+        );
+      } else if (toolAllowed) {
         const approvalEvaluation = policyEngine.evaluate({
           risk,
           wouldRequireApproval: false
@@ -392,6 +507,32 @@ export class AgentLoop {
         }
       });
 
+      planState = updatePlanForToolResult({
+        plan: planState,
+        tool: toolCall.tool,
+        result: toolResult,
+        updatedAt: Date.now()
+      });
+      appendTrace(this.deps.traceRecorder, {
+        id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.PLAN_UPDATED),
+        runId,
+        turnId: stepId,
+        stepIndex,
+        type: TRACE_EVENT_NAMES.PLAN_UPDATED,
+        timestamp: Date.now(),
+        schemaVersion: TRACE_SCHEMA_VERSION,
+        payload: {
+          plan: planState,
+          goal: {
+            ...goalState,
+            satisfiedCriteria: buildPlanProgressSummary(planState).done,
+            unsatisfiedCriteria: goalState.successCriteria.filter(
+              (criterion) => !buildPlanProgressSummary(planState).done.includes(criterion)
+            )
+          }
+        }
+      });
+
       session.turns.push({
         id: stepId,
         runId,
@@ -420,6 +561,13 @@ export class AgentLoop {
             durationMs: endedAt - startedAt,
             status: 'finished'
           }
+        });
+        this.emitTerminalReport({
+          runId,
+          stepId,
+          stepIndex,
+          runMode,
+          session
         });
         appendTrace(this.deps.traceRecorder, {
           id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.RUN_FINISHED),
@@ -549,6 +697,44 @@ export class AgentLoop {
             retryable
           }
         });
+        if (retryable) {
+          const recovery = recoveryBudget.consume(toolResult.code);
+          appendTrace(this.deps.traceRecorder, {
+            id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.RECOVERY_ACTION),
+            runId,
+            turnId: stepId,
+            stepIndex,
+            type: TRACE_EVENT_NAMES.RECOVERY_ACTION,
+            timestamp: Date.now(),
+            schemaVersion: TRACE_SCHEMA_VERSION,
+            payload: {
+              recovery
+            }
+          });
+
+          if (recovery.action.type !== 'fail' && recovery.action.type !== 'ask_user') {
+            const endedAt = Date.now();
+            appendTrace(this.deps.traceRecorder, {
+              id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.TURN_FINISHED),
+              runId,
+              turnId: stepId,
+              stepIndex,
+              type: TRACE_EVENT_NAMES.TURN_FINISHED,
+              timestamp: endedAt,
+              durationMs: endedAt - startedAt,
+              schemaVersion: TRACE_SCHEMA_VERSION,
+              payload: {
+                stepIndex,
+                startedAt,
+                endedAt,
+                durationMs: endedAt - startedAt,
+                status: 'recovering'
+              }
+            });
+            session.status = 'recovering';
+            continue;
+          }
+        }
         return this.failRun({
           runId,
           stepId,
@@ -646,6 +832,71 @@ export class AgentLoop {
       message: input.message,
       trace: this.deps.traceRecorder.list(input.runId)
     };
+  }
+
+  private emitTerminalReport(input: {
+    runId: string;
+    stepId: string;
+    stepIndex: number;
+    runMode: RunMode;
+    session: ReturnType<typeof createLoopSession>;
+  }): void {
+    if (input.runMode !== 'form' && input.runMode !== 'debug') {
+      return;
+    }
+
+    const findings =
+      input.runMode === 'form'
+        ? input.session.turns.flatMap((turn) => {
+            const parsed = formReadFieldsPayloadSchema.safeParse(turn.toolResult?.data);
+            if (!parsed.success) {
+              return [];
+            }
+            return buildFormDoctorFindings({
+              fields: parsed.data.fields,
+              submit: parsed.data.submit,
+              warnings: parsed.data.warnings
+            });
+          })
+        : [];
+
+    if (findings.length > 0) {
+      appendTrace(this.deps.traceRecorder, {
+        id: createEventId(input.runId, input.stepIndex, TRACE_EVENT_NAMES.FINDINGS_REPORTED),
+        runId: input.runId,
+        turnId: input.stepId,
+        stepIndex: input.stepIndex,
+        type: TRACE_EVENT_NAMES.FINDINGS_REPORTED,
+        timestamp: Date.now(),
+        schemaVersion: TRACE_SCHEMA_VERSION,
+        payload: {
+          findings
+        }
+      });
+    }
+
+    const limitations =
+      input.runMode === 'debug' && findings.length === 0
+        ? ['暂未收集到可汇总的浅层 debug finding']
+        : undefined;
+    const report = buildDebugReport({
+      title: input.runMode === 'form' ? 'Form Doctor 诊断报告' : 'Page Inspector 诊断报告',
+      findings,
+      recommendations: findings.length > 0 ? ['根据 finding 的 evidence 逐项处理。'] : [],
+      ...(limitations ? { limitations } : {})
+    });
+    appendTrace(this.deps.traceRecorder, {
+      id: createEventId(input.runId, input.stepIndex, TRACE_EVENT_NAMES.DEBUG_REPORT_CREATED),
+      runId: input.runId,
+      turnId: input.stepId,
+      stepIndex: input.stepIndex,
+      type: TRACE_EVENT_NAMES.DEBUG_REPORT_CREATED,
+      timestamp: Date.now(),
+      schemaVersion: TRACE_SCHEMA_VERSION,
+      payload: {
+        report
+      }
+    });
   }
 }
 

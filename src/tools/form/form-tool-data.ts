@@ -71,7 +71,10 @@ export function isToolResult(value: FormToolData | ToolResult): value is ToolRes
 
 export function missingRequiredFields(fields: FormFieldSnapshot[]): FormFieldSnapshot[] {
   return fields.filter(
-    (field) => field.required && !field.disabled && field.valuePreview.length === 0
+    (field) =>
+      field.required &&
+      !field.disabled &&
+      (field.valuePreview.length === 0 || field.valuePreview === 'empty')
   );
 }
 

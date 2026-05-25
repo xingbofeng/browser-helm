@@ -2,7 +2,9 @@ import type { LoopTurn } from './agent-step';
 
 export type LoopSessionStatus =
   | 'running'
+  | 'recovering'
   | 'waiting_for_approval'
+  | 'waiting_for_user'
   | 'paused'
   | 'cancelled'
   | 'finished'
@@ -10,7 +12,9 @@ export type LoopSessionStatus =
 
 export const LOOP_SESSION_STATUSES: LoopSessionStatus[] = [
   'running',
+  'recovering',
   'waiting_for_approval',
+  'waiting_for_user',
   'paused',
   'cancelled',
   'finished',

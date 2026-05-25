@@ -2,7 +2,15 @@ import { z } from 'zod';
 
 import { approvalRequestSchema } from './approval.schema';
 import { agentDecisionSchema } from './agent-decision.schema';
+import { debugReportSchema, agentFindingSchema } from './diagnosis.schema';
+import { goalStateSchema, planStateSchema } from './goal-plan.schema';
+import {
+  taskClassificationSchema,
+  toolSelectionSchema
+} from './mode-system.schema';
+import { recoveryStateSchema } from './recovery.schema';
 import { runMetadataSchema } from './run-metadata.schema';
+import { runtimeCapabilitiesSchema } from './runtime-capabilities.schema';
 import { toolResultSchema, toolRiskSchema } from './tool-result.schema';
 import { TRACE_EVENT_NAMES } from '../constants/event-names';
 
@@ -18,7 +26,9 @@ const traceEventBaseSchema = z.object({
 
 const loopSessionStatusSchema = z.enum([
   'running',
+  'recovering',
   'waiting_for_approval',
+  'waiting_for_user',
   'paused',
   'cancelled',
   'finished',
@@ -82,6 +92,7 @@ const turnFinishedEventSchema = traceEventBaseSchema.extend({
       'finished',
       'failed',
       'continued',
+      'recovering',
       'waiting_for_approval',
       'paused',
       'cancelled'
@@ -197,6 +208,57 @@ const stateChangedEventSchema = traceEventBaseSchema.extend({
   })
 });
 
+const taskClassifiedEventSchema = traceEventBaseSchema.extend({
+  type: z.literal(TRACE_EVENT_NAMES.TASK_CLASSIFIED),
+  payload: z.object({
+    classification: taskClassificationSchema
+  })
+});
+
+const toolsSelectedEventSchema = traceEventBaseSchema.extend({
+  type: z.literal(TRACE_EVENT_NAMES.TOOLS_SELECTED),
+  payload: z.object({
+    selection: toolSelectionSchema
+  })
+});
+
+const capabilitiesResolvedEventSchema = traceEventBaseSchema.extend({
+  type: z.literal(TRACE_EVENT_NAMES.CAPABILITIES_RESOLVED),
+  payload: z.object({
+    capabilities: runtimeCapabilitiesSchema,
+    limitations: z.array(z.string().min(1)).default([])
+  })
+});
+
+const planUpdatedEventSchema = traceEventBaseSchema.extend({
+  type: z.literal(TRACE_EVENT_NAMES.PLAN_UPDATED),
+  payload: z.object({
+    plan: planStateSchema,
+    goal: goalStateSchema.optional()
+  })
+});
+
+const recoveryActionEventSchema = traceEventBaseSchema.extend({
+  type: z.literal(TRACE_EVENT_NAMES.RECOVERY_ACTION),
+  payload: z.object({
+    recovery: recoveryStateSchema
+  })
+});
+
+const findingsReportedEventSchema = traceEventBaseSchema.extend({
+  type: z.literal(TRACE_EVENT_NAMES.FINDINGS_REPORTED),
+  payload: z.object({
+    findings: z.array(agentFindingSchema)
+  })
+});
+
+const debugReportCreatedEventSchema = traceEventBaseSchema.extend({
+  type: z.literal(TRACE_EVENT_NAMES.DEBUG_REPORT_CREATED),
+  payload: z.object({
+    report: debugReportSchema
+  })
+});
+
 export const traceEventSchema = z.discriminatedUnion('type', [
   runStartedEventSchema,
   runFinishedEventSchema,
@@ -214,7 +276,14 @@ export const traceEventSchema = z.discriminatedUnion('type', [
   contextCompactedEventSchema,
   contextSummaryEventSchema,
   approvalRequiredEventSchema,
-  stateChangedEventSchema
+  stateChangedEventSchema,
+  taskClassifiedEventSchema,
+  toolsSelectedEventSchema,
+  capabilitiesResolvedEventSchema,
+  planUpdatedEventSchema,
+  recoveryActionEventSchema,
+  findingsReportedEventSchema,
+  debugReportCreatedEventSchema
 ]);
 
 export type TraceEvent = z.infer<typeof traceEventSchema>;

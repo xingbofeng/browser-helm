@@ -24,6 +24,14 @@ _避免使用_：browser tab、Chrome tab
 BrowserHelm 在 extension side panel 中提供的用户控制面，用于查看页面数据、Agent 步骤、工具结果、trace、settings 和 approval。
 _避免使用_：side panel app、desktop workbench、form doctor UI
 
+**Page Inspector / 页面检查员**：
+v1.0 的只读页面诊断产品能力，用于解释页面状态、基础错误信号和下一步建议。
+_避免使用_：debug workbench、DevTools clone、page automation
+
+**Form Doctor / 表单医生**：
+v1.0 的只读表单诊断产品能力，用于解释字段状态、必填缺失、校验错误和提交按钮不可用原因。
+_避免使用_：autofill、form submitter、form executor
+
 **Observation Tab Data**：
 记录页面 URL、标题、可见文本摘要和页面状态的 Tab Data 类别。
 _避免使用_：raw DOM
@@ -90,9 +98,11 @@ _避免使用_：empty reason、unsupported
 - **Structured Page Data** 包含 **Observation Tab Data**、**Ref Tab Data**、**Interactive Tab Data** 和 **Form Fields Tab Data**。
 - **Structured Page Data** 是 v0.3 契约层；完整 interactive discovery 属于 v0.31，完整 form field reading 属于 v0.32，**Action Readiness** 属于 v0.33。
 - **Cockpit UI / 驾驶舱 UI** 承载用户可见的 side panel 体验；side panel 是宿主位置，不是产品概念。
+- **Page Inspector / 页面检查员** 和 **Form Doctor / 表单医生** 是 v1.0 的首发产品闭环，默认只读诊断，不代表自动填写或提交。
 - **Tab Data** 供 **Cockpit UI / 驾驶舱 UI** 和 runtime snapshot 使用；Agent context 只接收从 Tab Data 裁剪出的摘要。
 - **Interactive Tab Data** 和 **Form Fields Tab Data** 只负责识别与诊断页面结构，不判断动作是否可以安全执行。
 - **Run Mode Gate** 是 v0.31/v0.32 为新增细粒度工具提供的最小工具门禁；完整 **Mode System** 属于 v1.0。
+- v1.0 的 **Act / 动作准备** 只表达动作前检查、风险、readiness、policy 和 approval 边界；真实表单填写、verify、submit-with-approval 和提交执行属于 v1.1。
 - **Disabled Submit Reason** 可以是 **Confirmed Reason**、**Inferred Reason** 或 **Unknown Reason**。
 - **Empty Tab State** 和 **Unsupported Tab State** 必须区分：empty 表示已检查但没有匹配数据，unsupported 表示当前能力边界内不可用。
 - **Deterministic Summary** 是 **Structured Page Data** 默认使用的摘要形式。

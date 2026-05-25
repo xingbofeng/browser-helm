@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <head>
+    <title>无效表单示例</title>
+  </head>
+  <body>
+    <h1>结账信息</h1>
+    <form>
+      <label>
+        邮箱
+        <input id="email" name="email" type="email" required value="not-an-email" aria-invalid="true" />
+      </label>
+      <label>
+        手机号
+        <input id="phone" name="phone" type="tel" required value="" />
+      </label>
+      <button type="submit" disabled>继续支付</button>
+    </form>
+  </body>
+</html>

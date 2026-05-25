@@ -13,6 +13,7 @@ describe('Cockpit CSS', () => {
     expect(css).toContain('.bh-cockpitShell');
     expect(css).toContain('.bh-cockpitTabs');
     expect(css).toContain('.bh-cockpitInspector');
+    expect(css).toContain('.bh-diagnosisOverview');
     expect(css).toContain('.bh-approvalDrawer');
     expect(css).toContain('@media');
     expect(css).toContain('max-width');

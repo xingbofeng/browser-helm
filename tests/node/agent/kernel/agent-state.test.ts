@@ -6,10 +6,12 @@ import {
 } from '../../../../src/agent/kernel/agent-state';
 
 describe('agent-state', () => {
-  it('exports all v0.1 loop session statuses', () => {
+  it('exports all loop session statuses', () => {
     expect(LOOP_SESSION_STATUSES).toEqual([
       'running',
+      'recovering',
       'waiting_for_approval',
+      'waiting_for_user',
       'paused',
       'cancelled',
       'finished',

@@ -83,6 +83,46 @@ export class CockpitUiFlow {
     });
   }
 
+  async expectV1FormDoctorDiagnosis(): Promise<void> {
+    const fixture = await this.flowContext.fixturePage();
+    await fixture.goto('invalid-form.html');
+
+    const tabId = await this.flowContext.shell().activeTabId();
+    const sidePanel = this.flowContext.sidePanel();
+    const snapshot = await sidePanel.runOnTab({
+      tabId,
+      task: '诊断这个表单为什么不能提交',
+      mode: 'form'
+    });
+    const page = await sidePanel.openRun(snapshot.runId);
+
+    await new CockpitPanel(page).expectDiagnosisOverview({
+      modeText: '用户显式选择 form mode',
+      reportTitle: 'Form Doctor 诊断报告',
+      finding: '字段校验失败'
+    });
+  }
+
+  async expectV1PageInspectorDiagnosis(): Promise<void> {
+    const fixture = await this.flowContext.fixturePage();
+    await fixture.goto('console-network-errors.html');
+
+    const tabId = await this.flowContext.shell().activeTabId();
+    const sidePanel = this.flowContext.sidePanel();
+    const snapshot = await sidePanel.runOnTab({
+      tabId,
+      task: '检查这个页面有什么错误',
+      mode: 'debug'
+    });
+    const page = await sidePanel.openRun(snapshot.runId);
+
+    await new CockpitPanel(page).expectDiagnosisOverview({
+      modeText: '用户显式选择 debug mode',
+      reportTitle: 'Page Inspector 诊断报告',
+      limitation: '暂未收集到可汇总的浅层 debug finding'
+    });
+  }
+
   async close(): Promise<void> {
     await this.flowContext.close();
   }

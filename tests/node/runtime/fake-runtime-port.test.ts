@@ -87,4 +87,95 @@ describe('FakeRuntimePort', () => {
       apiKey: 'sk-next'
     });
   });
+
+  it('preserves v1 diagnosis fields on seeded snapshots', async () => {
+    const port = new FakeRuntimePort({
+      snapshots: [
+        {
+          runId: 'seed_v1',
+          mode: 'form',
+          status: 'observed',
+          refs: [],
+          classification: {
+            mode: 'form',
+            taskType: 'form',
+            confidence: 'high',
+            reason: '用户要求诊断表单',
+            matchedSignals: ['表单']
+          },
+          modeReason: 'form: 用户要求诊断表单',
+          capabilities: {
+            hasActiveTab: true,
+            hasDebuggerPermission: false,
+            hasClipboardPermission: false,
+            hasDownloadsPermission: false,
+            hostPermissions: ['http://127.0.0.1/*'],
+            shallowDebugAvailable: true,
+            cdp: 'reserved'
+          },
+          capabilityLimitations: [],
+          goal: {
+            goal: '诊断表单',
+            successCriteria: ['列出表单字段状态'],
+            satisfiedCriteria: [],
+            unsatisfiedCriteria: ['列出表单字段状态']
+          },
+          plan: {
+            id: 'plan_1',
+            mode: 'form',
+            updatedAt: 1,
+            steps: [
+              {
+                id: 'read_fields',
+                title: '读取表单字段',
+                status: 'current'
+              }
+            ]
+          },
+          recovery: {
+            action: {
+              type: 're_observe',
+              reason: 'REF_STALE'
+            },
+            attempts: 1,
+            budgetRemaining: 0
+          },
+          findings: [
+            {
+              title: '必填字段为空',
+              explanation: 'Email 为空',
+              evidence: [
+                {
+                  source: 'form',
+                  summary: 'Email required empty',
+                  refId: 'ref_email'
+                }
+              ],
+              confidence: 'high'
+            }
+          ],
+          debugReport: {
+            title: 'Form Doctor 诊断报告',
+            findings: [],
+            recommendations: [],
+            limitations: ['浅层 debug 信号不可用']
+          },
+          canInterrupt: true,
+          canReviseGoal: true
+        }
+      ]
+    });
+
+    const started = await port.startRun({ task: '诊断表单', mode: 'form' });
+    const snapshot = await port.getRunSnapshot(started.runId);
+
+    expect(snapshot.classification?.mode).toBe('form');
+    expect(snapshot.capabilities?.hostPermissions).toContain('http://127.0.0.1/*');
+    expect(snapshot.plan?.steps[0]?.title).toBe('读取表单字段');
+    expect(snapshot.recovery?.action.type).toBe('re_observe');
+    expect(snapshot.findings?.[0]?.confidence).toBe('high');
+    expect(snapshot.debugReport?.title).toBe('Form Doctor 诊断报告');
+    expect(snapshot.canInterrupt).toBe(true);
+    expect(snapshot.canReviseGoal).toBe(true);
+  });
 });

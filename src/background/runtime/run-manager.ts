@@ -1,13 +1,34 @@
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
+import type {
+  ContentRpcRequest,
+  ContentRpcResponse
+} from '../../page/messaging/content-rpc.schema';
+import { ContextBuilder } from '../../agent/context/context-builder';
+import { initializeGoalState } from '../../agent/goal/goal-state';
+import { AgentLoop } from '../../agent/kernel/agent-loop';
+import { DecisionParser } from '../../agent/parser/decision-parser';
+import { buildPlanState } from '../../agent/planning/plan-builder';
+import {
+  buildDebugReport,
+  buildFormDoctorFindings
+} from '../../agent/report/findings-report';
+import { resolveRunMode } from '../../agent/modes/mode-system';
+import { InMemoryTraceRecorder } from '../../storage/memory/in-memory-trace-recorder';
 import { ChromeContentRpcClient } from '../../page/messaging/content-rpc-client';
 import { buildStructuredPageData } from '../../page/structured/structured-page-data';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
-import { APPROVAL_EVENT_NAMES, TRACE_EVENT_NAMES } from '../../shared/constants/event-names';
+import {
+  APPROVAL_EVENT_NAMES,
+  CONTENT_RPC_MESSAGES,
+  TRACE_EVENT_NAMES
+} from '../../shared/constants/event-names';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import type { Observation } from '../../shared/schemas/observation.schema';
 import type { ToolResult } from '../../shared/schemas/tool-result.schema';
 import { ApprovalManager } from '../../runtime/approval/approval-manager';
 import { PolicyEngine } from '../../agent/policy/policy-engine';
+import { RuntimeDiagnosticModelClient } from './runtime-diagnostic-model-client';
+import { resolveRuntimeCapabilities } from '../../runtime/capabilities/runtime-capabilities';
 import { redactToolArgs } from '../../tools/core/tool-args-redaction';
 import { ToolRouter } from '../../tools/core/tool-router';
 import {
@@ -23,6 +44,7 @@ import type {
   StartRunInput
 } from '../../runtime/runtime-messages';
 import type { RunMode } from '../../shared/schemas/tool.schema';
+import type { TraceEvent } from '../../shared/schemas/trace.schema';
 
 type RunManagerDeps = {
   getActiveTabId?: () => Promise<number | undefined>;
@@ -177,10 +199,112 @@ export class RunManager {
         requiresApproval: result.requiresApproval
       }
     });
-    this.snapshots.set(
-      runId,
-      this.snapshotFromToolResult(runId, record.mode, result, record.trace)
+    const baseSnapshot = this.snapshotFromToolResult(runId, record.mode, result, record.trace);
+    if (record.mode === 'form' || record.mode === 'debug') {
+      this.snapshots.set(runId, baseSnapshot);
+      try {
+        this.snapshots.set(runId, {
+          ...baseSnapshot,
+          ...fallbackV1SnapshotFields(record.mode, result),
+          trace: record.trace,
+          canInterrupt: true,
+          canReviseGoal: true
+        });
+      } catch {
+        this.snapshots.set(runId, {
+          ...baseSnapshot,
+          trace: record.trace,
+          canInterrupt: true,
+          canReviseGoal: true
+        });
+      }
+      void this.enrichSnapshotWithAgentDiagnostics(
+        runId,
+        record,
+        tabId,
+        result,
+        baseSnapshot
+      ).then((enriched) => {
+        this.snapshots.set(runId, enriched);
+      }).catch(() => undefined);
+      return;
+    }
+    let nextSnapshot: RunSnapshot;
+    try {
+      nextSnapshot = await this.enrichSnapshotWithAgentDiagnostics(
+        runId,
+        record,
+        tabId,
+        result,
+        baseSnapshot
+      );
+    } catch {
+      nextSnapshot = {
+        ...baseSnapshot,
+        ...fallbackV1SnapshotFields(record.mode, result),
+        trace: record.trace,
+        canInterrupt: true,
+        canReviseGoal: true
+      };
+    }
+    this.snapshots.set(runId, nextSnapshot);
+  }
+
+  private async enrichSnapshotWithAgentDiagnostics(
+    runId: string,
+    record: {
+      mode: RunMode;
+      trace: RuntimeEvent[];
+    },
+    tabId: number,
+    observeResult: ToolResult,
+    snapshot: RunSnapshot
+  ): Promise<RunSnapshot> {
+    if (record.mode !== 'form' && record.mode !== 'debug') {
+      return snapshot;
+    }
+    const traceRecorder = new InMemoryTraceRecorder();
+    const rpc = new CachedObservationRpcClient(
+      this.createContentRpcClient(tabId),
+      observeResult
     );
+    const agent = new AgentLoop({
+      modelClient: new RuntimeDiagnosticModelClient(),
+      decisionParser: new DecisionParser(),
+      toolRouter: new ToolRouter(createToolRegistry(rpc)),
+      contextBuilder: new ContextBuilder(),
+      traceRecorder
+    });
+
+    const result = await withTimeout(agent.run({
+      task: snapshot.mode === 'form'
+        ? '诊断当前表单状态'
+        : snapshot.mode === 'debug'
+          ? '检查当前页面健康状态'
+          : '观察当前页面并准备诊断',
+      mode: record.mode,
+      maxSteps: record.mode === 'form' || record.mode === 'debug' ? 3 : 1
+    }), 1000);
+    if (!result) {
+      return {
+        ...snapshot,
+        ...fallbackV1SnapshotFields(record.mode, observeResult),
+        trace: record.trace,
+        canInterrupt: true,
+        canReviseGoal: true
+      };
+    }
+    const agentTrace = result.trace;
+    const v1 = extractV1SnapshotFields(agentTrace);
+    record.trace.push(...normalizeAgentTraceEvents(runId, agentTrace));
+
+    return {
+      ...snapshot,
+      ...v1,
+      trace: record.trace,
+      canInterrupt: true,
+      canReviseGoal: true
+    };
   }
 
   async executeTool(input: ExecuteToolInput): Promise<ToolResult> {
@@ -533,6 +657,205 @@ export class RunManager {
       listener(event);
     }
   }
+}
+
+class CachedObservationRpcClient implements ContentRpcClient {
+  constructor(
+    private readonly fallback: ContentRpcClient,
+    private readonly observeResult: ToolResult
+  ) {}
+
+  request(message: ContentRpcRequest): Promise<ContentRpcResponse> {
+    if (
+      message.type === CONTENT_RPC_MESSAGES.PAGE_OBSERVE &&
+      this.observeResult.ok &&
+      typeof this.observeResult.data === 'object' &&
+      this.observeResult.data !== null
+    ) {
+      return Promise.resolve({
+        ok: true,
+        observation: this.observeResult.data as Observation
+      });
+    }
+    return this.fallback.request(message);
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | undefined> {
+  return Promise.race([
+    promise,
+    new Promise<undefined>((resolve) => {
+      setTimeout(() => resolve(undefined), timeoutMs);
+    })
+  ]);
+}
+
+function fallbackV1SnapshotFields(
+  mode: RunMode,
+  observeResult: ToolResult
+): Pick<
+  RunSnapshot,
+  | 'classification'
+  | 'modeReason'
+  | 'capabilities'
+  | 'capabilityLimitations'
+  | 'goal'
+  | 'plan'
+  | 'findings'
+  | 'debugReport'
+> {
+  const task = mode === 'form' ? '诊断当前表单状态' : '检查当前页面健康状态';
+  const resolvedMode = resolveRunMode({
+    task,
+    explicitMode: mode
+  });
+  const capabilities = resolveRuntimeCapabilities({
+    hasActiveTab: true,
+    shallowDebugAvailable: true
+  });
+  const goal = initializeGoalState({
+    task,
+    mode
+  });
+  const plan = buildPlanState({
+    id: `plan_fallback_${Date.now().toString(36)}`,
+    mode,
+    task,
+    updatedAt: Date.now()
+  });
+
+  const fields: Pick<
+    RunSnapshot,
+    | 'classification'
+    | 'modeReason'
+    | 'capabilities'
+    | 'capabilityLimitations'
+    | 'goal'
+    | 'plan'
+    | 'findings'
+    | 'debugReport'
+  > = {
+    classification: resolvedMode.classification,
+    modeReason: resolvedMode.reason,
+    capabilities,
+    capabilityLimitations: [],
+    goal,
+    plan
+  };
+
+  if (mode === 'form' && observeResult.ok) {
+    const observation = observeResult.data as Observation;
+    const formData = readFormDataFromObservation(observation);
+    const findings = buildFormDoctorFindings(formData);
+    fields.findings = findings;
+    fields.debugReport = buildDebugReport({
+      title: 'Form Doctor 诊断报告',
+      findings,
+      recommendations: findings.length > 0 ? ['根据 finding 的 evidence 逐项处理。'] : []
+    });
+  }
+  if (mode === 'debug') {
+    fields.debugReport = buildDebugReport({
+      title: 'Page Inspector 诊断报告',
+      findings: [],
+      recommendations: [],
+      limitations: ['暂未收集到可汇总的浅层 debug finding']
+    });
+  }
+
+  return fields;
+}
+
+function readFormDataFromObservation(observation: Observation): Parameters<
+  typeof buildFormDoctorFindings
+>[0] {
+  const record =
+    typeof observation.formFields === 'object' && observation.formFields !== null
+      ? observation.formFields as Record<string, unknown>
+      : {};
+  return {
+    fields: Array.isArray(record.fields) ? record.fields as never : [],
+    submit:
+      typeof record.submit === 'object' && record.submit !== null
+        ? record.submit as never
+        : undefined,
+    warnings: Array.isArray(record.warnings) ? record.warnings as never : []
+  };
+}
+
+function extractV1SnapshotFields(trace: TraceEvent[]): Pick<
+  RunSnapshot,
+  | 'classification'
+  | 'modeReason'
+  | 'capabilities'
+  | 'capabilityLimitations'
+  | 'goal'
+  | 'plan'
+  | 'recovery'
+  | 'findings'
+  | 'debugReport'
+> {
+  const fields: Pick<
+    RunSnapshot,
+    | 'classification'
+    | 'modeReason'
+    | 'capabilities'
+    | 'capabilityLimitations'
+    | 'goal'
+    | 'plan'
+    | 'recovery'
+    | 'findings'
+    | 'debugReport'
+  > = {};
+
+  for (const event of trace) {
+    if (event.type === TRACE_EVENT_NAMES.TASK_CLASSIFIED) {
+      fields.classification = event.payload.classification;
+      fields.modeReason = event.payload.classification.reason;
+    }
+    if (event.type === TRACE_EVENT_NAMES.CAPABILITIES_RESOLVED) {
+      fields.capabilities = event.payload.capabilities;
+      fields.capabilityLimitations = event.payload.limitations;
+    }
+    if (event.type === TRACE_EVENT_NAMES.PLAN_UPDATED) {
+      fields.plan = event.payload.plan;
+      if (event.payload.goal) {
+        fields.goal = event.payload.goal;
+      }
+    }
+    if (event.type === TRACE_EVENT_NAMES.RECOVERY_ACTION) {
+      fields.recovery = event.payload.recovery;
+    }
+    if (event.type === TRACE_EVENT_NAMES.FINDINGS_REPORTED) {
+      fields.findings = event.payload.findings;
+    }
+    if (event.type === TRACE_EVENT_NAMES.DEBUG_REPORT_CREATED) {
+      fields.debugReport = event.payload.report;
+    }
+  }
+
+  return fields;
+}
+
+function normalizeAgentTraceEvents(runId: string, trace: TraceEvent[]): RuntimeEvent[] {
+  return trace.map((event) => ({
+    ...event,
+    runId,
+    payload: withAgentRunId(event.payload, event.runId)
+  }));
+}
+
+function withAgentRunId(payload: unknown, agentRunId: string): unknown {
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    return {
+      ...payload,
+      agentRunId
+    };
+  }
+  return {
+    value: payload,
+    agentRunId
+  };
 }
 
 function snapshotToolResult(
