@@ -29,6 +29,12 @@ describe('FakeRuntimePort', () => {
       mode: 'form',
       status: 'cancelled'
     });
+    expect(snapshot.messages?.some((message) =>
+      message.kind === 'task' && message.content === '观察页面'
+    )).toBe(true);
+    expect(snapshot.messages?.some((message) =>
+      message.kind === 'error' && message.content.includes('已取消')
+    )).toBe(true);
     expect(events).toContain('run_cancelled');
   });
 
@@ -177,5 +183,37 @@ describe('FakeRuntimePort', () => {
     expect(snapshot.debugReport?.title).toBe('Form Doctor 诊断报告');
     expect(snapshot.canInterrupt).toBe(true);
     expect(snapshot.canReviseGoal).toBe(true);
+  });
+
+  it('revises an existing run goal and emits a plan update event', async () => {
+    const port = new FakeRuntimePort({
+      snapshots: [
+        {
+          runId: 'seed_goal',
+          mode: 'form',
+          status: 'observed',
+          refs: []
+        }
+      ]
+    });
+    const started = await port.startRun({ task: '诊断表单', mode: 'form' });
+    const events: string[] = [];
+    port.subscribeRun(started.runId, (event) => {
+      events.push(event.type);
+    });
+
+    const snapshot = await port.reviseGoal({
+      runId: started.runId,
+      goal: '只读诊断当前表单',
+      successCriteria: ['解释 disabled submit 原因']
+    });
+
+    expect(snapshot.goal).toMatchObject({
+      goal: '只读诊断当前表单',
+      successCriteria: ['解释 disabled submit 原因'],
+      unsatisfiedCriteria: ['解释 disabled submit 原因']
+    });
+    expect(snapshot.plan?.mode).toBe('form');
+    expect(events).toContain('plan_updated');
   });
 });

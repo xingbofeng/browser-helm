@@ -130,7 +130,132 @@ bh_policy_classify_risk
 bh_policy_request_approval
 ```
 
-## 4. 完整版工具清单
+## 4. v1.0.2 补齐边界
+
+v1.0.2 一次性补齐 v1.0 必须工具缺口，并提前纳入长页面 / iframe 读取闭环所需的 viewport 工具。用户任务必须进入真实 AgentLoop tool-calling 路径，不能只基于一次 snapshot provider answer。
+
+### v1.0.2 最终工具面
+
+#### Agent control
+
+```txt
+bh_agent_finish
+bh_agent_fail
+bh_agent_ask_user
+```
+
+#### Page observation / reading
+
+```txt
+bh_page_observe
+bh_page_read_visible_text
+bh_page_read_article
+bh_page_wait_until_stable
+```
+
+#### Iframe
+
+```txt
+bh_iframe_list
+bh_iframe_read
+```
+
+#### A11y discovery
+
+```txt
+bh_a11y_snapshot
+bh_a11y_find_interactive
+bh_a11y_resolve_ref
+bh_a11y_refresh_refs
+```
+
+#### Element inspection
+
+```txt
+bh_element_inspect
+bh_element_read_state
+bh_element_get_computed_style
+bh_element_focus
+```
+
+#### Element actions
+
+```txt
+bh_element_click
+bh_element_type_text
+```
+
+`bh_iframe_click` 和 `bh_iframe_type` 不保留 deprecated 工具；iframe 内元素动作统一迁移到 `bh_element_click` 和 `bh_element_type_text`，由 stable ref / resolver 处理元素所在 iframe 上下文。
+
+#### Navigation
+
+```txt
+bh_nav_open_url
+bh_nav_reload
+bh_nav_back
+bh_nav_forward
+```
+
+#### Viewport
+
+```txt
+bh_viewport_get_info
+bh_viewport_scroll
+```
+
+`bh_viewport_scroll` 支持 `target: page | iframe`。滚动 iframe 不新增 `bh_iframe_scroll`；iframe 和顶层页面都属于 viewport scroll context。
+
+#### Form tools
+
+```txt
+bh_form_list
+bh_form_inspect
+bh_form_read_fields
+bh_form_find_missing_required
+bh_form_find_validation_errors
+bh_form_find_disabled_submit_reason
+```
+
+#### Debug tools
+
+```txt
+bh_debug_collect_page_health
+bh_debug_get_console_errors
+bh_debug_get_network_failures
+bh_debug_explain_error
+```
+
+#### Policy tools
+
+```txt
+bh_policy_mask_secrets
+```
+
+#### Action readiness
+
+```txt
+bh_action_check_readiness
+```
+
+### v1.0.2 风险标注
+
+| 工具 | 风险 | 是否改变页面 | 是否要求重新 observe/read |
+| --- | --- | --- | --- |
+| `bh_page_read_visible_text` | `safe` | 否 | 否 |
+| `bh_page_read_article` | `safe` | 否 | 否 |
+| `bh_page_wait_until_stable` | `safe` | 否 | 是 |
+| `bh_iframe_list` | `safe` | 否 | 否 |
+| `bh_iframe_read` | `safe` | 否 | 否 |
+| `bh_viewport_get_info` | `safe` | 否 | 否 |
+| `bh_viewport_scroll` | `low` | 是，改变视口位置 | 是 |
+| `bh_element_focus` | `low` | 是，改变焦点 | 是 |
+| `bh_element_click` | `high` | 是 | 是 |
+| `bh_element_type_text` | `high` | 是 | 是 |
+| `bh_nav_open_url` | `medium` | 是，改变页面位置 | 是 |
+| `bh_nav_reload` / `bh_nav_back` / `bh_nav_forward` | `low` | 是，改变页面位置 | 是 |
+| 其余 v1.0.2 只读诊断工具 | `safe` | 否 | 否 |
+
+## 5. 完整版工具清单
 
 ### Agent control
 
@@ -344,13 +469,11 @@ bh_tab_group_summary
 ### Frames
 
 ```txt
-bh_frame_list
-bh_frame_read
-bh_frame_find_element
-bh_frame_click_element
-bh_frame_type_element
-bh_frame_get_context
+bh_iframe_list
+bh_iframe_read
 ```
+
+iframe 只表达嵌入页面发现与文档读取边界。具体元素检查和动作使用 element 工具；页面或 iframe 滚动使用 viewport 工具。
 
 ### Shadow DOM
 
@@ -466,15 +589,15 @@ bh_eval_run_case
 bh_eval_label_result
 ```
 
-## 4. 动态裁剪规则
+## 6. 动态裁剪规则
 
 不要把所有工具每轮都暴露给模型。按 mode 裁剪：
 
 ```txt
-Ask mode：page/a11y/debug read-only tools
+Ask mode：page/a11y/iframe/viewport read tools，以及低风险 scroll
 Act mode：page/a11y/element/nav/viewport/form tools
-Debug mode：debug + form + page read tools
-Form mode：form + element + policy tools
+Debug mode：debug + form + page/iframe/viewport read tools
+Form mode：form + page/iframe/element/viewport + policy tools
 Vision mode：vision + pointer tools
 Advanced mode：tabs/frame/shadow/file/doc/clipboard tools
 Memory mode：memory/pad/flow tools

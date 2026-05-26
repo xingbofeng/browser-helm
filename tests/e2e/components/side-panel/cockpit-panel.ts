@@ -5,25 +5,18 @@ export class CockpitPanel {
 
   async expectShell(): Promise<void> {
     await expect(this.page.getByRole('heading', { name: /BrowserHelm/u })).toBeVisible();
-    await expect(this.page.getByRole('button', { name: '页面观察' })).toBeVisible();
-    await expect(this.page.getByRole('button', { name: 'Ref 映射' })).toBeVisible();
-    await expect(this.page.getByRole('button', { name: '交互元素' })).toBeVisible();
-    await expect(this.page.getByRole('button', { name: '表单字段' })).toBeVisible();
-    await expect(this.page.getByRole('heading', { name: '执行时间线' })).toBeVisible();
-    await expect(this.page.getByRole('heading', { name: '工具结果' })).toBeVisible();
-    await expect(this.page.getByText('Settings')).toBeVisible();
+    await expect(this.page.getByLabel('BrowserHelm Agent 消息')).toBeVisible();
+    await expect(this.page.getByRole('textbox', { name: '任务' })).toBeVisible();
+    await expect(this.page.getByRole('button', { name: '高级开发者选项' })).toBeVisible();
+    await expect(this.page.getByRole('button', { name: '打开模型配置' })).toBeVisible();
+    await expect(this.page.getByRole('button', { name: '页面观察' })).toHaveCount(0);
+    await expect(this.page.getByText(/Cockpit/u)).toHaveCount(0);
   }
 
   async expectObservedPage(expected: { title: string; url: string }): Promise<void> {
-    await expect(this.page.getByRole('heading', { name: expected.title })).toBeVisible();
-    await expect(this.page.getByText(expected.url)).toBeVisible();
-  }
-
-  async expectObservationTimelineSteps(): Promise<void> {
-    const timeline = this.page.locator('.bh-stepTimeline');
-    await expect(timeline.getByText('Run 开始')).toBeVisible();
-    await expect(timeline.getByText('工具开始')).toBeVisible();
-    await expect(timeline.getByText('工具结果')).toBeVisible();
+    await expect(this.page.getByText(expected.title)).toBeVisible();
+    await expect(this.page.getByText(new URL(expected.url).hostname)).toBeVisible();
+    await expect(this.page.getByText(expected.url)).toHaveCount(0);
   }
 
   async stopRun(): Promise<void> {
@@ -31,35 +24,32 @@ export class CockpitPanel {
   }
 
   async expectCancelled(): Promise<void> {
-    await expect(this.page.getByText('已取消')).toBeVisible();
+    await expect(this.page.getByText('已取消', { exact: true })).toBeVisible();
   }
 
   async expectApprovalDrawer(expected: { action: string; code?: string }): Promise<void> {
     await expect(this.page.getByLabel('Approval')).toBeVisible();
     await expect(this.page.getByLabel('Approval').getByText(expected.action).first()).toBeVisible();
     if (expected.code) {
-      await expect(this.page.locator('p').filter({ hasText: expected.code }).first()).toBeVisible();
+      await expect(this.page.getByText(expected.code).first()).toBeVisible();
     }
   }
 
-  async expectDiagnosisOverview(expected: {
+  async expectAgentDiagnosis(expected: {
     modeText: string;
     reportTitle: string;
     finding?: string;
     limitation?: string;
   }): Promise<void> {
-    const overview = this.page.getByLabel('Diagnosis overview');
-    await expect(overview).toBeVisible();
-    await expect(overview.getByText(expected.modeText)).toBeVisible();
-    await expect(overview.getByText(expected.reportTitle)).toBeVisible();
+    await expect(this.page.getByText(expected.reportTitle)).toBeVisible();
     if (expected.finding) {
-      await expect(overview.getByText(expected.finding)).toBeVisible();
+      await expect(this.page.getByText(expected.finding, { exact: true }).first()).toBeVisible();
     }
     if (expected.limitation) {
-      await expect(overview.getByText(expected.limitation)).toBeVisible();
+      await expect(this.page.getByText(expected.limitation, { exact: true }).first()).toBeVisible();
     }
-    await expect(overview.getByText('可中断')).toBeVisible();
-    await expect(overview.getByText('可修改目标')).toBeVisible();
+    await this.openDebug();
+    await expect(this.page.getByText(new RegExp(expected.modeText.includes('form') ? 'form /' : 'debug /', 'u'))).toBeVisible();
   }
 
   async expectSettingsMasking(expected: { baseUrl: string; model: string }): Promise<void> {
@@ -70,7 +60,10 @@ export class CockpitPanel {
     await expect(this.page.getByRole('textbox', { name: 'Model' })).toHaveValue(
       expected.model
     );
-    await expect(this.page.getByText('sk-...cret')).toBeVisible();
+    await expect(this.page.getByRole('textbox', { name: 'API Key' })).toHaveAttribute(
+      'placeholder',
+      'sk-...cret'
+    );
     await expect(this.page.getByText('sk-e2e-secret')).toHaveCount(0);
   }
 
@@ -85,7 +78,7 @@ export class CockpitPanel {
     if (settings.apiKey) {
       await this.page.getByRole('textbox', { name: 'API Key' }).fill(settings.apiKey);
     }
-    await this.page.getByRole('button', { name: 'Save' }).click();
+    await this.page.getByRole('button', { name: '保存配置' }).click();
   }
 
   private async openSettings(): Promise<void> {
@@ -93,7 +86,15 @@ export class CockpitPanel {
     if (await baseUrl.isVisible()) {
       return;
     }
-    await this.page.getByText('Settings').click();
+    await this.page.getByRole('button', { name: '打开模型配置' }).click();
     await expect(baseUrl).toBeVisible();
+  }
+
+  private async openDebug(): Promise<void> {
+    if (await this.page.getByRole('button', { name: /Trace/u }).first().isVisible()) {
+      return;
+    }
+    await this.page.getByRole('button', { name: '高级开发者选项' }).click();
+    await expect(this.page.getByRole('button', { name: /Trace/u }).first()).toBeVisible();
   }
 }

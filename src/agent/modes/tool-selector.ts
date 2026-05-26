@@ -9,6 +9,9 @@ type SelectToolsInput = {
   task: string;
   tools: ToolPromptContract[];
   capabilities: RuntimeCapabilities;
+  pageState?: {
+    hasForm?: boolean;
+  };
 };
 
 export function selectToolsForRun(input: SelectToolsInput): ToolSelection {
@@ -17,6 +20,17 @@ export function selectToolsForRun(input: SelectToolsInput): ToolSelection {
   const limitations: string[] = [];
 
   for (const tool of input.tools) {
+    if (!input.capabilities.hasActiveTab && !tool.modes.includes('internal')) {
+      hiddenTools.push({
+        tool: tool.name,
+        reason: 'No active tab is available'
+      });
+      if (!limitations.includes('No active tab is available')) {
+        limitations.push('No active tab is available');
+      }
+      continue;
+    }
+
     const modeAllowed = isToolAvailableInRunMode(
       tool.modes,
       input.mode,
@@ -35,6 +49,17 @@ export function selectToolsForRun(input: SelectToolsInput): ToolSelection {
         tool: tool.name,
         reason: 'High-risk tools require explicit approval boundary'
       });
+      continue;
+    }
+
+    if (isFormTool(tool) && input.pageState?.hasForm === false) {
+      hiddenTools.push({
+        tool: tool.name,
+        reason: 'No form is detected in current page state'
+      });
+      if (!limitations.includes('No form detected on page')) {
+        limitations.push('No form detected on page');
+      }
       continue;
     }
 
@@ -62,4 +87,8 @@ export function selectToolsForRun(input: SelectToolsInput): ToolSelection {
 
 function isDebugTool(tool: ToolPromptContract): boolean {
   return tool.name.startsWith('bh_debug_');
+}
+
+function isFormTool(tool: ToolPromptContract): boolean {
+  return tool.name.startsWith('bh_form_');
 }

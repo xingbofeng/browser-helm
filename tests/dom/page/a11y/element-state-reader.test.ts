@@ -28,6 +28,30 @@ describe('element-state-reader', () => {
     });
   });
 
+  it('treats elements hidden by CSS or hidden ancestors as not visible', () => {
+    document.body.innerHTML = `
+      <style>
+        .css-hidden { display: none; }
+        .transparent { opacity: 0; }
+      </style>
+      <button class="css-hidden">CSS hidden</button>
+      <button class="transparent">Transparent</button>
+      <div style="visibility:hidden">
+        <button id="child">Hidden child</button>
+      </div>
+    `;
+
+    expect(readElementState(document.querySelector('.css-hidden'))).toMatchObject({
+      visible: false
+    });
+    expect(readElementState(document.querySelector('.transparent'))).toMatchObject({
+      visible: false
+    });
+    expect(readElementState(document.querySelector('#child'))).toMatchObject({
+      visible: false
+    });
+  });
+
   it('reads checked and selected state when available', () => {
     const page = loadDomFixture(
       'v0-31-interactive-complete.html',

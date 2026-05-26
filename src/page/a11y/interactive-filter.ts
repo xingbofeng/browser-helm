@@ -1,6 +1,7 @@
 import type { InteractiveElement } from '../../shared/schemas/structured-page-data.schema';
 import { readAccessibleName } from './accessible-name';
 import { isDisabledElement, isVisibleElement } from './element-finder';
+import type { PageZone } from './interactive-ranker';
 import type { RefMap } from './ref-map';
 import { resolveRole } from './role-resolver';
 
@@ -37,12 +38,14 @@ export function findInteractiveElements(
       const role = resolveInteractiveRole(element);
       const name = readAccessibleName(element);
       const disabled = isDisabledElement(element);
+      const pageZone = inferPageZone(element, role, name);
       const ref = refMap.register(element, {
         role,
         name,
         tagName: element.tagName.toLowerCase(),
         visible: isVisibleElement(element),
-        disabled
+        disabled,
+        pageZone
       });
 
       return {
@@ -55,6 +58,7 @@ export function findInteractiveElements(
         checked: readCheckedState(element, role),
         selected: readSelectedState(element, role),
         domOrder: index,
+        pageZone,
         warnings: []
       };
     });
@@ -124,4 +128,34 @@ function readSelectedState(
   }
   const ariaSelected = element.getAttribute('aria-selected');
   return ariaSelected === null ? undefined : ariaSelected === 'true';
+}
+
+function inferPageZone(
+  element: Element,
+  role: string | undefined,
+  accessibleName: string
+): PageZone {
+  if (element.closest('form')) {
+    return 'form';
+  }
+  const tagName = element.tagName.toLowerCase();
+  if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
+    return 'form';
+  }
+  if (
+    (role === 'button' || tagName === 'button') &&
+    /submit|save|cancel|reset|登录|注册|提交|保存|取消|搜索|登出|sign\s?in|log\s?in|sign\s?up|log\s?out/i.test(accessibleName)
+  ) {
+    return 'form';
+  }
+  if (element.closest('nav, header, [role="navigation"], [role="banner"], [role="menubar"]')) {
+    return 'nav';
+  }
+  if (element.closest('main, article, section, [role="main"], [role="article"]')) {
+    return 'content';
+  }
+  if (element.closest('footer, aside, [role="contentinfo"], [role="complementary"]')) {
+    return 'other';
+  }
+  return 'content';
 }

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { RunStateBadge } from '../../../../src/ui/components/run-state-badge';
 
 describe('RunStateBadge', () => {
-  it('renders v0.4 run display states with Chinese labels', () => {
+  it('renders run display states with Chinese labels', () => {
     const html = renderToString(
       <>
         <RunStateBadge state="observing" />

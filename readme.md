@@ -1,123 +1,151 @@
-# BrowserHelm / 浏览器舵手
+<p align="center">
+  <img src="docs/browserhelm-logo.png" alt="BrowserHelm Logo" width="128" />
+</p>
 
-![状态](https://img.shields.io/badge/status-planning-blue)
-![运行时](https://img.shields.io/badge/runtime-browser_extension-2ea44f)
-![架构](https://img.shields.io/badge/architecture-local--first-black)
-![Agent](https://img.shields.io/badge/agent-a11y--first-6f42c1)
-![后端](https://img.shields.io/badge/backend-none-orange)
-![语言](https://img.shields.io/badge/language-TypeScript-3178c6)
-![UI](https://img.shields.io/badge/UI-React-61dafb)
-![Memory](https://img.shields.io/badge/memory-local--first-0969da)
-![Tools](https://img.shields.io/badge/tools-bh__prefix-black)
-![License](https://img.shields.io/badge/license-TBD-lightgrey)
+<p align="center">
+  <img src="https://img.shields.io/badge/status-v1.0-blue" alt="Status" />
+  <img src="https://img.shields.io/badge/runtime-browser_extension-2ea44f" alt="Runtime" />
+  <img src="https://img.shields.io/badge/architecture-local--first-black" alt="Architecture" />
+  <img src="https://img.shields.io/badge/agent-a11y--first-6f42c1" alt="Agent" />
+  <img src="https://img.shields.io/badge/backend-none-orange" alt="Backend" />
+  <img src="https://img.shields.io/badge/language-TypeScript-3178c6" alt="Language" />
+  <img src="https://img.shields.io/badge/UI-React-61dafb" alt="UI" />
+  <img src="https://img.shields.io/badge/memory-local--first-0969da" alt="Memory" />
+  <img src="https://img.shields.io/badge/tools-bh__prefix-black" alt="Tools" />
+  <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="License" />
+</p>
 
-**BrowserHelm（浏览器舵手）** 是一个本地优先、a11y-first 的浏览器 Agent。它运行在用户自己的浏览器扩展里，通过结构化页面观察、稳定元素引用、可审批工具执行、本地记忆和可复盘 trace，帮助用户调试页面、填写表单、理解错误、复用工作流，并最终成长为完整的浏览器 Agent 平台。
+<h1 align="center">BrowserHelm · 浏览器舵手</h1>
 
-它不是云浏览器，不是后端自动化服务，也不是把通用 Agent SDK 包一层 UI。BrowserHelm 的核心资产是自己的浏览器 Agent Kernel：观察页面、决定动作、审批风险、执行工具、验证结果、写入 trace、使用 memory，并把每一步清楚地展示给用户。
+<p align="center">
+  <strong>先看懂页面，再安全执行。</strong><br />
+  一个跑在你浏览器里的本地优先 AI 页面助手。
+</p>
 
-## 一句话定位
+<p align="center">
+  <a href="README_EN.md">English</a>
+</p>
 
-```txt
-BrowserHelm = local-first browser agent cockpit + a11y-first page tools + inspectable memory + safe workflow replay.
-```
+---
 
-当前阶段更聚焦的产品表达是：
+## 产品定位
 
-```txt
-BrowserHelm：先看懂页面，再安全执行。
-```
+**BrowserHelm（浏览器舵手）** 是一个本地优先的浏览器 AI Agent。它作为 Chrome 扩展直接运行在你的浏览器中，能看懂页面、诊断问题、帮你理解表单为什么填不了，并在你的允许下安全执行操作。
 
-## 核心原则
+它不是云浏览器，不是后端自动化，也不是通用 Agent SDK 的 UI 壳。BrowserHelm 的核心是自己的 Agent Kernel：观察页面 → 分析问题 → 请示风险 → 执行工具 → 验证结果 → 记录 trace，每一步都清楚展示给你。
 
-- **Local-first**：核心 Agent loop、memory、trace、settings、tool execution 默认在本地浏览器扩展内完成。
-- **No required backend**：核心产品不需要后端；未来云同步、团队能力、hosted mode 只能是可选增强。
-- **A11y-first**：优先使用 accessibility-like tree、stable refs、form snapshots、console/network errors，而不是截图优先。
-- **Self-owned Agent Kernel**：不把早期核心 loop 交给 OpenAI Agents SDK、Vercel AI SDK 或 LangChain AgentExecutor。
-- **Transparent Cockpit UI**：用户必须看到 Agent 看到了什么、调用了什么工具、为什么失败、哪些动作需要确认。
-- **Approval by design**：提交、发送、发布、删除、支付、上传、执行 JS、剪贴板、workflow replay 等高风险动作必须审批。
-- **Inspectability**：Memory、trace、workflow、tool result 都要可查看、可删除、可复盘。
+## 当前能力 (v1.0)
 
-## v1.0 产品目标
+BrowserHelm 的首个可发布版本定位为 **Page Inspector + Form Doctor**。
 
-v1.0 不追求“全能浏览器 Agent”，而是交付第一个可发布产品：**Page Inspector + Form Doctor**。
-
-它要解决：
-
+**页面诊断** — 一眼看懂页面健康状况：
 - 页面为什么报错？
-- 表单为什么不能提交？
+- Console / Network 有什么异常？
+- 当前页面状态概览（标题、来源、交互元素数量）
+
+**表单医生** — 帮你排查表单问题：
 - 哪些必填项缺失？
 - 哪个按钮为什么 disabled？
-- 当前页面的 console / network 有没有明显异常？
+- 表单验证错误在哪？
+- 提交按钮的关联状态如何？
 
-v1.0 必须包含：
+**安全执行** — 高风险动作必须经过你审批：
+- 提交、发送、删除、发布、执行 JS 等操作默认阻断
+- approval 面板清晰展示要做什么、风险多大
+- 你决定执行还是拒绝
 
-- Chrome extension side panel。
-- BYOK OpenAI-compatible ModelClient。
-- 自研 AgentLoop / ToolRegistry / DecisionParser / TraceRecorder。
-- Mode system：Ask / Debug / Form / Act。
-- TaskClassifier / ToolSelector / RecoveryPolicy。
-- Evidence / Confidence / Goal / SuccessCriteria。
-- Mode-based lightweight plan。
-- Human-readable DebugReport。
-- HITL / Policy / Approval Runtime：高风险动作必须被阻断并进入 approval flow。
-- A11y snapshot、stable ref_id、低风险 inspect / focus。
-- Form list/inspect/read/find missing required/find validation errors/find disabled submit reason。
-- Read-only page health summary：console errors、network failures、基础页面状态。
-- Cockpit UI：chat、timeline、tool inspector、observation panel、approval dialog、settings。
+**本地优先** — 你的数据归你：
+- 核心 Agent loop、memory、trace、配置全在本地
+- 不需要后端，不需要注册任何服务
+- 未来云同步仅作为可选增强
 
-v1.0 明确不包含：
+**可复盘可追溯** — Agent 每步都可见：
+- 消息瀑布流展示 Agent 看到了什么、做了什么
+- trace 事件完整记录决策过程
+- 高级开发者选项提供完整诊断面板
 
-- 表单自动填写与批量填写。
-- submit-with-approval。
-- FormPanel / DebugPanel / TraceViewer detail。
-- 长期 memory / workflow replay。
-- DevTools CDP response body deep inspector。
-- Vision / screenshot-first agent。
-- Multi-tab / iframe / shadow DOM 深度工具。
-- PDF、download/upload、clipboard。
-- Domain adapters。
-- OpenAI Agents SDK 或 Vercel AI SDK core integration。
+## 安装
+
+BrowserHelm 是一款 Chrome 扩展。目前已支持开发者模式手动加载，后续将上架 Chrome Web Store。
+
+**开发者模式安装：**
+
+```bash
+git clone https://github.com/your-org/browser-helm.git
+cd browser-helm
+npm install
+npm run build
+```
+
+然后在 Chrome 中：
+
+1. 打开 `chrome://extensions`
+2. 开启「开发者模式」
+3. 点击「加载已解压的扩展程序」
+4. 选择 `.output/chrome-mv3` 目录
+
+**配置模型：**
+
+BrowserHelm 不内置任何模型服务。首次使用需要配置：
+1. 点击右侧栏顶部齿轮图标进入模型配置
+2. 填入你已有的 OpenAI 兼容 API 信息（支持自定义 Base URL）
+3. 点击测试连接确认可用
+
+## 使用场景
+
+| 场景 | 描述 |
+|------|------|
+| **前端调试** | 打开目标页面，让 BrowserHelm 观察并诊断 console / network 异常 |
+| **表单排查** | 面对复杂的表单，让 BrowserHelm 找出缺失必填项和 disabled 原因 |
+| **页面理解** | 快速获取页面结构概览：title、来源、交互元素、表单字段 |
+| **安全执行** | 在需要操作页面时，通过审批流程安全执行高风险动作 |
 
 ## 技术栈
 
-- Extension framework：WXT。
-- UI：React。
-- Language：TypeScript。
-- Schema：Zod。
-- IndexedDB：Dexie.js。
-- UI state：Zustand。
-- A11y helpers：DOM APIs、`dom-accessibility-api`、`aria-query`。
-- Browser APIs：Chrome Extension APIs、Side Panel、Tabs、Scripting、Storage、Downloads、Debugger/CDP。
-- Model layer：自研 OpenAI-compatible REST client，支持 BYOK、custom base URL、model config。
-- Lint/Type：ESLint flat config、strict TypeScript。
+- **扩展框架**：[WXT](https://wxt.dev/)
+- **界面**：React + [Animal Island UI](https://github.com/guokaigdg/animal-island-ui)（动物森友会视觉主题）
+- **语言**：TypeScript
+- **Schema**：Zod
+- **本地存储**：Dexie.js (IndexedDB)
+- **状态管理**：Zustand
+- **模型层**：自研 OpenAI 兼容 REST Client，支持 BYOK
 
-## Roadmap
+## 路线图
 
-- `v0.1` Agent Kernel Prototype：纯前端 loop、model client、tool registry、trace、versioning、raw model output trace。
-- `v0.2` Page Observation + Ref Prototype：真实页面观察、visible text、页面状态、stable ref map、domain awareness、prompt injection fixture。
-- `v0.3` Structured Page Data Prototype：结构化页面数据总层，承接四类 tab data contract。
-- `v0.31` Interactive Elements Prototype：交互元素、role/name/state、visible/disabled/checked/selected。
-- `v0.32` Form Fields Prototype：表单字段、label/type/required/value/validation、submit 关联。
-- `v0.33` Safe Action Readiness Prototype：动作前检查、risk、staleRefs、requiresObserve、基础 approval request。
-- `v0.4` Complete Cockpit UI Prototype：完整 side panel UI，产品化页面观察、Ref、交互元素、表单字段、Trace、Settings、Approval。
-- `v1.0` Page Inspector + Form Doctor：第一个可发布版本，先做只读诊断，包含 TaskClassifier、ToolSelector、RecoveryPolicy、mode-based plan、Evidence/Confidence、Goal/SuccessCriteria。
-- `v1.1` Assisted Form Fill + Frontend Debug：表单填写、verify、submit approval、FormPanel、DebugPanel、TraceViewer。
-- `v1.2` Memory + Workflow Replay：scratchpad、domain memory、workflow replay。
-- `v1.3` DevTools/CDP Deep Tools：debugger、network detail、response body、performance。
-- `v1.4` Vision/Screenshot Agent：视觉理解、遮挡、布局、坐标 fallback。
-- `v1.5` Advanced Browser Tools：tabs、iframe、shadow DOM、files、PDF、clipboard。
-- `v1.6` Domain Adapters：GitHub、Gmail、Notion、Linear、Jira、Stripe、Vercel、Supabase。
-- `v2.0` Full Browser Agent Platform：eval、prompt injection eval、trace replay、skill/MCP ecosystem、tool sandbox、adapter/workflow ecosystem、agent-as-tool、多 agent、optional sync/team。
+- **v1.0** — Page Inspector + Form Doctor：第一个可发布版本，只读诊断 + 安全审批
+- **v1.1** — Assisted Form Fill + Frontend Debug：辅助填表、表单验证、深度调试面板
+- **v1.2** — Memory + Workflow Replay：本地记忆、工作流复盘
+- **v1.3** — DevTools/CDP 深度集成：Network 详情、Performance、Response Body
+- **v1.4** — Vision/Screenshot Agent：视觉理解、布局分析
+- **v1.5** — 高级浏览器工具：多标签、iframe、Shadow DOM、文件/剪贴板
+- **v1.6** — 领域适配器：GitHub、Gmail、Notion、Linear 等
+- **v2.0** — 完整浏览器 Agent 平台
 
-## 文档入口
+## 开发
 
-- `docs/architecture.md`：完整架构、技术选型、目录结构、运行边界。
-- `docs/tools.md`：完整 `bh_` 工具体系与 v1.0/v2.0 tool set。
-- `docs/memory.md`：scratchpad、domain memory、workflow memory、replay policy。
-- `docs/security.md`：权限、安全、prompt injection、secret masking、approval。
-- `docs/research.md`：Sarathi、WebBrain、BrowserBee、BrowserKing、onUI、SDK 取舍。
-- `docs/decisions.md`：关键 ADR。
-- `docs/roadmap/`：每个版本一个需求文档，使用统一 11 模块模板。
-- `docs/roadmap/final-version-structure.md`：最终架构和版本边界总览。
-- `docs/specs/`：AgentDecision、Observation、ToolSpec、ToolResult、TraceEvent、Approval、Memory、Finding、Goal、Plan、Capabilities、RunMetadata。
-- `docs/design/`：只放设计图。
+```bash
+# 启动开发模式
+npm run dev
+
+# 类型检查
+npm run typecheck
+
+# 运行测试
+npm test
+
+# E2E 测试
+npm run test:e2e
+
+# 扩展调试
+npm run debug:extension:watch
+```
+
+## 开源协议
+
+本项目采用 MIT License 开源协议。
+
+---
+
+<p align="center">
+  <sub>Made with ❤️ for people who build on the web</sub>
+</p>

@@ -25,12 +25,14 @@ import {
 import { initializeGoalState } from '../goal/goal-state';
 import {
   buildDebugReport,
-  buildFormDoctorFindings
+  buildFormDoctorFindings,
+  buildPageHealthFindings
 } from '../report/findings-report';
 import { resolveRuntimeCapabilities } from '../../runtime/capabilities/runtime-capabilities';
 import { approvalRequiredResult } from '../../tools/core/tool-result-factory';
 import { failedToolResult } from '../../tools/core/tool-result-factory';
 import { formReadFieldsPayloadSchema } from '../../shared/schemas/structured-page-data.schema';
+import { pageHealthSummarySchema } from '../../shared/schemas/page-health.schema';
 import type { RunMode } from '../../shared/schemas/tool.schema';
 import type { RuntimeCapabilities } from '../../shared/schemas/runtime-capabilities.schema';
 import {
@@ -38,6 +40,10 @@ import {
   redactModelOutputText,
   redactToolArgs
 } from '../../tools/core/tool-args-redaction';
+import {
+  maskProviderSecret,
+  redactProviderBaseUrlForTrace
+} from '../../shared/redaction';
 
 type AgentLoopDeps = {
   modelClient: ModelClient;
@@ -123,7 +129,7 @@ export class AgentLoop {
           contextPolicyVersion: CONTEXT_POLICY_VERSION,
           model: runtimeModel,
           runMode,
-          providerBaseUrl: runtimeBaseUrl
+          providerBaseUrl: redactProviderBaseUrlForTrace(runtimeBaseUrl)
         }
       }
     });
@@ -256,11 +262,128 @@ export class AgentLoop {
 
       let modelOutput;
       try {
-        modelOutput = await this.deps.modelClient.complete({
+        const modelInput = {
           runId,
           stepIndex,
           messages: built.messages
-        });
+        };
+        if (this.deps.modelClient.streamComplete) {
+          let chunkCount = 0;
+          let streamFailureRecorded = false;
+          try {
+            modelOutput = await this.deps.modelClient.streamComplete(modelInput, {
+              onStart: () => {
+                appendTrace(this.deps.traceRecorder, {
+                  id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.MODEL_STREAM_STARTED),
+                  runId,
+                  turnId: stepId,
+                  stepIndex,
+                  type: TRACE_EVENT_NAMES.MODEL_STREAM_STARTED,
+                  timestamp: Date.now(),
+                  schemaVersion: TRACE_SCHEMA_VERSION,
+                  payload: {
+                    model: runtimeModel
+                  }
+                });
+              },
+              onDelta: (delta) => {
+                chunkCount += 1;
+                appendTrace(this.deps.traceRecorder, {
+                  id: createEventId(runId, stepIndex, `${TRACE_EVENT_NAMES.MODEL_STREAM_DELTA}:${chunkCount}`),
+                  runId,
+                  turnId: stepId,
+                  stepIndex,
+                  type: TRACE_EVENT_NAMES.MODEL_STREAM_DELTA,
+                  timestamp: Date.now(),
+                  schemaVersion: TRACE_SCHEMA_VERSION,
+                  payload: {
+                    chunkCount,
+                    charCount: delta.length,
+                    preview: redactModelOutputText(delta).slice(0, 120)
+                  }
+                });
+              },
+              onFinish: (output) => {
+                appendTrace(this.deps.traceRecorder, {
+                  id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.MODEL_STREAM_FINISHED),
+                  runId,
+                  turnId: stepId,
+                  stepIndex,
+                  type: TRACE_EVENT_NAMES.MODEL_STREAM_FINISHED,
+                  timestamp: Date.now(),
+                  schemaVersion: TRACE_SCHEMA_VERSION,
+                  payload: {
+                    chunkCount,
+                    charCount: output.text.length,
+                    model: runtimeModel
+                  }
+                });
+              },
+              onError: (error) => {
+                streamFailureRecorded = true;
+                appendTrace(this.deps.traceRecorder, {
+                  id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.MODEL_STREAM_FAILED),
+                  runId,
+                  turnId: stepId,
+                  stepIndex,
+                  type: TRACE_EVENT_NAMES.MODEL_STREAM_FAILED,
+                  timestamp: Date.now(),
+                  schemaVersion: TRACE_SCHEMA_VERSION,
+                  payload: {
+                    message: maskProviderSecret(redactModelOutputText(error.message)),
+                    chunkCount
+                  }
+                });
+              }
+            });
+          } catch (streamError) {
+            if (!streamFailureRecorded) {
+              const message = streamError instanceof Error
+                ? streamError.message
+                : 'Model streaming failed';
+              appendTrace(this.deps.traceRecorder, {
+                id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.MODEL_STREAM_FAILED),
+                runId,
+                turnId: stepId,
+                stepIndex,
+                type: TRACE_EVENT_NAMES.MODEL_STREAM_FAILED,
+                timestamp: Date.now(),
+                schemaVersion: TRACE_SCHEMA_VERSION,
+                payload: {
+                  message: maskProviderSecret(redactModelOutputText(message)),
+                  chunkCount
+                }
+              });
+            }
+            appendTrace(this.deps.traceRecorder, {
+              id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_STARTED),
+              runId,
+              turnId: stepId,
+              stepIndex,
+              type: TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_STARTED,
+              timestamp: Date.now(),
+              schemaVersion: TRACE_SCHEMA_VERSION,
+              payload: {
+                reason: 'stream_failed'
+              }
+            });
+            modelOutput = await this.deps.modelClient.complete(modelInput);
+            appendTrace(this.deps.traceRecorder, {
+              id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_FINISHED),
+              runId,
+              turnId: stepId,
+              stepIndex,
+              type: TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_FINISHED,
+              timestamp: Date.now(),
+              schemaVersion: TRACE_SCHEMA_VERSION,
+              payload: {
+                charCount: modelOutput.text.length
+              }
+            });
+          }
+        } else {
+          modelOutput = await this.deps.modelClient.complete(modelInput);
+        }
       } catch (error) {
         const normalized = normalizeModelError(error);
         return this.failRun({
@@ -338,6 +461,39 @@ export class AgentLoop {
       });
 
       if (parsed.decision.type === 'finish') {
+        const unsatisfiedCriteria = findUnsatisfiedSuccessCriteria(
+          input.successCriteria ?? [],
+          runMode,
+          session
+        );
+        if (unsatisfiedCriteria.length > 0) {
+          controller.pause(ERROR_CODES.ASK_USER_REQUIRED);
+          const endedAt = Date.now();
+          appendTrace(this.deps.traceRecorder, {
+            id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.TURN_FINISHED),
+            runId,
+            turnId: stepId,
+            stepIndex,
+            type: TRACE_EVENT_NAMES.TURN_FINISHED,
+            timestamp: endedAt,
+            durationMs: endedAt - startedAt,
+            schemaVersion: TRACE_SCHEMA_VERSION,
+            payload: {
+              stepIndex,
+              startedAt,
+              endedAt,
+              durationMs: endedAt - startedAt,
+              status: 'paused',
+              unsatisfiedCriteria
+            }
+          });
+          return {
+            runId,
+            status: 'paused',
+            message: `Success criteria not satisfied: ${unsatisfiedCriteria.join(' | ')}`,
+            trace: this.deps.traceRecorder.list(runId)
+          };
+        }
         controller.markFinished();
         const endedAt = Date.now();
         appendTrace(this.deps.traceRecorder, {
@@ -845,20 +1001,24 @@ export class AgentLoop {
       return;
     }
 
-    const findings =
-      input.runMode === 'form'
-        ? input.session.turns.flatMap((turn) => {
-            const parsed = formReadFieldsPayloadSchema.safeParse(turn.toolResult?.data);
-            if (!parsed.success) {
-              return [];
-            }
-            return buildFormDoctorFindings({
-              fields: parsed.data.fields,
-              submit: parsed.data.submit,
-              warnings: parsed.data.warnings
-            });
-          })
-        : [];
+    const findings = input.session.turns.flatMap((turn) => {
+      if (input.runMode === 'form') {
+        const parsed = formReadFieldsPayloadSchema.safeParse(turn.toolResult?.data);
+        if (!parsed.success) {
+          return [];
+        }
+        return buildFormDoctorFindings({
+          fields: parsed.data.fields,
+          submit: parsed.data.submit,
+          warnings: parsed.data.warnings
+        });
+      }
+      const parsed = pageHealthSummarySchema.safeParse(turn.toolResult?.data);
+      if (!parsed.success) {
+        return [];
+      }
+      return buildPageHealthFindings(parsed.data);
+    });
 
     if (findings.length > 0) {
       appendTrace(this.deps.traceRecorder, {
@@ -875,9 +1035,14 @@ export class AgentLoop {
       });
     }
 
+    const debugHealth = input.session.turns
+      .map((turn) => pageHealthSummarySchema.safeParse(turn.toolResult?.data))
+      .find((parsed) => parsed.success)?.data;
     const limitations =
-      input.runMode === 'debug' && findings.length === 0
-        ? ['暂未收集到可汇总的浅层 debug finding']
+      input.runMode === 'debug'
+        ? debugHealth?.limitations ?? (findings.length === 0
+            ? ['暂未收集到可汇总的浅层 debug finding']
+            : undefined)
         : undefined;
     const report = buildDebugReport({
       title: input.runMode === 'form' ? 'Form Doctor 诊断报告' : 'Page Inspector 诊断报告',
@@ -931,6 +1096,48 @@ function normalizeModelError(error: unknown): {
     message,
     retryable: code !== ERROR_CODES.PROVIDER_NOT_CONFIGURED
   };
+}
+
+function findUnsatisfiedSuccessCriteria(
+  criteria: string[],
+  runMode: RunMode,
+  session: ReturnType<typeof createLoopSession>
+): string[] {
+  if (criteria.length === 0) {
+    return [];
+  }
+  return criteria.filter((criterion) =>
+    !hasSupportingEvidenceForCriterion(criterion, runMode, session)
+  );
+}
+
+function hasSupportingEvidenceForCriterion(
+  criterion: string,
+  runMode: RunMode,
+  session: ReturnType<typeof createLoopSession>
+): boolean {
+  const normalized = criterion.toLowerCase();
+  if (/debug|console|network|页面健康|错误|异常/u.test(normalized)) {
+    return session.turns.some((turn) =>
+      pageHealthSummarySchema.safeParse(turn.toolResult?.data).success
+    );
+  }
+  if (/form|表单|字段|必填|required|校验|validation|disabled|submit/u.test(normalized)) {
+    return session.turns.some((turn) =>
+      formReadFieldsPayloadSchema.safeParse(turn.toolResult?.data).success
+    );
+  }
+  if (runMode === 'debug') {
+    return session.turns.some((turn) =>
+      pageHealthSummarySchema.safeParse(turn.toolResult?.data).success
+    );
+  }
+  if (runMode === 'form') {
+    return session.turns.some((turn) =>
+      formReadFieldsPayloadSchema.safeParse(turn.toolResult?.data).success
+    );
+  }
+  return session.turns.some((turn) => turn.toolResult?.ok === true);
 }
 
 function getRetryableFromToolResult(result: {

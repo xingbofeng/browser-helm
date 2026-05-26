@@ -20,10 +20,12 @@
   },
   "dependencies": {
     "@wxt-dev/module-react": "latest",
+    "animal-island-ui": "^0.9.4",
     "aria-query": "latest",
     "dexie": "latest",
     "dom-accessibility-api": "latest",
     "lucide-react": "^1.16.0",
+    "marked": "^18.0.4",
     "react": "latest",
     "react-dom": "latest",
     "wxt": "latest",

@@ -22,12 +22,22 @@ export const contentRpcRequestSchema = z.discriminatedUnion('type', [
     refId: z.string().min(1)
   }),
   z.object({
+    type: z.literal(CONTENT_RPC_MESSAGES.A11Y_HIGHLIGHT_REF),
+    refId: z.string().min(1)
+  }),
+  z.object({
     type: z.literal(CONTENT_RPC_MESSAGES.A11Y_REFRESH_REFS)
   }),
   z.object({
     type: z.literal(CONTENT_RPC_MESSAGES.IFRAME_READ),
     frameId: z.number().int().nonnegative(),
     refId: z.string().min(1)
+  }),
+  z.object({
+    type: z.literal(CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE),
+    frameId: z.number().int().nonnegative(),
+    refId: z.string().min(1),
+    action: z.enum(['click', 'type'])
   }),
   z.object({
     type: z.literal(CONTENT_RPC_MESSAGES.IFRAME_CLICK),
@@ -69,6 +79,10 @@ export const contentRpcSuccessSchema = z.union([
     ok: z.literal(true),
     ref: z.unknown(),
     changedPage: z.boolean().optional()
+  }),
+  z.object({
+    ok: z.literal(true),
+    actionToken: z.string().min(1)
   })
 ]);
 

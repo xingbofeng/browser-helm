@@ -2,12 +2,16 @@ import type { RuntimePort } from './runtime-port';
 import {
   runtimeResponseSchema,
   type DecideApprovalInput,
+  type HighlightRefInput,
   type RuntimeEvent,
   type RuntimeProviderSettings,
+  type RuntimeProviderTestResult,
   type RuntimeResponse,
   type RuntimeToolExecutionResult,
   type RunSnapshot,
-  type StartRunInput
+  type ReviseGoalInput,
+  type StartRunInput,
+  type TestProviderSettingsInput
 } from './runtime-messages';
 import { ERROR_CODES } from '../shared/constants/error-codes';
 import { RUNTIME_MESSAGES } from '../shared/constants/event-names';
@@ -38,6 +42,34 @@ export class ExtensionRuntimePort implements RuntimePort {
     if (!response.ok) {
       throw new Error(response.message);
     }
+  }
+
+  async reviseGoal(input: ReviseGoalInput): Promise<RunSnapshot> {
+    const response = await sendRuntimeMessage({
+      type: RUNTIME_MESSAGES.REVISE_GOAL,
+      input
+    });
+    if (!response.ok) {
+      throw new Error(response.message);
+    }
+    if (!isRunSnapshot(response.data)) {
+      throw new Error('Runtime revise goal response is invalid');
+    }
+    return response.data;
+  }
+
+  async highlightRef(input: HighlightRefInput): Promise<RuntimeToolExecutionResult> {
+    const response = await sendRuntimeMessage({
+      type: RUNTIME_MESSAGES.HIGHLIGHT_REF,
+      input
+    });
+    if (!response.ok) {
+      throw new Error(response.message);
+    }
+    if (!isToolResult(response.data)) {
+      throw new Error('Runtime highlight ref response is invalid');
+    }
+    return response.data;
   }
 
   async sendUserReply(_runId: string, _message: string): Promise<void> {
@@ -98,6 +130,22 @@ export class ExtensionRuntimePort implements RuntimePort {
   setProviderSettings(settings: RuntimeProviderSettings): Promise<void> {
     return this.settingsStore.setProviderSettings(settings);
   }
+
+  async testProviderSettings(
+    input: TestProviderSettingsInput
+  ): Promise<RuntimeProviderTestResult> {
+    const response = await sendRuntimeMessage({
+      type: RUNTIME_MESSAGES.TEST_PROVIDER_CONNECTION,
+      input
+    });
+    if (!response.ok) {
+      throw new Error(response.message);
+    }
+    if (!isProviderTestResult(response.data)) {
+      throw new Error('Runtime provider test response is invalid');
+    }
+    return response.data;
+  }
 }
 
 async function sendRuntimeMessage(message: unknown): Promise<RuntimeResponse> {
@@ -134,6 +182,10 @@ function isToolResult(value: unknown): value is RuntimeToolExecutionResult {
 
 function isRuntimeEvent(value: unknown): value is RuntimeEvent {
   return isRecord(value) && typeof value.runId === 'string' && typeof value.type === 'string';
+}
+
+function isProviderTestResult(value: unknown): value is RuntimeProviderTestResult {
+  return isRecord(value) && typeof value.ok === 'boolean' && typeof value.code === 'string';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

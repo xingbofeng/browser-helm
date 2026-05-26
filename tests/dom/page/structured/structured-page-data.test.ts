@@ -101,6 +101,7 @@ describe('structured page data builder', () => {
     expect(summary.counts.refs).toBe(structured.refs.count);
     expect(summary.highlights.length).toBeLessThanOrEqual(2);
     expect(summary.summary).toContain('字段');
+    expect(summary.summary).toContain('|');
     expect(summary.summary).not.toContain('valuePreview');
     expect(summary.summary).not.toContain('[MASKED]');
     expect(JSON.stringify(summary)).not.toContain('items');

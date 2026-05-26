@@ -5,7 +5,7 @@ import { CockpitApp } from '../../../../src/ui/sidepanel/cockpit-app';
 import { FakeRuntimePort } from '../../../../src/runtime/fake-runtime-port';
 
 describe('CockpitApp', () => {
-  it('renders cockpit shell with core tabs, timeline, approval and settings surfaces', () => {
+  it('renders BrowserHelm agent surface with debug and model configuration entry points', () => {
     const html = renderToString(
       <CockpitApp
         runtime={new FakeRuntimePort({
@@ -30,18 +30,17 @@ describe('CockpitApp', () => {
             }
           ]
         })}
+        initialRunId="seed"
       />
     );
 
     expect(html).toContain('BrowserHelm');
-    expect(html).toContain('v0.4');
-    expect(html).toContain('v0.4 页面数据驾驶舱');
-    expect(html).toContain('页面观察');
-    expect(html).toContain('Ref 映射');
-    expect(html).toContain('交互元素');
-    expect(html).toContain('表单字段');
-    expect(html).toContain('执行时间线');
-    expect(html).toContain('工具结果');
-    expect(html).toContain('Settings');
+    expect(html).not.toContain('Cockpit');
+    expect(html).not.toContain('页面数据驾驶舱');
+    expect(html).not.toContain('页面观察');
+    expect(html).toContain('BrowserHelm Agent 消息');
+    expect(html).toContain('高级开发者选项');
+    expect(html).toContain('aria-label="打开模型配置"');
+    expect(html).toContain('你想和 BrowserHelm 聊点什么......');
   });
 });

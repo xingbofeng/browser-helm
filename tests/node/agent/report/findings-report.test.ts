@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDebugReport,
   buildFormDoctorFindings,
+  buildPageHealthFindings,
   buildFinding,
   confidenceFromEvidence
 } from '../../../../src/agent/report/findings-report';
@@ -97,5 +98,38 @@ describe('findings-report', () => {
     expect(findings[1]?.evidence[0]?.summary).toContain('请填写邮箱');
     expect(findings[2]?.confidence).toBe('medium');
     expect(findings[2]?.evidence[0]?.refId).toBe('ref_email');
+  });
+
+  it('builds Page Inspector findings from console and network health signals', () => {
+    const findings = buildPageHealthFindings({
+      consoleErrors: [
+        {
+          message: 'Uncaught TypeError',
+          source: 'app.js',
+          count: 2
+        }
+      ],
+      networkFailures: [
+        {
+          url: 'https://api.example.com/users',
+          method: 'GET',
+          errorText: 'Failed to fetch'
+        }
+      ],
+      hasForm: false,
+      pageStateSummary: '检测到 1 类 console error 和 1 个 network failure',
+      limitations: ['CDP deep inspection is not used in v1.0']
+    });
+
+    expect(findings.map((finding) => finding.title)).toEqual([
+      'Console error',
+      'Network failure'
+    ]);
+    expect(findings[0]?.confidence).toBe('high');
+    expect(findings[0]?.evidence[0]).toMatchObject({
+      source: 'debug',
+      summary: 'app.js: Uncaught TypeError (2 次)'
+    });
+    expect(findings[1]?.evidence[0]?.summary).toContain('GET https://api.example.com/users');
   });
 });

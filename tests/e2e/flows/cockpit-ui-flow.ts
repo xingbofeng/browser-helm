@@ -1,5 +1,4 @@
 import { CockpitPanel } from '../components/side-panel/cockpit-panel';
-import { ERROR_CODES } from '../../../src/shared/constants/error-codes';
 import { TOOL_NAMES } from '../../../src/shared/constants/tool-names';
 import { E2EFlowContext } from './e2e-flow-context';
 import { findFrameRef } from './page-observation-flow';
@@ -11,7 +10,7 @@ export class CockpitUiFlow {
     return new CockpitUiFlow(await E2EFlowContext.create());
   }
 
-  async expectCockpitAutoObservationAndStop(): Promise<void> {
+  async expectCockpitAutoObservation(): Promise<void> {
     const fixture = await this.flowContext.fixturePage();
     await fixture.goto('basic-form.html');
 
@@ -24,9 +23,6 @@ export class CockpitUiFlow {
       title: '欢迎注册 - 示例网站',
       url: `${this.flowContext.origin}/basic-form.html`
     });
-    await cockpit.expectObservationTimelineSteps();
-    await cockpit.stopRun();
-    await cockpit.expectCancelled();
   }
 
   async expectApprovalDrawerFromPendingRuntimeRequest(): Promise<void> {
@@ -54,8 +50,7 @@ export class CockpitUiFlow {
 
     const approvalPage = await sidePanel.openRun(snapshot.runId);
     await new CockpitPanel(approvalPage).expectApprovalDrawer({
-      action: 'Click Iframe Target',
-      code: ERROR_CODES.APPROVAL_REQUIRED
+      action: 'Click Iframe Target'
     });
   }
 
@@ -96,7 +91,7 @@ export class CockpitUiFlow {
     });
     const page = await sidePanel.openRun(snapshot.runId);
 
-    await new CockpitPanel(page).expectDiagnosisOverview({
+    await new CockpitPanel(page).expectAgentDiagnosis({
       modeText: '用户显式选择 form mode',
       reportTitle: 'Form Doctor 诊断报告',
       finding: '字段校验失败'
@@ -109,6 +104,19 @@ export class CockpitUiFlow {
 
     const tabId = await this.flowContext.shell().activeTabId();
     const sidePanel = this.flowContext.sidePanel();
+    await sidePanel.runOnTab({
+      tabId,
+      task: '观察当前页面',
+      mode: 'ask'
+    });
+    await fixture.page.evaluate(() => {
+      window.postMessage({
+        channel: 'BROWSER_HELM_PAGE_HEALTH_EVENT',
+        kind: 'console_error',
+        message: 'Payment widget failed to initialize',
+        source: 'console'
+      }, '*');
+    });
     const snapshot = await sidePanel.runOnTab({
       tabId,
       task: '检查这个页面有什么错误',
@@ -116,10 +124,10 @@ export class CockpitUiFlow {
     });
     const page = await sidePanel.openRun(snapshot.runId);
 
-    await new CockpitPanel(page).expectDiagnosisOverview({
+    await new CockpitPanel(page).expectAgentDiagnosis({
       modeText: '用户显式选择 debug mode',
       reportTitle: 'Page Inspector 诊断报告',
-      limitation: '暂未收集到可汇总的浅层 debug finding'
+      finding: 'Console error'
     });
   }
 

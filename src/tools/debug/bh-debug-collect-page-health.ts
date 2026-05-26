@@ -56,6 +56,21 @@ export function bhDebugCollectPageHealth(
       }
 
       const observation = response.observation;
+      if (observation.pageHealth) {
+        const payload = pageHealthSummarySchema.parse(observation.pageHealth);
+        return {
+          ok: true,
+          code: ERROR_CODES.OK,
+          summary: payload.pageStateSummary,
+          data: payload,
+          changedPage: false,
+          requiresObserve: false,
+          context: {
+            visibility: 'summary',
+            summary: payload.pageStateSummary
+          }
+        };
+      }
       const hasForm =
         typeof observation.formFields === 'object' &&
         observation.formFields !== null &&
@@ -67,7 +82,7 @@ export function bhDebugCollectPageHealth(
         networkFailures: [],
         hasForm,
         pageStateSummary: observation.pageStateSummary,
-        limitations: ['Console/network shallow signals are unavailable from content RPC']
+        limitations: ['CDP deep inspection is not used in v1.0']
       });
 
       return {

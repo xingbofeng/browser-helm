@@ -50,6 +50,7 @@ describe('content RPC frame aggregation', () => {
       },
       files: ['content-scripts/content.js']
     });
+    expect(executeScript).toHaveBeenCalledTimes(1);
     expect(sendMessage).toHaveBeenCalledWith(
       1499184501,
       { type: CONTENT_RPC_MESSAGES.PAGE_OBSERVE },

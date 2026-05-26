@@ -32,7 +32,7 @@ export function readFormFields(
 ): FormReaderResult {
   const fieldElements = Array.from(
     document.querySelectorAll<HTMLElement>(FIELD_SELECTOR)
-  );
+  ).filter(isVisibleElement);
   if (fieldElements.length === 0) {
     return {
       status: 'empty',

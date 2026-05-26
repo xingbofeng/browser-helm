@@ -1,15 +1,11 @@
 import { useMemo } from 'react';
+import 'animal-island-ui/style';
 import './app.css';
 
 import { ExtensionRuntimePort } from '../../runtime/extension-runtime-port';
 import type { RuntimePort } from '../../runtime/runtime-port';
+import { SIDE_PANEL_MESSAGES } from '../../shared/constants/event-names';
 import { CockpitApp } from '../../ui/sidepanel/cockpit-app';
-
-export {
-  readTargetTabChangedTabId,
-  resolveTargetModeFromSearch,
-  SidePanelView
-} from '../../ui/sidepanel/legacy-side-panel-view';
 
 export function App() {
   const runtime = useMemo<RuntimePort>(() => new ExtensionRuntimePort(), []);
@@ -39,4 +35,24 @@ function readStringSearchParam(name: string): string | undefined {
     return undefined;
   }
   return new URLSearchParams(window.location.search).get(name) ?? undefined;
+}
+
+export function resolveTargetModeFromSearch(search: string): 'active' | 'pinned' {
+  const params = new URLSearchParams(search);
+  if (params.get('target') === 'active') {
+    return 'active';
+  }
+  return params.has('tabId') ? 'pinned' : 'active';
+}
+
+export function readTargetTabChangedTabId(message: unknown): number | undefined {
+  if (typeof message !== 'object' || message === null) {
+    return undefined;
+  }
+  const record = message as Record<string, unknown>;
+  return record.type === SIDE_PANEL_MESSAGES.TARGET_TAB_CHANGED &&
+    Number.isInteger(record.tabId) &&
+    Number(record.tabId) > 0
+    ? Number(record.tabId)
+    : undefined;
 }

@@ -10,6 +10,20 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
       startRun: async () => ({ runId: 'run_1' }),
       getSnapshot: () => ({ runId: 'run_1', mode: 'act', status: 'observed' }),
       cancelRun: async () => ({ runId: 'run_1', status: 'cancelled' }),
+      reviseGoal: async (input) => {
+        calls.push(`${input.runId}:revise`);
+        return {
+          runId: input.runId,
+          mode: 'form',
+          status: 'observed',
+          goal: {
+            goal: input.goal,
+            successCriteria: input.successCriteria ?? [],
+            satisfiedCriteria: [],
+            unsatisfiedCriteria: input.successCriteria ?? []
+          }
+        };
+      },
       executeTool: async (input) => {
         calls.push(`${input.runId}:${input.tool}`);
         return {
@@ -17,6 +31,14 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
           code: 'APPROVAL_REQUIRED',
           summary: 'Requires approval',
           requiresApproval: true
+        };
+      },
+      highlightRef: async (input) => {
+        calls.push(`${input.runId}:${input.refId}`);
+        return {
+          ok: true,
+          code: 'OK',
+          summary: 'highlighted'
         };
       },
       decideApproval: async (input) => {
@@ -29,6 +51,12 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
           requiresObserve: false
         };
       },
+      testProviderSettings: async () => ({
+        ok: true,
+        code: 'OK',
+        message: '连接正常',
+        supportsStreaming: true
+      }),
       subscribeRun: () => () => undefined
     });
 
@@ -65,7 +93,89 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
         code: 'USER_DENIED_APPROVAL'
       }
     });
-    expect(calls).toEqual(['run_1:bh_iframe_click', 'run_1:denied']);
+    await expect(
+      host.handleMessage({
+        type: RUNTIME_MESSAGES.HIGHLIGHT_REF,
+        input: {
+          runId: 'run_1',
+          refId: 'frame_7:ref_201'
+        }
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        code: 'OK'
+      }
+    });
+    expect(calls).toEqual([
+      'run_1:bh_iframe_click',
+      'run_1:denied',
+      'run_1:frame_7:ref_201'
+    ]);
+  });
+
+  it('routes revise goal messages through the runtime boundary', async () => {
+    const calls: string[] = [];
+    const host = new BackgroundRuntimeHost({
+      startRun: async () => ({ runId: 'run_1' }),
+      getSnapshot: () => ({ runId: 'run_1', mode: 'form', status: 'observed' }),
+      cancelRun: async () => ({ runId: 'run_1', status: 'cancelled' }),
+      reviseGoal: async (input) => {
+        calls.push(input.goal);
+        return {
+          runId: input.runId,
+          mode: 'form',
+          status: 'observed',
+          goal: {
+            goal: input.goal,
+            successCriteria: input.successCriteria ?? [],
+            satisfiedCriteria: [],
+            unsatisfiedCriteria: input.successCriteria ?? []
+          }
+        };
+      },
+      executeTool: async () => ({
+        ok: true,
+        code: 'OK',
+        summary: 'ok'
+      }),
+      highlightRef: async () => ({
+        ok: true,
+        code: 'OK',
+        summary: 'highlighted'
+      }),
+      decideApproval: async () => ({
+        ok: true,
+        code: 'OK',
+        summary: 'ok'
+      }),
+      testProviderSettings: async () => ({
+        ok: true,
+        code: 'OK',
+        message: '连接正常',
+        supportsStreaming: true
+      }),
+      subscribeRun: () => () => undefined
+    });
+
+    await expect(
+      host.handleMessage({
+        type: RUNTIME_MESSAGES.REVISE_GOAL,
+        input: {
+          runId: 'run_1',
+          goal: '只读诊断当前表单',
+          successCriteria: ['解释 disabled submit 原因']
+        }
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        goal: {
+          goal: '只读诊断当前表单'
+        }
+      }
+    });
+    expect(calls).toEqual(['只读诊断当前表单']);
   });
 
   it('routes cancel run messages through the runtime boundary', async () => {
@@ -77,15 +187,31 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
         calls.push(runId);
         return { runId, status: 'cancelled' };
       },
+      reviseGoal: async (input) => ({
+        runId: input.runId,
+        mode: 'ask',
+        status: 'observed'
+      }),
       executeTool: async () => ({
         ok: true,
         code: 'OK',
         summary: 'ok'
       }),
+      highlightRef: async () => ({
+        ok: true,
+        code: 'OK',
+        summary: 'highlighted'
+      }),
       decideApproval: async () => ({
         ok: true,
         code: 'OK',
         summary: 'ok'
+      }),
+      testProviderSettings: async () => ({
+        ok: true,
+        code: 'OK',
+        message: '连接正常',
+        supportsStreaming: true
       }),
       subscribeRun: () => () => undefined
     });
@@ -111,15 +237,31 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
       startRun: async () => ({ runId: 'run_1' }),
       getSnapshot: () => ({ runId: 'run_1', mode: 'ask', status: 'observed' }),
       cancelRun: async () => ({ runId: 'run_1', status: 'cancelled' }),
+      reviseGoal: async (input) => ({
+        runId: input.runId,
+        mode: 'ask',
+        status: 'observed'
+      }),
       executeTool: async () => ({
         ok: true,
         code: 'OK',
         summary: 'ok'
       }),
+      highlightRef: async () => ({
+        ok: true,
+        code: 'OK',
+        summary: 'highlighted'
+      }),
       decideApproval: async () => ({
         ok: true,
         code: 'OK',
         summary: 'ok'
+      }),
+      testProviderSettings: async () => ({
+        ok: true,
+        code: 'OK',
+        message: '连接正常',
+        supportsStreaming: true
       }),
       subscribeRun: (_runId, listener) => {
         listeners.push(listener);
@@ -138,5 +280,59 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
 
     expect(received).toEqual([{ runId: 'run_1', type: 'run_started' }]);
     expect(listeners).toHaveLength(0);
+  });
+
+  it('routes provider test messages through the runtime boundary', async () => {
+    const host = new BackgroundRuntimeHost({
+      startRun: async () => ({ runId: 'run_1' }),
+      getSnapshot: () => ({ runId: 'run_1', mode: 'ask', status: 'observed' }),
+      cancelRun: async () => ({ runId: 'run_1', status: 'cancelled' }),
+      reviseGoal: async (input) => ({
+        runId: input.runId,
+        mode: 'ask',
+        status: 'observed'
+      }),
+      executeTool: async () => ({
+        ok: true,
+        code: 'OK',
+        summary: 'ok'
+      }),
+      highlightRef: async () => ({
+        ok: true,
+        code: 'OK',
+        summary: 'highlighted'
+      }),
+      decideApproval: async () => ({
+        ok: true,
+        code: 'OK',
+        summary: 'ok'
+      }),
+      testProviderSettings: async (settings) => ({
+        ok: true,
+        code: 'OK',
+        message: `tested ${settings.model}`,
+        supportsStreaming: settings.streamingEnabled
+      }),
+      subscribeRun: () => () => undefined
+    });
+
+    await expect(
+      host.handleMessage({
+        type: RUNTIME_MESSAGES.TEST_PROVIDER_CONNECTION,
+        input: {
+          baseUrl: 'https://api.example.com/v1',
+          model: 'gpt-4.1-mini',
+          apiKey: 'sk-live-super-secret-token',
+          streamingEnabled: true
+        }
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        ok: true,
+        message: 'tested gpt-4.1-mini',
+        supportsStreaming: true
+      }
+    });
   });
 });

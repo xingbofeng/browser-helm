@@ -32,6 +32,76 @@ describe('ExtensionRuntimePort', () => {
     });
   });
 
+  it('sends reviseGoal through the runtime message boundary', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({
+      ok: true,
+      data: {
+        runId: 'run_1',
+        mode: 'form',
+        status: 'observed'
+      }
+    });
+    vi.stubGlobal('chrome', {
+      runtime: {
+        sendMessage
+      }
+    });
+    const port = new ExtensionRuntimePort();
+
+    await port.reviseGoal({
+      runId: 'run_1',
+      goal: '只读诊断当前表单',
+      successCriteria: ['解释 disabled submit 原因']
+    });
+
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: RUNTIME_MESSAGES.REVISE_GOAL,
+      input: {
+        runId: 'run_1',
+        goal: '只读诊断当前表单',
+        successCriteria: ['解释 disabled submit 原因']
+      }
+    });
+  });
+
+  it('sends provider test requests through the runtime message boundary', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({
+      ok: true,
+      data: {
+        ok: true,
+        code: 'OK',
+        message: '连接正常',
+        supportsStreaming: true,
+        model: 'gpt-4.1-mini'
+      }
+    });
+    vi.stubGlobal('chrome', {
+      runtime: {
+        sendMessage
+      }
+    });
+    const port = new ExtensionRuntimePort();
+
+    const result = await port.testProviderSettings({
+      baseUrl: 'https://api.example.com/v1',
+      model: 'gpt-4.1-mini',
+      apiKey: 'sk-live-super-secret-token',
+      streamingEnabled: true
+    });
+
+    expect(result.ok).toBe(true);
+    expect(JSON.stringify(result)).not.toContain('sk-live-super-secret-token');
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: RUNTIME_MESSAGES.TEST_PROVIDER_CONNECTION,
+      input: {
+        baseUrl: 'https://api.example.com/v1',
+        model: 'gpt-4.1-mini',
+        apiKey: 'sk-live-super-secret-token',
+        streamingEnabled: true
+      }
+    });
+  });
+
   it('subscribes to runtime run events through a named port', () => {
     const listeners: Array<(message: unknown) => void> = [];
     const disconnectListeners: Array<() => void> = [];

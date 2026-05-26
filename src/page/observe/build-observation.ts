@@ -2,6 +2,7 @@ import type { Observation } from '../../shared/schemas/observation.schema';
 import { buildA11ySnapshot } from '../a11y/a11y-snapshot';
 import { RefMap } from '../a11y/ref-map';
 import { readFormFields } from '../dom/form-reader';
+import { readPageHealthSummary } from '../dom/page-health-reader';
 import { readPageMetadata } from './page-metadata';
 import { readPageState } from './page-state';
 import { readVisibleText } from './visible-text';
@@ -31,6 +32,7 @@ export function buildObservation(
   const pageState = readPageState(document);
   const snapshot = buildA11ySnapshot(document, refMap);
   const formFields = readFormFields(document, refMap);
+  const pageHealth = readPageHealthSummary(document);
 
   return {
     url: metadata.url,
@@ -42,6 +44,7 @@ export function buildObservation(
     pageStateSummary: pageState.pageStateSummary,
     refSummary: snapshot.elements,
     formFields,
+    pageHealth,
     warnings: [...metadata.warnings, ...visibleText.warnings, ...snapshot.warnings]
   };
 }

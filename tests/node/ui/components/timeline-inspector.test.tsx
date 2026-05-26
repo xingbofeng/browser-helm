@@ -1,27 +1,10 @@
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { StepTimeline } from '../../../../src/ui/components/step-timeline';
 import { ToolInspector } from '../../../../src/ui/components/tool-inspector';
 import { TraceLog } from '../../../../src/ui/components/trace-log';
 
 describe('timeline and inspector components', () => {
-  it('renders approval and terminal events in the timeline', () => {
-    const html = renderToString(
-      <StepTimeline
-        items={[
-          { id: 'run_1:0', type: 'run_started', label: 'Run started' },
-          { id: 'run_1:1', type: 'approval_required', label: 'Approval required' },
-          { id: 'run_1:2', type: 'run_cancelled', label: 'Run cancelled' }
-        ]}
-      />
-    );
-
-    expect(html).toContain('Run started');
-    expect(html).toContain('Approval required');
-    expect(html).toContain('Run cancelled');
-  });
-
   it('renders tool result flags and redacted args', () => {
     const html = renderToString(
       <ToolInspector
@@ -68,5 +51,23 @@ describe('timeline and inspector components', () => {
     expect(html).toContain('tool_result');
     expect(html).toContain('Observed page');
     expect(html).not.toContain('Replay');
+  });
+
+  it('summarizes streaming delta trace events instead of rendering every chunk', () => {
+    const html = renderToString(
+      <TraceLog
+        events={[
+          { runId: 'run_1', type: 'model_stream_started', payload: { model: 'gpt-test' } },
+          { runId: 'run_1', type: 'model_stream_delta', payload: { charCount: 5, preview: 'hello' } },
+          { runId: 'run_1', type: 'model_stream_delta', payload: { charCount: 6, preview: ' world' } },
+          { runId: 'run_1', type: 'model_stream_finished', payload: { charCount: 11 } }
+        ]}
+      />
+    );
+
+    expect(html).toContain('model_stream_delta_summary');
+    expect(html).toContain('chunkCount');
+    expect(html).toContain('2');
+    expect(html).not.toContain('model_stream_delta</strong>');
   });
 });

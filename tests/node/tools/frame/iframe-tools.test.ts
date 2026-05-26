@@ -7,7 +7,6 @@ import { bhIframeType } from '../../../../src/tools/frame/bh-iframe-type';
 import { ToolRegistry } from '../../../../src/tools/core/tool-registry';
 import { ToolRouter } from '../../../../src/tools/core/tool-router';
 import { CONTENT_RPC_MESSAGES } from '../../../../src/shared/constants/event-names';
-import { IFRAME_ACTION_TOKEN } from '../../../../src/shared/constants/runtime-auth';
 import { TOOL_NAMES } from '../../../../src/shared/constants/tool-names';
 
 describe('iframe tools', () => {
@@ -109,11 +108,22 @@ describe('iframe tools', () => {
             }
           };
         }
+        if (message.type === CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE) {
+          expect(message).toMatchObject({
+            frameId: 7,
+            refId: 'ref_200',
+            action: 'click'
+          });
+          return {
+            ok: true,
+            actionToken: 'dynamic-click-token'
+          };
+        }
         expect(message).toMatchObject({
           type: CONTENT_RPC_MESSAGES.IFRAME_CLICK,
           frameId: 7,
           refId: 'ref_200',
-          actionToken: IFRAME_ACTION_TOKEN
+          actionToken: 'dynamic-click-token'
         });
         return {
           ok: true,
@@ -137,6 +147,7 @@ describe('iframe tools', () => {
 
     expect(calls).toEqual([
       CONTENT_RPC_MESSAGES.IFRAME_READ,
+      CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE,
       CONTENT_RPC_MESSAGES.IFRAME_CLICK
     ]);
     expect(result).toMatchObject({
@@ -152,6 +163,17 @@ describe('iframe tools', () => {
     const tool = bhIframeClick(
       rpcClient(async (message) => {
         calls.push(message.type);
+        if (message.type === CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE) {
+          expect(message).toMatchObject({
+            frameId: 7,
+            refId: 'ref_103',
+            action: 'type'
+          });
+          return {
+            ok: true,
+            actionToken: 'dynamic-type-token'
+          };
+        }
         return {
           ok: true,
           ref: {
@@ -237,6 +259,17 @@ describe('iframe tools', () => {
             }
           };
         }
+        if (message.type === CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE) {
+          expect(message).toMatchObject({
+            frameId: 7,
+            refId: 'ref_103',
+            action: 'type'
+          });
+          return {
+            ok: true,
+            actionToken: 'dynamic-type-token'
+          };
+        }
         return {
           ok: true,
           ref: {
@@ -266,11 +299,12 @@ describe('iframe tools', () => {
 
     expect(calls.map((call) => call.type)).toEqual([
       CONTENT_RPC_MESSAGES.IFRAME_READ,
+      CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE,
       CONTENT_RPC_MESSAGES.IFRAME_TYPE
     ]);
-    expect(calls[1]).toMatchObject({
+    expect(calls[2]).toMatchObject({
       text: 'hello@example.com',
-      actionToken: IFRAME_ACTION_TOKEN,
+      actionToken: 'dynamic-type-token',
       preview: {
         masked: false,
         preview: 'hello@example.com'

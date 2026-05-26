@@ -21,6 +21,18 @@ describe('content RPC schema', () => {
     });
   });
 
+  it('accepts highlight ref requests', () => {
+    expect(
+      contentRpcRequestSchema.parse({
+        type: CONTENT_RPC_MESSAGES.A11Y_HIGHLIGHT_REF,
+        refId: 'frame_7:ref_102'
+      })
+    ).toMatchObject({
+      type: CONTENT_RPC_MESSAGES.A11Y_HIGHLIGHT_REF,
+      refId: 'frame_7:ref_102'
+    });
+  });
+
   it('accepts iframe click requests', () => {
     expect(
       contentRpcRequestSchema.parse({
@@ -30,6 +42,29 @@ describe('content RPC schema', () => {
       })
     ).toMatchObject({
       type: CONTENT_RPC_MESSAGES.IFRAME_CLICK
+    });
+  });
+
+  it('accepts iframe action authorization requests and responses', () => {
+    expect(
+      contentRpcRequestSchema.parse({
+        type: CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE,
+        frameId: 7,
+        refId: 'ref_200',
+        action: 'click'
+      })
+    ).toMatchObject({
+      type: CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE,
+      action: 'click'
+    });
+    expect(
+      contentRpcSuccessSchema.parse({
+        ok: true,
+        actionToken: 'token_run_local_1'
+      })
+    ).toMatchObject({
+      ok: true,
+      actionToken: 'token_run_local_1'
     });
   });
 

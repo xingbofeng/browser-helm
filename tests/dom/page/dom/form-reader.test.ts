@@ -55,19 +55,30 @@ describe('form-reader', () => {
     });
     expect(byName.get('volume')?.refId).toMatch(/^ref_/u);
     expect(byName.get('country')?.valuePreview).toBe('non-empty');
-    expect(result.fields.map((field) => ({
-      name: field.name,
-      ref: field.refId
-    }))).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: 'avatar' })
-    ]));
+    expect(result.fields.map((field) => field.name)).not.toContain('avatar');
 
     const refSummary = createRefSummary(result, refMap);
     expect(refSummary.get('agree')).toMatchObject({ role: 'checkbox', visible: true });
     expect(refSummary.get('plan')).toMatchObject({ role: 'radio', visible: true });
     expect(refSummary.get('volume')).toMatchObject({ role: 'slider', visible: true });
     expect(refSummary.get('country')).toMatchObject({ role: 'combobox', visible: true });
-    expect(refSummary.get('avatar')).toMatchObject({ role: 'button', visible: false });
+  });
+
+  it('ignores hidden file inputs that are only used behind upload buttons', () => {
+    document.body.innerHTML = `
+      <main>
+        <button type="button" aria-label="Add photos">Add photos</button>
+        <input id="media-upload" type="file" style="display:none" />
+      </main>
+    `;
+
+    const result = readFormFields(document, createRefMap());
+
+    expect(result).toMatchObject({
+      status: 'empty',
+      fields: [],
+      emptyReason: 'NO_FORM_FIELDS_DETECTED'
+    });
   });
 
   it('returns fields even when there is no form tag', () => {

@@ -108,8 +108,9 @@ export class PageObservationFlow {
     const tabId = await this.flowContext.shell().activeTabId();
     const sidePanelPage = await this.flowContext.sidePanel().open(tabId);
 
+    await sidePanelPage.getByRole('button', { name: '高级开发者选项' }).click();
     await expect(
-      sidePanelPage.locator('.bh-toolResultCard > p').filter({ hasText: /检测到 2 个字段/u })
+      sidePanelPage.locator('.bh-debugSummary').getByText('表单 2')
     ).toBeVisible({ timeout: 8_000 });
   }
 

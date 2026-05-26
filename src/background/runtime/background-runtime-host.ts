@@ -9,7 +9,15 @@ import { RunManager } from './run-manager';
 
 type RuntimeRunManager = Pick<
   RunManager,
-  'startRun' | 'getSnapshot' | 'cancelRun' | 'executeTool' | 'decideApproval' | 'subscribeRun'
+  | 'startRun'
+  | 'getSnapshot'
+  | 'cancelRun'
+  | 'reviseGoal'
+  | 'highlightRef'
+  | 'executeTool'
+  | 'decideApproval'
+  | 'testProviderSettings'
+  | 'subscribeRun'
 >;
 
 export class BackgroundRuntimeHost {
@@ -41,6 +49,16 @@ export class BackgroundRuntimeHost {
           ok: true,
           data: await this.runManager.cancelRun(parsed.data.runId)
         };
+      case RUNTIME_MESSAGES.REVISE_GOAL:
+        return {
+          ok: true,
+          data: await this.runManager.reviseGoal(parsed.data.input)
+        };
+      case RUNTIME_MESSAGES.HIGHLIGHT_REF:
+        return {
+          ok: true,
+          data: await this.runManager.highlightRef(parsed.data.input)
+        };
       case RUNTIME_MESSAGES.EXECUTE_TOOL:
         return {
           ok: true,
@@ -50,6 +68,11 @@ export class BackgroundRuntimeHost {
         return {
           ok: true,
           data: await this.runManager.decideApproval(parsed.data.input)
+        };
+      case RUNTIME_MESSAGES.TEST_PROVIDER_CONNECTION:
+        return {
+          ok: true,
+          data: await this.runManager.testProviderSettings(parsed.data.input)
         };
     }
   }

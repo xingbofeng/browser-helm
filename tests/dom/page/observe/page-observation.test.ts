@@ -37,6 +37,18 @@ describe('page observation', () => {
     expect(result.warnings).toContain('VISIBLE_TEXT_TRUNCATED');
   });
 
+  it('keeps non-landmark body text when landmark navigation exists', () => {
+    document.body.innerHTML = `
+      <nav>Home Pricing Login</nav>
+      <div>Critical checkout error: payment failed after submit</div>
+    `;
+
+    const result = readVisibleText(document, { maxChars: 200 });
+
+    expect(result.text).toContain('Home Pricing Login');
+    expect(result.text).toContain('Critical checkout error');
+  });
+
   it('summarizes page state and empty reason', () => {
     const page = loadDomFixture(
       'basic-form.html',
@@ -67,6 +79,19 @@ describe('page observation', () => {
       '来自 https://demo.example.com 的页面文本'
     );
     expect(summary.refHighlights.length).toBeLessThanOrEqual(3);
+  });
+
+  it('keeps content links out of the navigation zone', () => {
+    document.body.innerHTML = `
+      <nav><a href="/pricing">Pricing</a></nav>
+      <main><a href="/checkout">Checkout details</a></main>
+    `;
+
+    const observation = buildObservation(document);
+    const zones = new Map(observation.refSummary.map((ref) => [ref.name, ref.pageZone]));
+
+    expect(zones.get('Pricing')).toBe('nav');
+    expect(zones.get('Checkout details')).toBe('content');
   });
 
   it('keeps prompt injection text as data in summaries', () => {

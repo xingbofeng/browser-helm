@@ -19,12 +19,62 @@ describe('v1.0 debug read-only tools', () => {
     expect(result.data).toMatchObject({
       hasForm: true,
       pageStateSummary: '页面包含表单',
-      limitations: ['Console/network shallow signals are unavailable from content RPC']
+      limitations: ['CDP deep inspection is not used in v1.0']
+    });
+  });
+
+  it('returns shallow console and network signals from observation page health data', async () => {
+    const result = await bhDebugCollectPageHealth(debugRpc({
+      pageHealth: {
+        consoleErrors: [
+          {
+            message: 'Uncaught TypeError',
+            source: 'app.js',
+            count: 2
+          }
+        ],
+        networkFailures: [
+          {
+            url: 'https://api.example.com/users',
+            method: 'GET',
+            errorText: 'Failed to fetch'
+          }
+        ],
+        hasForm: false,
+        pageStateSummary: '检测到 1 类 console error 和 1 个 network failure',
+        limitations: ['CDP deep inspection is not used in v1.0']
+      }
+    })).execute(
+      {},
+      {
+        runId: 'run_1',
+        stepId: 'step_1',
+        runMode: 'debug'
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      consoleErrors: [
+        {
+          message: 'Uncaught TypeError',
+          source: 'app.js',
+          count: 2
+        }
+      ],
+      networkFailures: [
+        {
+          url: 'https://api.example.com/users',
+          method: 'GET',
+          errorText: 'Failed to fetch'
+        }
+      ],
+      pageStateSummary: '检测到 1 类 console error 和 1 个 network failure'
     });
   });
 });
 
-function debugRpc(): ContentRpcClient {
+function debugRpc(overrides: Record<string, unknown> = {}): ContentRpcClient {
   return {
     async request(message) {
       expect(message.type).toBe(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
@@ -45,9 +95,10 @@ function debugRpc(): ContentRpcClient {
             count: 0,
             warnings: []
           },
-          warnings: []
-        }
-      };
-    }
+            warnings: [],
+            ...overrides
+          }
+        };
+      }
   };
 }

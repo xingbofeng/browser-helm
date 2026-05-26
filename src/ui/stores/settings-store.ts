@@ -22,10 +22,10 @@ type SettingsStoreState = {
 };
 
 const policyPlaceholders: PolicyPlaceholder[] = [
-  { id: 'read_only_default', label: '默认只读', status: 'reserved' },
-  { id: 'confirm_before_submit', label: '提交前确认', status: 'reserved' },
-  { id: 'domain_blocklist', label: 'Domain 禁用', status: 'reserved' },
-  { id: 'debug_network_read', label: 'Debug/Network 读取', status: 'reserved' }
+  { id: 'read_only_default', label: '默认只读（规划中）', status: 'reserved' },
+  { id: 'confirm_before_submit', label: '提交前确认（规划中）', status: 'reserved' },
+  { id: 'domain_blocklist', label: 'Domain 禁用（规划中）', status: 'reserved' },
+  { id: 'debug_network_read', label: 'Debug/Network 读取（规划中）', status: 'reserved' }
 ];
 
 export function createSettingsStore(runtime: SettingsRuntime) {

@@ -4,7 +4,6 @@ import { checkResolvedActionReadiness } from '../../page/dom/action-readiness';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
-import { IFRAME_ACTION_TOKEN } from '../../shared/constants/runtime-auth';
 import { actionValuePreviewSchema } from '../../shared/schemas/action-readiness.schema';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import { approvalRequiredResult } from '../core/tool-result-factory';
@@ -80,12 +79,25 @@ export function bhIframeType(
         };
       }
 
+      const authorized = await rpc.request({
+        type: CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE,
+        frameId: parsed.frameId,
+        refId: parsed.innerRefId,
+        action: 'type'
+      });
+      if (!authorized.ok) {
+        return failure(authorized.code, authorized.message, true, authorized.detail);
+      }
+      if (!('actionToken' in authorized)) {
+        return failure(ERROR_CODES.OBSERVATION_FAILED, 'Content RPC did not authorize iframe action', true);
+      }
+
       const typed = await rpc.request({
         type: CONTENT_RPC_MESSAGES.IFRAME_TYPE,
         frameId: parsed.frameId,
         refId: parsed.innerRefId,
         text: args.text,
-        actionToken: IFRAME_ACTION_TOKEN,
+        actionToken: authorized.actionToken,
         valuePreview: args.valuePreview
       });
       if (!typed.ok) {
@@ -139,6 +151,6 @@ function normalizeResolvedRef(refId: string, ref: unknown) {
     disabled: typeof record.disabled === 'boolean' ? record.disabled : false,
     inputType: typeof record.inputType === 'string' ? record.inputType : undefined,
     autocomplete: typeof record.autocomplete === 'string' ? record.autocomplete : undefined,
-    isSensitive: typeof record.isSensitive === 'boolean' ? record.isSensitive : undefined
+    isSensitive: typeof record.isSensitive === 'boolean' ? record.isSensitive : false
   };
 }

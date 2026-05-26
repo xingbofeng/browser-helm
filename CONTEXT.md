@@ -28,6 +28,22 @@ _避免使用_：side panel app、desktop workbench、form doctor UI
 v1.0 的只读页面诊断产品能力，用于解释页面状态、基础错误信号和下一步建议。
 _避免使用_：debug workbench、DevTools clone、page automation
 
+**Long Page Reading / 长页面读取**：
+当页面正文或可见文本超过 bounded observation 能承载的范围时，Agent 通过分页读取、正文读取、滚动后重读等工具继续获取上下文的能力。
+_避免使用_：full DOM dump、unbounded page scrape
+
+**Iframe Page / iframe 页面**：
+由页面中的 iframe 承载的嵌入子页面。Agent 语义和工具命名中统一使用 iframe；底层浏览器 runtime 可以使用 frameId 作为技术标识。
+_避免使用_：frame page、embedded page、sub-document
+
+**Viewport Scroll Context / 视口滚动上下文**：
+可以读取滚动状态或执行滚动的上下文，可以是顶层页面，也可以是 iframe 页面。滚动属于低风险视口变更，不等同于点击、输入或提交等业务动作。
+_避免使用_：frame scroll、page mutation
+
+**Tool-calling User Task Path / 工具调用型用户任务路径**：
+用户主动提交的任务必须进入 AgentLoop，由模型基于工具结果迭代决策；不能只基于一次页面 snapshot 摘要直接生成 provider 回答。
+_避免使用_：snapshot answer path、provider-only answer
+
 **Form Doctor / 表单医生**：
 v1.0 的只读表单诊断产品能力，用于解释字段状态、必填缺失、校验错误和提交按钮不可用原因。
 _避免使用_：autofill、form submitter、form executor
@@ -99,6 +115,10 @@ _避免使用_：empty reason、unsupported
 - **Structured Page Data** 是 v0.3 契约层；完整 interactive discovery 属于 v0.31，完整 form field reading 属于 v0.32，**Action Readiness** 属于 v0.33。
 - **Cockpit UI / 驾驶舱 UI** 承载用户可见的 side panel 体验；side panel 是宿主位置，不是产品概念。
 - **Page Inspector / 页面检查员** 和 **Form Doctor / 表单医生** 是 v1.0 的首发产品闭环，默认只读诊断，不代表自动填写或提交。
+- **Long Page Reading / 长页面读取** 用于弥补 bounded observation 的上下文上限；默认仍通过摘要和分页 chunk 控制模型上下文，不代表无限制读取完整 DOM。
+- **Iframe Page / iframe 页面** 是页面级读取对象；iframe 内的具体按钮、输入框等仍属于元素语义，使用 element 工具和 stable ref。
+- **Viewport Scroll Context / 视口滚动上下文** 负责页面或 iframe 的滚动状态与滚动动作；不单独引入 frame scroll 语义。
+- **Tool-calling User Task Path / 工具调用型用户任务路径** 是用户任务主路径；内部自动观察或 deterministic diagnostic fallback 不能替代用户任务 AgentLoop。
 - **Tab Data** 供 **Cockpit UI / 驾驶舱 UI** 和 runtime snapshot 使用；Agent context 只接收从 Tab Data 裁剪出的摘要。
 - **Interactive Tab Data** 和 **Form Fields Tab Data** 只负责识别与诊断页面结构，不判断动作是否可以安全执行。
 - **Run Mode Gate** 是 v0.31/v0.32 为新增细粒度工具提供的最小工具门禁；完整 **Mode System** 属于 v1.0。
@@ -124,6 +144,12 @@ _避免使用_：empty reason、unsupported
 > **Dev：**“Debug 和 Form 工具是不是会一直暴露给模型？”
 > **Domain expert：**“不会。v0.31/v0.32 先用 **Run Mode Gate** 做最小门禁；v1.0 再做完整 **Mode System**。”
 
+> **Dev：**“iframe 里有很多内容，是不是用 element inspect 读？”
+> **Domain expert：**“读具体按钮或输入框用 element 工具；读整个 iframe 页面正文、滚动状态和分页内容，用 **Iframe Page / iframe 页面** 工具。”
+
+> **Dev：**“滚 iframe 要不要单独做 frame_scroll？”
+> **Domain expert：**“不要。iframe 和顶层页面都属于 **Viewport Scroll Context / 视口滚动上下文**，统一由 viewport 工具处理。”
+
 ## 已澄清歧义
 
 - “tab data” 容易被误解成 Chrome 浏览器 tab。已澄清：**Tab Data** 是 Cockpit/product 数据类别，不是浏览器 tab。
@@ -133,3 +159,4 @@ _避免使用_：empty reason、unsupported
 - “submit disabled reason” 容易把推断说成事实。已澄清：disabled submit reason 必须区分 **Confirmed Reason**、**Inferred Reason** 和 **Unknown Reason**。
 - “mode” 容易同时指手动门禁和完整智能模式系统。已澄清：**Run Mode Gate** 是当前最小工具门禁；**Mode System** 是 v1.0 的自动分类和策略裁剪。
 - “side panel” 容易同时指 Chrome 宿主位置和产品界面。已澄清：产品界面统一称为 **Cockpit UI / 驾驶舱 UI**。
+- “frame / iframe” 容易混淆。已澄清：Agent 语义和工具命名使用 **Iframe Page / iframe 页面**；底层 runtime 可以继续使用 frameId 作为技术标识。

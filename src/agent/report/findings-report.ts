@@ -13,6 +13,7 @@ import type {
   FormSubmitSummary,
   StructuredPageWarning
 } from '../../shared/schemas/structured-page-data.schema';
+import type { PageHealthSummary } from '../../shared/schemas/page-health.schema';
 
 type BuildFindingInput = {
   title: string;
@@ -112,6 +113,37 @@ export function buildFormDoctorFindings(
           }
         ],
         inferred: reason?.kind !== 'confirmed'
+      })
+    );
+  }
+
+  return findings;
+}
+
+export function buildPageHealthFindings(input: PageHealthSummary): AgentFinding[] {
+  const findings: AgentFinding[] = [];
+  if (input.consoleErrors.length > 0) {
+    findings.push(
+      buildFinding({
+        title: 'Console error',
+        explanation: `发现 ${input.consoleErrors.length} 类 console error。`,
+        evidence: input.consoleErrors.map((error) => ({
+          source: 'debug',
+          summary: `${error.source ? `${error.source}: ` : ''}${error.message} (${error.count} 次)`
+        }))
+      })
+    );
+  }
+
+  if (input.networkFailures.length > 0) {
+    findings.push(
+      buildFinding({
+        title: 'Network failure',
+        explanation: `发现 ${input.networkFailures.length} 个 network failure。`,
+        evidence: input.networkFailures.map((failure) => ({
+          source: 'debug',
+          summary: `${failure.method} ${failure.url}: ${failure.errorText}${failure.status ? ` (${failure.status})` : ''}`
+        }))
       })
     );
   }

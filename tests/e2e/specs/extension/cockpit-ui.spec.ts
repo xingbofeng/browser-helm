@@ -2,10 +2,10 @@ import { test } from '@playwright/test';
 
 import { CockpitUiFlow } from '../../flows/cockpit-ui-flow';
 
-test('renders v0.4 cockpit tabs and stops the active run', async () => {
+test('renders v1.0.1 agent waterfall from automatic observation', async () => {
   const flow = await CockpitUiFlow.start();
   try {
-    await flow.expectCockpitAutoObservationAndStop();
+    await flow.expectCockpitAutoObservation();
   } finally {
     await flow.close();
   }

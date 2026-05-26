@@ -14,11 +14,17 @@ import type { RecoveryState } from '../shared/schemas/recovery.schema';
 import type { RuntimeCapabilities } from '../shared/schemas/runtime-capabilities.schema';
 import type { ToolResult } from '../shared/schemas/tool-result.schema';
 import type { ProviderSettings } from '../storage/interfaces/settings-store';
+import type {
+  AgentMessage,
+  ProviderTestResult,
+  StreamingState
+} from '../shared/schemas/agent-message.schema';
 
 export const startRunInputSchema = z.object({
   task: z.string().min(1),
-  mode: runModeSchema.default('ask'),
-  tabId: z.number().int().positive().optional()
+  mode: runModeSchema.optional(),
+  tabId: z.number().int().positive().optional(),
+  skipProviderResponse: z.boolean().optional()
 });
 
 export const executeToolInputSchema = z.object({
@@ -32,6 +38,24 @@ export const decideApprovalInputSchema = z.object({
   requestId: z.string().min(1),
   decision: z.enum(['approved', 'denied']),
   reason: z.string().min(1).optional()
+});
+
+export const reviseGoalInputSchema = z.object({
+  runId: z.string().min(1),
+  goal: z.string().min(1),
+  successCriteria: z.array(z.string().min(1)).optional()
+});
+
+export const highlightRefInputSchema = z.object({
+  runId: z.string().min(1),
+  refId: z.string().min(1)
+});
+
+export const providerSettingsInputSchema = z.object({
+  baseUrl: z.string().min(1),
+  model: z.string().min(1),
+  apiKey: z.string().min(1).optional(),
+  streamingEnabled: z.boolean().optional()
 });
 
 export const runtimeRequestSchema = z.discriminatedUnion('type', [
@@ -48,12 +72,24 @@ export const runtimeRequestSchema = z.discriminatedUnion('type', [
     runId: z.string().min(1)
   }),
   z.object({
+    type: z.literal(RUNTIME_MESSAGES.REVISE_GOAL),
+    input: reviseGoalInputSchema
+  }),
+  z.object({
+    type: z.literal(RUNTIME_MESSAGES.HIGHLIGHT_REF),
+    input: highlightRefInputSchema
+  }),
+  z.object({
     type: z.literal(RUNTIME_MESSAGES.EXECUTE_TOOL),
     input: executeToolInputSchema
   }),
   z.object({
     type: z.literal(RUNTIME_MESSAGES.DECIDE_APPROVAL),
     input: decideApprovalInputSchema
+  }),
+  z.object({
+    type: z.literal(RUNTIME_MESSAGES.TEST_PROVIDER_CONNECTION),
+    input: providerSettingsInputSchema
   })
 ]);
 
@@ -72,6 +108,9 @@ export const runtimeResponseSchema = z.discriminatedUnion('ok', [
 export type StartRunInput = z.input<typeof startRunInputSchema>;
 export type ExecuteToolInput = z.infer<typeof executeToolInputSchema>;
 export type DecideApprovalInput = z.infer<typeof decideApprovalInputSchema>;
+export type ReviseGoalInput = z.infer<typeof reviseGoalInputSchema>;
+export type HighlightRefInput = z.infer<typeof highlightRefInputSchema>;
+export type TestProviderSettingsInput = z.infer<typeof providerSettingsInputSchema>;
 export type RuntimeRequest = z.infer<typeof runtimeRequestSchema>;
 export type RuntimeResponse = z.infer<typeof runtimeResponseSchema>;
 
@@ -140,6 +179,8 @@ export type RunSnapshot = {
   canReviseGoal?: boolean;
   toolResult?: RuntimeToolResultSnapshot;
   pendingApproval?: ApprovalRequest | undefined;
+  messages?: AgentMessage[] | undefined;
+  streaming?: StreamingState | undefined;
   trace?: RuntimeEvent[] | undefined;
   error?: {
     code: string;
@@ -149,9 +190,11 @@ export type RunSnapshot = {
 
 export type RuntimeToolExecutionResult = ToolResult;
 export type RuntimeProviderSettings = ProviderSettings;
+export type RuntimeProviderTestResult = ProviderTestResult;
 
 export type RuntimeEvent = {
   runId: string;
   type: string;
+  timestamp?: number;
   payload?: unknown;
 };

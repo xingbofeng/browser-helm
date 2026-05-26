@@ -259,6 +259,53 @@ const debugReportCreatedEventSchema = traceEventBaseSchema.extend({
   })
 });
 
+const modelStreamStartedEventSchema = traceEventBaseSchema.extend({
+  type: z.literal(TRACE_EVENT_NAMES.MODEL_STREAM_STARTED),
+  payload: z.object({
+    model: z.string().min(1)
+  })
+});
+
+const modelStreamDeltaEventSchema = traceEventBaseSchema.extend({
+  type: z.literal(TRACE_EVENT_NAMES.MODEL_STREAM_DELTA),
+  payload: z.object({
+    chunkCount: z.number().int().nonnegative(),
+    charCount: z.number().int().nonnegative(),
+    preview: z.string()
+  })
+});
+
+const modelStreamFinishedEventSchema = traceEventBaseSchema.extend({
+  type: z.literal(TRACE_EVENT_NAMES.MODEL_STREAM_FINISHED),
+  payload: z.object({
+    chunkCount: z.number().int().nonnegative(),
+    charCount: z.number().int().nonnegative(),
+    model: z.string().min(1)
+  })
+});
+
+const modelStreamFailedEventSchema = traceEventBaseSchema.extend({
+  type: z.literal(TRACE_EVENT_NAMES.MODEL_STREAM_FAILED),
+  payload: z.object({
+    message: z.string().min(1),
+    chunkCount: z.number().int().nonnegative()
+  })
+});
+
+const modelStreamFallbackStartedEventSchema = traceEventBaseSchema.extend({
+  type: z.literal(TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_STARTED),
+  payload: z.object({
+    reason: z.string().min(1)
+  })
+});
+
+const modelStreamFallbackFinishedEventSchema = traceEventBaseSchema.extend({
+  type: z.literal(TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_FINISHED),
+  payload: z.object({
+    charCount: z.number().int().nonnegative()
+  })
+});
+
 export const traceEventSchema = z.discriminatedUnion('type', [
   runStartedEventSchema,
   runFinishedEventSchema,
@@ -283,7 +330,13 @@ export const traceEventSchema = z.discriminatedUnion('type', [
   planUpdatedEventSchema,
   recoveryActionEventSchema,
   findingsReportedEventSchema,
-  debugReportCreatedEventSchema
+  debugReportCreatedEventSchema,
+  modelStreamStartedEventSchema,
+  modelStreamDeltaEventSchema,
+  modelStreamFinishedEventSchema,
+  modelStreamFailedEventSchema,
+  modelStreamFallbackStartedEventSchema,
+  modelStreamFallbackFinishedEventSchema
 ]);
 
 export type TraceEvent = z.infer<typeof traceEventSchema>;

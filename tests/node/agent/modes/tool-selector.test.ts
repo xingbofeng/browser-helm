@@ -106,4 +106,57 @@ describe('selectToolsForRun', () => {
       reason: 'High-risk tools require explicit approval boundary'
     });
   });
+
+  it('hides page-dependent tools when active tab capability is unavailable', () => {
+    const result = selectToolsForRun({
+      mode: 'form',
+      task: '诊断表单',
+      tools,
+      capabilities: {
+        hasActiveTab: false,
+        hasDebuggerPermission: false,
+        hasClipboardPermission: false,
+        hasDownloadsPermission: false,
+        hostPermissions: [],
+        shallowDebugAvailable: true,
+        cdp: 'reserved'
+      }
+    });
+
+    expect(result.visibleTools).toEqual([]);
+    expect(result.hiddenTools.map((tool) => tool.tool)).toEqual([
+      'bh_page_observe',
+      'bh_debug_collect_page_health',
+      'bh_form_read_fields',
+      'bh_iframe_click'
+    ]);
+    expect(result.limitations).toContain('No active tab is available');
+  });
+
+  it('uses page state to hide form tools after a no-form observation', () => {
+    const result = selectToolsForRun({
+      mode: 'form',
+      task: '诊断表单',
+      tools,
+      capabilities: {
+        hasActiveTab: true,
+        hasDebuggerPermission: false,
+        hasClipboardPermission: false,
+        hasDownloadsPermission: false,
+        hostPermissions: [],
+        shallowDebugAvailable: true,
+        cdp: 'reserved'
+      },
+      pageState: {
+        hasForm: false
+      }
+    });
+
+    expect(result.visibleTools).toEqual(['bh_page_observe']);
+    expect(result.hiddenTools).toContainEqual({
+      tool: 'bh_form_read_fields',
+      reason: 'No form is detected in current page state'
+    });
+    expect(result.limitations).toContain('No form detected on page');
+  });
 });

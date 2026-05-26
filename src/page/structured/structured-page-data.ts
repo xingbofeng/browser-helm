@@ -1,3 +1,4 @@
+import { classifyZone, type PageZone } from '../a11y/interactive-ranker';
 import type { Observation } from '../../shared/schemas/observation.schema';
 import type {
   InteractiveElement,
@@ -27,6 +28,7 @@ export function buildStructuredPageData(
     checked: readOptionalBoolean(ref, 'checked'),
     selected: readOptionalBoolean(ref, 'selected'),
     domOrder: readOptionalNumber(ref, 'domOrder') ?? index,
+    pageZone: ref.pageZone,
     warnings: readWarnings(ref)
   }));
   const hasRefs = refs.length > 0;
@@ -99,6 +101,8 @@ export function buildStructuredPageContextSummary(
       ? 'forms 暂不支持'
       : structured.forms.summary;
 
+  const zoneDistribution = summarizeZoneDistribution(structured.refs.items);
+
   return {
     url: observation?.url ?? '',
     title: observation?.title ?? '',
@@ -106,10 +110,11 @@ export function buildStructuredPageContextSummary(
     origin: observation?.origin ?? '',
     summary: [
       observation?.pageStateSummary ?? structured.observation.summary,
+      zoneDistribution,
       `refs ${structured.refs.count} 个`,
       `interactive ${structured.interactive.count} 个`,
       formSummary
-    ].join('；'),
+    ].filter(Boolean).join('；'),
     counts: {
       refs: structured.refs.count,
       interactive: structured.interactive.count,
@@ -118,6 +123,32 @@ export function buildStructuredPageContextSummary(
     highlights,
     warnings: collectStructuredWarnings(structured)
   };
+}
+
+function summarizeZoneDistribution(refs: StructuredPageData['refs']['items']): string {
+  const counts = new Map<PageZone, number>();
+  counts.set('nav', 0);
+  counts.set('form', 0);
+  counts.set('content', 0);
+  counts.set('other', 0);
+  for (const ref of refs) {
+    const zone = classifyZone(ref);
+    counts.set(zone, (counts.get(zone) ?? 0) + 1);
+  }
+  const parts: string[] = [];
+  const zoneLabels: Record<PageZone, string> = {
+    nav: '导航',
+    form: '表单',
+    content: '内容',
+    other: '其它'
+  };
+  for (const zone of ['nav', 'form', 'content', 'other'] as PageZone[]) {
+    const count = counts.get(zone) ?? 0;
+    if (count > 0) {
+      parts.push(`${zoneLabels[zone]} ${count}`);
+    }
+  }
+  return parts.length > 0 ? parts.join(' | ') : '';
 }
 
 function collectStructuredWarnings(structured: StructuredPageData): string[] {

@@ -1,12 +1,17 @@
 import { z } from 'zod';
 
+import { pageHealthSummarySchema } from './page-health.schema';
+
+export const pageZoneSchema = z.enum(['nav', 'form', 'content', 'other']);
+
 export const elementRefSchema = z.object({
   refId: z.string().min(1),
   role: z.string().optional(),
   name: z.string().optional(),
   tagName: z.string().min(1),
   visible: z.boolean(),
-  disabled: z.boolean().optional()
+  disabled: z.boolean().optional(),
+  pageZone: pageZoneSchema.optional()
 });
 
 export const a11ySnapshotSchema = z.object({
@@ -27,6 +32,7 @@ export const observationSchema = z.object({
   pageStateSummary: z.string(),
   refSummary: z.array(elementRefSchema),
   formFields: z.unknown().optional(),
+  pageHealth: pageHealthSummarySchema.optional(),
   warnings: z.array(z.string()).default([])
 });
 
@@ -44,6 +50,7 @@ export const observationContextSummarySchema = z.object({
 });
 
 export type ElementRef = z.infer<typeof elementRefSchema>;
+export type PageZone = z.infer<typeof pageZoneSchema>;
 export type A11ySnapshot = z.infer<typeof a11ySnapshotSchema>;
 export type Observation = z.infer<typeof observationSchema>;
 export type ObservationContextSummary = z.infer<

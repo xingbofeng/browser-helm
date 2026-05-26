@@ -5,7 +5,10 @@ import {
   observationContextSummarySchema,
   observationSchema
 } from '../../../../src/shared/schemas/observation.schema';
-import { ERROR_CODES } from '../../../../src/shared/errors/error-codes';
+import {
+  ERROR_CODE_NUMBERS,
+  ERROR_CODES
+} from '../../../../src/shared/errors/error-codes';
 
 describe('observation schemas', () => {
   it('accepts a page observation with origin metadata and ref summary', () => {
@@ -69,5 +72,9 @@ describe('observation schemas', () => {
       'OBSERVATION_BUDGET_EXCEEDED'
     );
     expect(ERROR_CODES.OBSERVATION_FAILED).toBe('OBSERVATION_FAILED');
+    expect(ERROR_CODES.PAGE_CHANGED).toBe('PAGE_CHANGED');
+    expect(ERROR_CODE_NUMBERS.PAGE_CHANGED).toBe(3305);
+    expect(ERROR_CODES.ELEMENT_NOT_FOUND).toBe('ELEMENT_NOT_FOUND');
+    expect(ERROR_CODE_NUMBERS.ELEMENT_NOT_FOUND).toBe(3306);
   });
 });

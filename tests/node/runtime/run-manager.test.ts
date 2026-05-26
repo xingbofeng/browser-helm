@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { RunManager } from '../../../src/background/runtime/run-manager';
+import type { ModelClient } from '../../../src/agent/model/model-client';
 import type { ContentRpcClient } from '../../../src/page/messaging/content-rpc-client';
 import { ERROR_CODES } from '../../../src/shared/constants/error-codes';
 import {
@@ -95,6 +96,14 @@ describe('RunManager', () => {
     ]);
     expect(calls).toContain(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
     expect(snapshot.trace?.slice(0, 3).every((event) => event.runId === started.runId)).toBe(true);
+    expect(snapshot.messages?.some((message) =>
+      message.role === 'user' && message.kind === 'task' && message.content === '观察页面'
+    )).toBe(true);
+    expect(snapshot.messages?.some((message) =>
+      message.role === 'agent' &&
+      message.kind === 'page_summary' &&
+      message.content.includes('欢迎注册 - 示例网站')
+    )).toBe(false);
     expect(payloadRecord(snapshot.trace?.[0]?.payload)).toMatchObject({
       task: '观察页面',
       mode: 'form'
@@ -138,6 +147,11 @@ describe('RunManager', () => {
         code: ERROR_CODES.CONTENT_SCRIPT_UNAVAILABLE
       }
     });
+    expect(snapshot.messages?.some((message) =>
+      message.kind === 'error' &&
+      message.status === 'error' &&
+      message.content.includes('Cannot access this page')
+    )).toBe(true);
   });
 
   it('blocks high-risk iframe tools before ToolRouter execution', async () => {
@@ -282,6 +296,79 @@ describe('RunManager', () => {
     });
     expect(snapshot.findings?.map((finding) => finding.title)).toContain(
       '必填字段为空'
+    );
+  });
+
+  it('classifies debug mode from task when runtime start input omits explicit mode', async () => {
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        expect(message.type).toBe(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
+        return observationResponse({
+          pageHealth: {
+            consoleErrors: [
+              {
+                message: 'Uncaught TypeError',
+                source: 'app.js',
+                count: 1
+              }
+            ],
+            networkFailures: [],
+            hasForm: true,
+            pageStateSummary: '检测到 1 类 console error 和 0 个 network failure',
+            limitations: ['CDP deep inspection is not used in v1.0']
+          }
+        });
+      })
+    });
+
+    const started = await manager.startRun({ task: '检查这个页面有什么错误' });
+    const snapshot = await waitForTraceEvent(
+      manager,
+      started.runId,
+      TRACE_EVENT_NAMES.DEBUG_REPORT_CREATED
+    );
+
+    expect(snapshot.mode).toBe('debug');
+    expect(snapshot.classification?.mode).toBe('debug');
+    expect(snapshot.findings?.map((finding) => finding.title)).toContain(
+      'Console error'
+    );
+    expect(payloadRecord(snapshot.trace?.[0]?.payload)).toMatchObject({
+      mode: 'debug'
+    });
+  });
+
+  it('notifies subscribers when async AgentLoop diagnostics enrich the snapshot', async () => {
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        expect(message.type).toBe(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
+        return observationResponse();
+      })
+    });
+
+    const started = await manager.startRun({ task: '检查页面错误', mode: 'debug' });
+    const received: string[] = [];
+    const unsubscribe = manager.subscribeRun(started.runId, (event) => {
+      received.push(event.type);
+    });
+    const snapshot = await waitForTraceEvent(
+      manager,
+      started.runId,
+      TRACE_EVENT_NAMES.DEBUG_REPORT_CREATED
+    );
+    unsubscribe();
+
+    expect(received).toContain(TRACE_EVENT_NAMES.DEBUG_REPORT_CREATED);
+    expect(snapshot.trace?.some(
+      (event) =>
+        event.type === TRACE_EVENT_NAMES.TOOL_STARTED &&
+        payloadRecord(event.payload).tool === TOOL_NAMES.DEBUG_COLLECT_PAGE_HEALTH
+    )).toBe(true);
+    expect(snapshot.debugReport?.title).toBe('Page Inspector 诊断报告');
+    expect(snapshot.findings?.map((finding) => finding.title)).toContain(
+      'Console error'
     );
   });
 
@@ -521,6 +608,439 @@ describe('RunManager', () => {
       ])
     );
   });
+
+  it('streams the configured provider response into recoverable agent messages', async () => {
+    const complete = vi.fn();
+    let providerInput: Parameters<NonNullable<ModelClient['streamComplete']>>[0] | undefined;
+    const providerClient: ModelClient = {
+      complete,
+      async streamComplete(input, callbacks) {
+        providerInput = input;
+        callbacks?.onDelta?.('页面已经读取完成，');
+        callbacks?.onDelta?.('可以继续检查表单。');
+        return { text: '页面已经读取完成，可以继续检查表单。' };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse({
+        url: 'https://example.com/account/reset?token=secret-token&email=a@example.com#step2',
+        currentDomain: 'example.com',
+        origin: 'https://example.com'
+      })),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'demo-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: true
+          };
+        },
+        async setProviderSettings() {}
+      },
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({ task: '检查页面' });
+    const snapshot = await waitForTraceEvent(
+      manager,
+      started.runId,
+      TRACE_EVENT_NAMES.MODEL_STREAM_FINISHED
+    );
+
+    expect(snapshot.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `${started.runId}:provider-response`,
+          status: 'complete',
+          content: '页面已经读取完成，可以继续检查表单。'
+        })
+      ])
+    );
+    expect(snapshot.streaming).toMatchObject({
+      enabled: true,
+      active: false,
+      provider: 'api.example.com',
+      model: 'demo-model',
+      chunkCount: 2,
+      fallbackUsed: false,
+      finalText: '页面已经读取完成，可以继续检查表单。'
+    });
+    expect(complete).not.toHaveBeenCalled();
+    expect(JSON.stringify(snapshot)).not.toContain('sk-test-secret');
+    expect(JSON.stringify(providerInput)).toContain('来源：example.com');
+    expect(JSON.stringify(providerInput)).not.toContain('secret-token');
+    expect(JSON.stringify(providerInput)).not.toContain('a@example.com');
+    expect(JSON.stringify(providerInput)).not.toContain('/account/reset');
+  });
+
+  it('keeps non-sensitive text fields in tool result detail while masking real secrets', async () => {
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse())
+    });
+
+    const started = await manager.startRun({ task: '观察页面', mode: 'debug' });
+    await waitForSnapshot(manager, started.runId, 'observed');
+    const result = await manager.executeTool({
+      runId: started.runId,
+      tool: TOOL_NAMES.DEBUG_COLLECT_PAGE_HEALTH,
+      args: {}
+    });
+    const snapshot = manager.getSnapshot(started.runId);
+
+    expect(result).toMatchObject({
+      ok: true,
+      code: ERROR_CODES.OK
+    });
+    expect(JSON.stringify(snapshot.toolResult?.detail)).toContain('Uncaught TypeError');
+  });
+
+  it('respects disabled streaming by using provider complete fallback', async () => {
+    const streamComplete = vi.fn();
+    const providerClient: ModelClient = {
+      async complete() {
+        return { text: '非流式回答' };
+      },
+      streamComplete
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse()),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'demo-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: false
+          };
+        },
+        async setProviderSettings() {}
+      },
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({ task: '检查页面' });
+    const snapshot = await waitForTraceEvent(
+      manager,
+      started.runId,
+      TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_FINISHED
+    );
+
+    expect(snapshot.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `${started.runId}:provider-response`,
+          status: 'complete',
+          content: '非流式回答'
+        })
+      ])
+    );
+    expect(snapshot.streaming).toMatchObject({
+      enabled: false,
+      fallbackUsed: true,
+      fallbackReason: 'streaming_disabled',
+      finalText: '非流式回答'
+    });
+    expect(streamComplete).not.toHaveBeenCalled();
+  });
+
+  it('notifies subscribers after non-streaming provider messages are written', async () => {
+    const providerClient: ModelClient = {
+      async complete() {
+        return { text: '非流式订阅回答' };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse()),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'demo-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: false
+          };
+        },
+        async setProviderSettings() {}
+      },
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({ task: '检查页面' });
+    const snapshot = await waitForSubscribedSnapshot(manager, started.runId, (nextSnapshot) =>
+      nextSnapshot.messages?.some((message) =>
+        message.id === `${started.runId}:provider-response` &&
+        message.status === 'complete' &&
+        message.content === '非流式订阅回答'
+      ) === true
+    );
+
+    expect(snapshot.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `${started.runId}:provider-response`,
+          status: 'complete',
+          content: '非流式订阅回答'
+        })
+      ])
+    );
+  });
+
+  it('falls back to complete when provider streaming fails', async () => {
+    const complete = vi.fn(async () => ({ text: 'fallback 完成回答' }));
+    const providerClient: ModelClient = {
+      complete,
+      async streamComplete(_input, callbacks) {
+        callbacks?.onDelta?.('部分');
+        throw new Error('stream broke sk-test-secret');
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse()),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'demo-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: true
+          };
+        },
+        async setProviderSettings() {}
+      },
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({ task: '检查页面' });
+    const snapshot = await waitForTraceEvent(
+      manager,
+      started.runId,
+      TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_FINISHED
+    );
+
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(snapshot.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `${started.runId}:provider-response`,
+          status: 'complete',
+          content: 'fallback 完成回答'
+        })
+      ])
+    );
+    expect(snapshot.streaming).toMatchObject({
+      fallbackUsed: true,
+      fallbackReason: 'stream_failed: stream broke [MASKED]',
+      finalText: 'fallback 完成回答'
+    });
+    expect(JSON.stringify(snapshot)).not.toContain('sk-test-secret');
+  });
+
+  it('keeps run status thinking while provider streaming is active', async () => {
+    let finishStream: (() => void) | undefined;
+    const providerClient: ModelClient = {
+      complete: vi.fn(),
+      async streamComplete(_input, callbacks) {
+        callbacks?.onDelta?.('生成中');
+        await new Promise<void>((resolve) => {
+          finishStream = resolve;
+        });
+        return { text: '生成中完成' };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse()),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'demo-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: true
+          };
+        },
+        async setProviderSettings() {}
+      },
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({ task: '检查页面' });
+    const streamingSnapshot = await waitForSnapshot(manager, started.runId, 'thinking');
+
+    expect(streamingSnapshot.streaming).toMatchObject({
+      active: true
+    });
+
+    finishStream?.();
+    const finishedSnapshot = await waitForTraceEvent(
+      manager,
+      started.runId,
+      TRACE_EVENT_NAMES.MODEL_STREAM_FINISHED
+    );
+    expect(finishedSnapshot.status).toBe('observed');
+  });
+
+  it('guides users to configure a model when provider settings are missing', async () => {
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse()),
+      settingsStore: {
+        async getProviderSettings() {
+          return undefined;
+        },
+        async setProviderSettings() {}
+      }
+    });
+
+    const started = await manager.startRun({ task: '检查页面' });
+    const snapshot = await waitForMessage(
+      manager,
+      started.runId,
+      `${started.runId}:provider-config-guide`
+    );
+
+    expect(snapshot.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `${started.runId}:provider-config-guide`,
+          kind: 'recommendation',
+          title: '请配置模型',
+          content: '请先在右上角模型配置中填写 Base URL、API Key 和 Model。'
+        })
+      ])
+    );
+    expect(snapshot.streaming).toMatchObject({
+      enabled: false,
+      active: false
+    });
+  });
+
+  it('notifies subscribers after provider configuration guidance is written', async () => {
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse()),
+      settingsStore: {
+        async getProviderSettings() {
+          return undefined;
+        },
+        async setProviderSettings() {}
+      }
+    });
+
+    const started = await manager.startRun({ task: '检查页面' });
+    const snapshot = await waitForSubscribedSnapshot(manager, started.runId, (nextSnapshot) =>
+      nextSnapshot.messages?.some((message) =>
+        message.id === `${started.runId}:provider-config-guide`
+      ) === true
+    );
+
+    expect(snapshot.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `${started.runId}:provider-config-guide`,
+          kind: 'recommendation'
+        })
+      ])
+    );
+  });
+
+  it('skips provider responses for automatic page observation runs', async () => {
+    const createProviderModelClient = vi.fn(() => ({
+      async complete() {
+        return { text: '不应该调用模型' };
+      }
+    }));
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse()),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'demo-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: true
+          };
+        },
+        async setProviderSettings() {}
+      },
+      createProviderModelClient
+    });
+
+    const started = await manager.startRun({
+      task: '观察当前页面',
+      mode: 'ask',
+      skipProviderResponse: true
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'observed');
+
+    expect(createProviderModelClient).not.toHaveBeenCalled();
+    expect(snapshot.trace?.some((event) =>
+      event.type === TRACE_EVENT_NAMES.MODEL_STREAM_STARTED
+    )).toBe(false);
+    expect(snapshot.messages?.some((message) =>
+      message.id === `${started.runId}:provider-response`
+    )).toBe(false);
+  });
+
+  it('still calls the configured provider when async debug diagnostics fail', async () => {
+    const providerClient: ModelClient = {
+      async complete() {
+        return { text: '页面诊断已完成，可以查看调试摘要。' };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.PAGE_OBSERVE) {
+          return observationResponse();
+        }
+        throw new Error('content rpc unavailable');
+      }),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'demo-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: false
+          };
+        },
+        async setProviderSettings() {}
+      },
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({ task: '检查页面错误', mode: 'debug' });
+    const snapshot = await waitForTraceEvent(
+      manager,
+      started.runId,
+      TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_FINISHED
+    );
+
+    expect(snapshot.debugReport?.title).toBe('Page Inspector 诊断报告');
+    expect(snapshot.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `${started.runId}:provider-response`,
+          status: 'complete',
+          content: '页面诊断已完成，可以查看调试摘要。'
+        })
+      ])
+    );
+    expect(snapshot.streaming).toMatchObject({
+      fallbackUsed: true,
+      fallbackReason: 'streaming_disabled',
+      finalText: '页面诊断已完成，可以查看调试摘要。'
+    });
+    expect(JSON.stringify(snapshot)).not.toContain('sk-test-secret');
+  });
 });
 
 function rpcClient(handler: ContentRpcClient['request']): ContentRpcClient {
@@ -529,7 +1049,7 @@ function rpcClient(handler: ContentRpcClient['request']): ContentRpcClient {
   };
 }
 
-function observationResponse() {
+function observationResponse(overrides: Record<string, unknown> = {}) {
   return {
     ok: true as const,
     observation: {
@@ -540,6 +1060,19 @@ function observationResponse() {
       visibleText: 'iframe 表单 展开详情 删除账号',
       visibleTextSummary: 'iframe 表单 展开详情 删除账号',
       pageStateSummary: '页面包含 2 个可交互元素',
+      pageHealth: {
+        consoleErrors: [
+          {
+            message: 'Uncaught TypeError',
+            source: 'app.js',
+            count: 1
+          }
+        ],
+        networkFailures: [],
+        hasForm: true,
+        pageStateSummary: '检测到 1 类 console error 和 0 个 network failure',
+        limitations: ['CDP deep inspection is not used in v1.0']
+      },
       refSummary: [
         {
           refId: 'frame_7:ref_200',
@@ -588,7 +1121,8 @@ function observationResponse() {
         },
         warnings: []
       },
-      warnings: []
+      warnings: [],
+      ...overrides
     }
   };
 }
@@ -612,4 +1146,61 @@ async function waitForSnapshot(
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   return manager.getSnapshot(runId);
+}
+
+async function waitForTraceEvent(
+  manager: RunManager,
+  runId: string,
+  eventType: string
+) {
+  for (let index = 0; index < 30; index += 1) {
+    const snapshot = manager.getSnapshot(runId);
+    if (snapshot.trace?.some((event) => event.type === eventType)) {
+      return snapshot;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return manager.getSnapshot(runId);
+}
+
+async function waitForMessage(
+  manager: RunManager,
+  runId: string,
+  messageId: string
+) {
+  for (let index = 0; index < 30; index += 1) {
+    const snapshot = manager.getSnapshot(runId);
+    if (snapshot.messages?.some((message) => message.id === messageId)) {
+      return snapshot;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return manager.getSnapshot(runId);
+}
+
+function waitForSubscribedSnapshot(
+  manager: RunManager,
+  runId: string,
+  predicate: (snapshot: ReturnType<RunManager['getSnapshot']>) => boolean
+) {
+  return new Promise<ReturnType<RunManager['getSnapshot']>>((resolve, reject) => {
+    const initialSnapshot = manager.getSnapshot(runId);
+    if (predicate(initialSnapshot)) {
+      resolve(initialSnapshot);
+      return;
+    }
+    const timeout = setTimeout(() => {
+      unsubscribe();
+      reject(new Error('Timed out waiting for subscribed snapshot'));
+    }, 100);
+    const unsubscribe = manager.subscribeRun(runId, () => {
+      const snapshot = manager.getSnapshot(runId);
+      if (!predicate(snapshot)) {
+        return;
+      }
+      clearTimeout(timeout);
+      unsubscribe();
+      resolve(snapshot);
+    });
+  });
 }

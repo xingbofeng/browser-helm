@@ -4,6 +4,12 @@ import { ContextBuilder } from '../../../../src/agent/context/context-builder';
 import { AgentLoop } from '../../../../src/agent/kernel/agent-loop';
 import { DecisionParser } from '../../../../src/agent/parser/decision-parser';
 import { MockModelClient } from '../../../../src/agent/model/mock-model-client';
+import type {
+  ModelClient,
+  ModelInput,
+  ModelOutput,
+  ModelStreamCallbacks
+} from '../../../../src/agent/model/model-client';
 import { InMemoryTraceRecorder } from '../../../../src/storage/memory/in-memory-trace-recorder';
 import { ToolRegistry } from '../../../../src/tools/core/tool-registry';
 import { ToolRouter } from '../../../../src/tools/core/tool-router';
@@ -15,6 +21,94 @@ import { TOOL_NAMES } from '../../../../src/shared/constants/tool-names';
 import { z } from 'zod';
 
 describe('agent-loop', () => {
+  it('records model streaming lifecycle events when streamComplete succeeds', async () => {
+    const registry = new ToolRegistry();
+    const modelClient: ModelClient = {
+      async complete(): Promise<ModelOutput> {
+        throw new Error('complete should not be called');
+      },
+      async streamComplete(
+        _input: ModelInput,
+        callbacks: ModelStreamCallbacks = {}
+      ): Promise<ModelOutput> {
+        callbacks.onStart?.();
+        callbacks.onDelta?.('{"type":"finish",');
+        callbacks.onDelta?.('"message":"streamed"}');
+        const output = {
+          text: '{"type":"finish","message":"streamed"}'
+        };
+        callbacks.onFinish?.(output);
+        return output;
+      }
+    };
+    const loop = new AgentLoop({
+      modelClient,
+      decisionParser: new DecisionParser(),
+      toolRouter: new ToolRouter(registry),
+      contextBuilder: new ContextBuilder(),
+      traceRecorder: new InMemoryTraceRecorder()
+    });
+
+    const result = await loop.run({
+      task: '观察页面',
+      maxSteps: 1
+    });
+
+    expect(result.status).toBe('finished');
+    expect(result.trace.map((event) => event.type)).toEqual(
+      expect.arrayContaining([
+        TRACE_EVENT_NAMES.MODEL_STREAM_STARTED,
+        TRACE_EVENT_NAMES.MODEL_STREAM_DELTA,
+        TRACE_EVENT_NAMES.MODEL_STREAM_FINISHED
+      ])
+    );
+  });
+
+  it('falls back to complete when model streaming fails', async () => {
+    const registry = new ToolRegistry();
+    const modelClient: ModelClient = {
+      async complete(): Promise<ModelOutput> {
+        return {
+          text: JSON.stringify({
+            type: 'finish',
+            message: 'fallback complete'
+          })
+        };
+      },
+      async streamComplete(
+        _input: ModelInput,
+        callbacks: ModelStreamCallbacks = {}
+      ): Promise<ModelOutput> {
+        callbacks.onStart?.();
+        callbacks.onError?.(new Error('stream broke sk-live-super-secret-token'));
+        throw new Error('stream broke sk-live-super-secret-token');
+      }
+    };
+    const loop = new AgentLoop({
+      modelClient,
+      decisionParser: new DecisionParser(),
+      toolRouter: new ToolRouter(registry),
+      contextBuilder: new ContextBuilder(),
+      traceRecorder: new InMemoryTraceRecorder()
+    });
+
+    const result = await loop.run({
+      task: '观察页面',
+      maxSteps: 1
+    });
+
+    expect(result.status).toBe('finished');
+    expect(result.message).toBe('fallback complete');
+    expect(result.trace.map((event) => event.type)).toEqual(
+      expect.arrayContaining([
+        TRACE_EVENT_NAMES.MODEL_STREAM_FAILED,
+        TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_STARTED,
+        TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_FINISHED
+      ])
+    );
+    expect(JSON.stringify(result.trace)).not.toContain('sk-live-super-secret-token');
+  });
+
   it.each([
     ['ask', '观察页面'],
     ['debug', '检查 console 错误'],
@@ -173,9 +267,7 @@ describe('agent-loop', () => {
     }
     expect(runStarted.payload.metadata.model).toBe('gpt-5-mini');
     expect(runStarted.payload.metadata.runMode).toBe('ask');
-    expect(runStarted.payload.metadata.providerBaseUrl).toBe(
-      'https://api.example.com/v1'
-    );
+    expect(runStarted.payload.metadata.providerBaseUrl).toBeUndefined();
   });
 
   it('records explicit run mode and only exposes mode-available tools to the model', async () => {
@@ -897,6 +989,32 @@ describe('agent-loop', () => {
       '必填字段为空'
     );
     expect(report.payload.report.title).toBe('Form Doctor 诊断报告');
+  });
+
+  it('pauses instead of finishing when explicit success criteria have no supporting evidence', async () => {
+    const loop = new AgentLoop({
+      modelClient: new MockModelClient([
+        JSON.stringify({
+          type: 'finish',
+          message: 'done'
+        })
+      ]),
+      decisionParser: new DecisionParser(),
+      toolRouter: new ToolRouter(new ToolRegistry()),
+      contextBuilder: new ContextBuilder(),
+      traceRecorder: new InMemoryTraceRecorder()
+    });
+
+    const result = await loop.run({
+      task: '检查页面健康状态',
+      mode: 'debug',
+      successCriteria: ['读取页面健康摘要'],
+      maxSteps: 1
+    });
+
+    expect(result.status).toBe('paused');
+    expect(result.message).toContain('Success criteria not satisfied');
+    expect(result.message).toContain('读取页面健康摘要');
   });
 
   it('treats bh_agent_finish tool_call as a finished run', async () => {

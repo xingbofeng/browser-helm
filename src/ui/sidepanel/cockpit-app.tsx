@@ -1,23 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { Bug, PencilLine, Settings } from 'lucide-react';
+import { Button } from 'animal-island-ui';
 
 import type { RuntimeToolExecutionResult, RunSnapshot } from '../../runtime/runtime-messages';
 import type { RuntimePort } from '../../runtime/runtime-port';
+import type { AgentMessage } from '../../shared/schemas/agent-message.schema';
 import type { StructuredPageData } from '../../shared/schemas/structured-page-data.schema';
 import type { RunMode } from '../../shared/schemas/tool.schema';
 import { ApprovalDrawer } from '../approval/approval-drawer';
+import { AdvancedDebugPanel } from '../components/advanced-debug-drawer';
+import { AgentMessageList } from '../components/agent-message-list';
 import { ChatPanel } from '../components/chat-panel';
-import { CockpitFooter } from '../components/cockpit-footer';
-import { CockpitShell } from '../components/cockpit-shell';
-import { DiagnosisOverview } from '../components/diagnosis-overview';
-import { FormFieldsTab } from '../components/form-fields-tab';
-import { InteractiveElementsTab } from '../components/interactive-elements-tab';
-import { PageObservationTab } from '../components/page-observation-tab';
-import { RefMapTab } from '../components/ref-map-tab';
-import { SettingsPanel } from '../components/settings-panel';
-import { StepTimeline } from '../components/step-timeline';
-import { ToolInspector } from '../components/tool-inspector';
-import { TraceLog } from '../components/trace-log';
-import { toTimelineItems } from '../lib/timeline-groups';
+import { ModelConfigForm } from '../components/model-config-modal';
 import { createAgentStore } from '../stores/agent-store';
 import { createApprovalStore } from '../stores/approval-store';
 import { createPageDataStore } from '../stores/page-data-store';
@@ -26,20 +20,24 @@ import { createTraceStore } from '../stores/trace-store';
 import type { RunDisplayState } from '../stores/agent-store';
 import type { SimpleStore } from '../stores/store-core';
 
+const browserHelmLogoUrl = new URL('../assets/browserhelm-logo.png', import.meta.url).href;
+
 type CockpitAppProps = {
   runtime: RuntimePort;
   targetTabId?: number | undefined;
   initialRunId?: string | undefined;
 };
 
-type CockpitTab = 'observation' | 'refs' | 'interactive' | 'forms';
-
 export function CockpitApp({ runtime, targetTabId, initialRunId }: CockpitAppProps) {
-  const [task, setTask] = useState('观察当前页面');
+  const [task, setTask] = useState('');
   const [mode, setMode] = useState<RunMode>('ask');
   const [busy, setBusy] = useState(false);
+  const [reviseBusy, setReviseBusy] = useState(false);
   const [approvalResult, setApprovalResult] = useState<RuntimeToolExecutionResult>();
-  const [activeTab, setActiveTab] = useState<CockpitTab>('observation');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugTab, setDebugTab] = useState<'trace' | 'tools' | 'elements' | 'streaming'>('trace');
+  const [conversationMessages, setConversationMessages] = useState<AgentMessage[]>([]);
   const unsubscribeRunRef = useRef<(() => void) | undefined>(undefined);
   const agentStore = useMemo(() => createAgentStore(), []);
   const pageDataStore = useMemo(() => createPageDataStore(), []);
@@ -53,13 +51,26 @@ export function CockpitApp({ runtime, targetTabId, initialRunId }: CockpitAppPro
   const settingsState = useStore(settingsStore);
   const snapshot = pageDataState.snapshot;
   const trace = traceState.events;
-  const timelineItems = useMemo(() => toTimelineItems(trace), [trace]);
   const structuredPageData = snapshot?.structuredPageData ?? emptyStructuredPageData();
   const runDisplayState = busy ? 'starting' : agentState.displayState;
+  const waterfallSnapshot = snapshot
+    ? {
+        ...snapshot,
+        messages: conversationMessages
+      }
+    : undefined;
 
-  const applySnapshot = useCallback((nextSnapshot: RunSnapshot) => {
+  const applySnapshot = useCallback((
+    nextSnapshot: RunSnapshot,
+    options: { persistMessages?: boolean } = {}
+  ) => {
     pageDataStore.getState().setSnapshot(nextSnapshot);
     traceStore.getState().setEvents(nextSnapshot.trace ?? []);
+    if (options.persistMessages) {
+      setConversationMessages((messages) =>
+        mergeAgentMessages(messages, nextSnapshot.messages ?? [])
+      );
+    }
     if (nextSnapshot.pendingApproval) {
       approvalStore.getState().setPending(nextSnapshot.pendingApproval);
     } else {
@@ -68,16 +79,30 @@ export function CockpitApp({ runtime, targetTabId, initialRunId }: CockpitAppPro
     agentStore.getState().setDisplayState(statusToDisplayState(nextSnapshot.status, false));
   }, [agentStore, approvalStore, pageDataStore, traceStore]);
 
-  const subscribeToRun = useCallback((runId: string) => {
+  const subscribeToRun = useCallback((
+    runId: string,
+    options: { persistMessages?: boolean } = {}
+  ) => {
     unsubscribeRunRef.current?.();
     unsubscribeRunRef.current = runtime.subscribeRun(runId, () => {
-      void runtime.getRunSnapshot(runId).then(applySnapshot);
+      void runtime.getRunSnapshot(runId).then((nextSnapshot) => {
+        applySnapshot(nextSnapshot, options);
+      });
     });
   }, [applySnapshot, runtime]);
 
   useEffect(() => {
     void settingsStore.getState().load();
   }, [settingsStore]);
+
+  useEffect(() => {
+    document.body.classList.add('animal-cursor--force');
+    document.documentElement.classList.add('animal-cursor--force');
+    return () => {
+      document.body.classList.remove('animal-cursor--force');
+      document.documentElement.classList.remove('animal-cursor--force');
+    };
+  }, []);
 
   useEffect(() => () => {
     unsubscribeRunRef.current?.();
@@ -88,12 +113,12 @@ export function CockpitApp({ runtime, targetTabId, initialRunId }: CockpitAppPro
       return;
     }
     let active = true;
-    subscribeToRun(initialRunId);
+    subscribeToRun(initialRunId, { persistMessages: true });
     void runtime.getRunSnapshot(initialRunId).then((nextSnapshot) => {
       if (!active) {
         return;
       }
-      applySnapshot(nextSnapshot);
+      applySnapshot(nextSnapshot, { persistMessages: true });
       setMode(nextSnapshot.mode);
     });
     return () => {
@@ -102,7 +127,7 @@ export function CockpitApp({ runtime, targetTabId, initialRunId }: CockpitAppPro
   }, [applySnapshot, runtime, initialRunId, subscribeToRun]);
 
   useEffect(() => {
-    if (!targetTabId) {
+    if (!targetTabId || initialRunId) {
       return undefined;
     }
     let active = true;
@@ -110,16 +135,21 @@ export function CockpitApp({ runtime, targetTabId, initialRunId }: CockpitAppPro
     const retryDelays = [500, 1_500, 3_000, 6_000];
     const observe = (attempt: number) => {
       void runtime
-        .startRun({ task: '观察当前页面', mode: 'ask', tabId: targetTabId })
+        .startRun({
+          task: '观察当前页面',
+          mode: 'ask',
+          tabId: targetTabId,
+          skipProviderResponse: true
+        })
         .then((started) => {
-          subscribeToRun(started.runId);
+          subscribeToRun(started.runId, { persistMessages: attempt === 0 });
           return runtime.getRunSnapshot(started.runId);
         })
         .then((nextSnapshot) => {
           if (!active) {
             return;
           }
-          applySnapshot(nextSnapshot);
+          applySnapshot(nextSnapshot, { persistMessages: attempt === 0 });
           setMode(nextSnapshot.mode);
           if (
             attempt < retryDelays.length &&
@@ -136,17 +166,26 @@ export function CockpitApp({ runtime, targetTabId, initialRunId }: CockpitAppPro
         window.clearTimeout(timer);
       }
     };
-  }, [applySnapshot, runtime, subscribeToRun, targetTabId]);
+  }, [applySnapshot, runtime, subscribeToRun, targetTabId, initialRunId]);
 
   const start = async () => {
+    const submittedTask = task.trim();
+    if (!submittedTask) {
+      return;
+    }
     setBusy(true);
     setApprovalResult(undefined);
     try {
-      const started = await runtime.startRun({ task, mode, tabId: targetTabId });
+      const started = await runtime.startRun({
+        task: submittedTask,
+        mode,
+        tabId: targetTabId
+      });
+      setTask('');
       agentStore.getState().startRun({ runId: started.runId, mode });
-      subscribeToRun(started.runId);
+      subscribeToRun(started.runId, { persistMessages: true });
       const nextSnapshot = await runtime.getRunSnapshot(started.runId);
-      applySnapshot(nextSnapshot);
+      applySnapshot(nextSnapshot, { persistMessages: true });
       setMode(nextSnapshot.mode);
     } finally {
       setBusy(false);
@@ -159,7 +198,26 @@ export function CockpitApp({ runtime, targetTabId, initialRunId }: CockpitAppPro
     }
     await runtime.cancelRun(snapshot.runId);
     agentStore.getState().cancelRun();
-    applySnapshot(await runtime.getRunSnapshot(snapshot.runId));
+    applySnapshot(await runtime.getRunSnapshot(snapshot.runId), { persistMessages: true });
+  };
+
+  const reviseCurrentGoal = async () => {
+    const currentSnapshot = snapshot;
+    const goal = task.trim();
+    if (!currentSnapshot || !currentSnapshot.canReviseGoal || !goal) {
+      return;
+    }
+    setReviseBusy(true);
+    try {
+      const nextSnapshot = await runtime.reviseGoal({
+        runId: currentSnapshot.runId,
+        goal
+      });
+      applySnapshot(nextSnapshot, { persistMessages: true });
+      setMode(nextSnapshot.mode);
+    } finally {
+      setReviseBusy(false);
+    }
   };
 
   const decide = async (decision: 'approved' | 'denied') => {
@@ -179,37 +237,85 @@ export function CockpitApp({ runtime, targetTabId, initialRunId }: CockpitAppPro
       approvalStore.getState().failDecision(result.code);
     }
     setApprovalResult(result);
-    applySnapshot(await runtime.getRunSnapshot(currentSnapshot.runId));
+    applySnapshot(await runtime.getRunSnapshot(currentSnapshot.runId), { persistMessages: true });
   };
 
   const saveSettings = async (nextSettings: {
     baseUrl: string;
     model: string;
     apiKey?: string;
+    streamingEnabled?: boolean;
   }) => {
     await settingsStore.getState().save(nextSettings);
   };
 
+  const inspectElement = async (refId: string) => {
+    const currentSnapshot = snapshot;
+    if (!currentSnapshot || refId.startsWith('sensitive_ref_')) {
+      return;
+    }
+    await runtime.highlightRef({
+      runId: currentSnapshot.runId,
+      refId
+    });
+  };
+
   return (
-    <CockpitShell
-      header={
-        <div className="bh-cockpitTitleBar">
-          <span className="bh-brandMark" aria-hidden="true">BH</span>
+    <main className="bh-agentSidePanel animal-cursor--force">
+      <header className="bh-agentHeader">
+        <div className="bh-agentBrand">
+          <img className="bh-brandMark" src={browserHelmLogoUrl} alt="" aria-hidden="true" />
           <div>
-            <h1>BrowserHelm Cockpit</h1>
-            <p>v0.4 页面数据驾驶舱</p>
+            <h1>BrowserHelm</h1>
+            <p>agentic page inspector</p>
           </div>
-          <span className="bh-leafMark" aria-hidden="true" />
-          <span className="bh-kebabMark" aria-hidden="true" />
         </div>
-      }
-      task={
+        <div className="bh-agentHeaderActions">
+          <span className={`bh-agentStatus${!settingsState.settings ? ' bh-agentStatus--unconfigured' : ''}`}>{statusLabel(runDisplayState)}</span>
+          <Button
+            htmlType="button"
+            className="bh-headerIconButton"
+            aria-label="高级开发者选项"
+            icon={<Bug size={18} />}
+            onClick={() => {
+              setDebugTab('trace');
+              setDebugOpen(true);
+            }}
+          />
+          <Button
+            htmlType="button"
+            className="bh-headerIconButton"
+            aria-label="打开模型配置"
+            icon={<Settings size={18} />}
+            onClick={() => setSettingsOpen(true)}
+          />
+        </div>
+      </header>
+
+      <AgentMessageList snapshot={waterfallSnapshot} />
+
+      <div className="bh-agentComposerDock">
+        {snapshot?.canReviseGoal ? (
+          <div className="bh-reviseGoalBar">
+            <span>当前 run 可修改目标</span>
+            <Button
+              htmlType="button"
+              type="default"
+              icon={<PencilLine size={14} />}
+              disabled={reviseBusy || !task.trim()}
+              onClick={() => {
+                void reviseCurrentGoal();
+              }}
+            >
+              修改目标
+            </Button>
+          </div>
+        ) : null}
         <ChatPanel
           task={task}
           mode={mode}
-          runState={runDisplayState}
           busy={busy}
-          canStop={snapshot ? snapshot.status !== 'cancelled' : false}
+          canStop={snapshot?.streaming?.active === true || runDisplayState === 'thinking'}
           onTaskChange={setTask}
           onModeChange={setMode}
           onStart={() => {
@@ -219,98 +325,109 @@ export function CockpitApp({ runtime, targetTabId, initialRunId }: CockpitAppPro
             void stop();
           }}
         />
-      }
-      tabs={
-        <section>
-          <nav aria-label="Cockpit tabs">
-            <button
-              type="button"
-              aria-selected={activeTab === 'observation'}
-              onClick={() => setActiveTab('observation')}
-            >
-              页面观察
-            </button>
-            <button
-              type="button"
-              aria-selected={activeTab === 'refs'}
-              onClick={() => setActiveTab('refs')}
-            >
-              Ref 映射
-            </button>
-            <button
-              type="button"
-              aria-selected={activeTab === 'interactive'}
-              onClick={() => setActiveTab('interactive')}
-            >
-              交互元素
-            </button>
-            <button
-              type="button"
-              aria-selected={activeTab === 'forms'}
-              onClick={() => setActiveTab('forms')}
-            >
-              表单字段
-            </button>
-          </nav>
-          <div data-active-tab={activeTab}>
-            {activeTab === 'observation' ? (
-              <PageObservationTab data={structuredPageData.observation} />
-            ) : null}
-            {activeTab === 'refs' ? <RefMapTab data={structuredPageData.refs} /> : null}
-            {activeTab === 'interactive' ? (
-              <InteractiveElementsTab data={structuredPageData.interactive} />
-            ) : null}
-            {activeTab === 'forms' ? <FormFieldsTab data={structuredPageData.forms} /> : null}
-          </div>
-        </section>
-      }
-      timeline={
-        <>
-          <StepTimeline items={timelineItems} />
-          <TraceLog events={trace} />
-        </>
-      }
-      inspector={
-        <>
-          <DiagnosisOverview snapshot={snapshot} />
-          <ToolInspector
-            toolResult={snapshot?.toolResult}
-            argsPreview={snapshot?.pendingApproval?.argsPreview}
+      </div>
+
+      {approvalState.pending || approvalResult ? (
+        <section className="bh-agentApproval">
+          <ApprovalDrawer
+            request={approvalState.pending}
+            decision={toDrawerDecision(approvalState.decision)}
+            decisionError={approvalState.decisionError ?? (approvalResult?.ok === false ? approvalResult.code : undefined)}
+            onApprove={() => {
+              void decide('approved');
+            }}
+            onDeny={() => {
+              void decide('denied');
+            }}
           />
-        </>
-      }
-      approval={
-        approvalState.pending || approvalResult ? (
-          <>
-            <ApprovalDrawer
-              request={approvalState.pending}
-              decision={toDrawerDecision(approvalState.decision)}
-              decisionError={approvalState.decisionError ?? (approvalResult?.ok === false ? approvalResult.code : undefined)}
-              onApprove={() => {
-                void decide('approved');
-              }}
-              onDeny={() => {
-                void decide('denied');
-              }}
-            />
-            {approvalResult ? <p>{approvalResult.code}</p> : null}
-          </>
-        ) : undefined
-      }
-      settings={
-        <SettingsPanel
-          baseUrl={settingsState.settings?.baseUrl ?? ''}
-          model={settingsState.settings?.model ?? ''}
-          maskedApiKey={settingsState.maskedApiKey ?? ''}
-          policyPlaceholders={settingsState.policyPlaceholders}
-          onSave={(nextSettings) => {
-            void saveSettings(nextSettings);
-          }}
-        />
-      }
-      footer={<CockpitFooter runId={snapshot?.runId} />}
-    />
+          {approvalResult ? (
+            <p className="bh-approvalResult" role="status">
+              审批结果：{approvalResult.code}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {settingsOpen ? (
+        <div className="bh-debugOverlay" onClick={() => setSettingsOpen(false)}>
+          <div className="bh-debugDrawerPanel" onClick={(e) => e.stopPropagation()}>
+            <div className="bh-debugDrawerHeader">
+              <span className="bh-modalTitle"><Settings size={18} />模型配置</span>
+              <button
+                className="bh-debugDrawerClose"
+                aria-label="关闭"
+                onClick={() => setSettingsOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="bh-debugDrawerBody">
+              <ModelConfigForm
+                key={[
+                  settingsState.settings?.baseUrl,
+                  settingsState.settings?.model,
+                  settingsState.maskedApiKey,
+                  String(settingsState.settings?.streamingEnabled ?? true)
+                ].join('|')}
+                settings={settingsState.settings}
+                maskedApiKey={settingsState.maskedApiKey}
+                onClose={() => setSettingsOpen(false)}
+                onSave={saveSettings}
+                onTest={(nextSettings) => runtime.testProviderSettings(nextSettings)}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {debugOpen ? (
+        <div className="bh-debugOverlay" onClick={() => setDebugOpen(false)}>
+          <div className="bh-debugDrawerPanel" onClick={(e) => e.stopPropagation()}>
+            <div className="bh-debugDrawerHeader">
+              <span className="bh-modalTitle"><Bug size={18} />高级开发者选项</span>
+              <button
+                className="bh-debugDrawerClose"
+                aria-label="关闭"
+                onClick={() => setDebugOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="bh-debugDrawerBody">
+              <AdvancedDebugPanel
+                snapshot={snapshot ? { ...snapshot, trace } : undefined}
+                structuredPageData={structuredPageData}
+                activeTab={debugTab}
+                onTabChange={setDebugTab}
+                onInspectElement={(refId) => {
+                  void inspectElement(refId);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </main>
   );
+}
+
+function mergeAgentMessages(
+  existingMessages: AgentMessage[],
+  nextMessages: AgentMessage[]
+): AgentMessage[] {
+  if (nextMessages.length === 0) {
+    return existingMessages;
+  }
+  const messagesById = new Map(existingMessages.map((message) => [message.id, message]));
+  const orderedIds = existingMessages.map((message) => message.id);
+  for (const message of nextMessages) {
+    if (!messagesById.has(message.id)) {
+      orderedIds.push(message.id);
+    }
+    messagesById.set(message.id, message);
+  }
+  return orderedIds
+    .map((id) => messagesById.get(id))
+    .filter((message): message is AgentMessage => Boolean(message));
 }
 
 function useStore<T extends object>(store: SimpleStore<T>): T {
@@ -370,6 +487,23 @@ function statusToDisplayState(
     return 'finished';
   }
   return 'idle';
+}
+
+function statusLabel(status: RunDisplayState): string {
+  const labels: Record<RunDisplayState, string> = {
+    idle: 'Ready',
+    starting: 'Starting',
+    observing: 'Observing',
+    thinking: 'Thinking',
+    executing_tool: 'Running',
+    waiting_for_approval: 'Approval',
+    waiting_for_user: 'Waiting',
+    recovering: 'Recovering',
+    finished: 'Done',
+    failed: 'Error',
+    cancelled: 'Stopped'
+  };
+  return labels[status];
 }
 
 function emptyStructuredPageData(): StructuredPageData {

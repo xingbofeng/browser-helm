@@ -43,7 +43,9 @@ export function createContentRpcStrategies(
     new AllFrameSnapshotStrategy(context, CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT),
     new AllFrameSnapshotStrategy(context, CONTENT_RPC_MESSAGES.A11Y_REFRESH_REFS),
     new ResolveRefStrategy(context),
+    new HighlightRefStrategy(context),
     new TargetFrameStrategy(context, CONTENT_RPC_MESSAGES.IFRAME_READ),
+    new TargetFrameStrategy(context, CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE),
     new TargetFrameStrategy(context, CONTENT_RPC_MESSAGES.IFRAME_CLICK),
     new TargetFrameStrategy(context, CONTENT_RPC_MESSAGES.IFRAME_TYPE)
   ];
@@ -135,6 +137,35 @@ class ResolveRefStrategy implements ContentRpcStrategy {
       return {
         ok: true,
         ref: prefixRefValue(response.ref, parsed.frameId ?? 0)
+      };
+    }
+    return response;
+  }
+}
+
+class HighlightRefStrategy implements ContentRpcStrategy {
+  readonly type = CONTENT_RPC_MESSAGES.A11Y_HIGHLIGHT_REF;
+
+  constructor(private readonly context: ContentRpcStrategyContext) {}
+
+  async execute(message: ContentRpcRequest): Promise<ContentRpcResponse> {
+    if (message.type !== CONTENT_RPC_MESSAGES.A11Y_HIGHLIGHT_REF) {
+      return {
+        ok: false,
+        code: ERROR_CODES.CONTENT_SCRIPT_UNAVAILABLE,
+        message: `Unexpected content RPC message: ${message.type}`
+      };
+    }
+    const parsed = parseFrameRefId(message.refId);
+    const response = await this.context.sendFrameMessage(parsed.frameId, {
+      type: CONTENT_RPC_MESSAGES.A11Y_HIGHLIGHT_REF,
+      refId: parsed.refId
+    });
+    if (response.ok && 'ref' in response) {
+      return {
+        ok: true,
+        ref: prefixRefValue(response.ref, parsed.frameId ?? 0),
+        changedPage: false
       };
     }
     return response;

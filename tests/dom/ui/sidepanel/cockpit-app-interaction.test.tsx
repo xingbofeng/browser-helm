@@ -11,6 +11,7 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 describe('CockpitApp interaction', () => {
   afterEach(() => {
+    vi.useRealTimers();
     document.body.replaceChildren();
   });
 
@@ -25,6 +26,12 @@ describe('CockpitApp interaction', () => {
           mode: 'form',
           status: 'observed',
           refs: [],
+          streaming: {
+            enabled: true,
+            active: true,
+            chunkCount: 1,
+            fallbackUsed: false
+          },
           structuredPageData: structuredData()
         }
       ]
@@ -35,26 +42,245 @@ describe('CockpitApp interaction', () => {
       await Promise.resolve();
     });
     await act(async () => {
+      changeInput('任务', '检查当前页面');
       button('启动任务').click();
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain('https://example.com/register');
-    expect(container.textContent).toContain('已完成');
+    expect(container.textContent).not.toContain('example.com');
+    expect(container.textContent).not.toContain('https://example.com/register');
 
     await act(async () => {
-      button('Ref 映射').click();
+      button('高级开发者选项').click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      button('元素与表单').click();
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain('ref_submit');
+    expect(document.body.textContent).toContain('元素与表单');
+    expect(document.body.textContent).toContain('ref_submit');
 
     await act(async () => {
-      button('停止任务').click();
+      button('暂停回复').click();
       await Promise.resolve();
     });
 
     expect(container.textContent).toContain('已取消');
+    root.unmount();
+    container.remove();
+  });
+
+  it('starts with an empty composer and clears it after sending', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const runtime = new FakeRuntimePort({
+      snapshots: [
+        {
+          runId: 'seed',
+          mode: 'ask',
+          status: 'observed',
+          refs: [],
+          structuredPageData: structuredData()
+        }
+      ]
+    });
+    const startRun = vi.spyOn(runtime, 'startRun');
+
+    await act(async () => {
+      root.render(<CockpitApp runtime={runtime} />);
+      await Promise.resolve();
+    });
+
+    expect(input('任务').value).toBe('');
+
+    await act(async () => {
+      button('启动任务').click();
+      await Promise.resolve();
+    });
+    expect(startRun).not.toHaveBeenCalled();
+
+    await act(async () => {
+      changeInput('任务', '检查 Apple 注册表单');
+      button('启动任务').click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(startRun).toHaveBeenCalledWith({
+      task: '检查 Apple 注册表单',
+      mode: 'ask',
+      tabId: undefined
+    });
+    expect(input('任务').value).toBe('');
+    root.unmount();
+    container.remove();
+  });
+
+  it('keeps previous user messages in the waterfall across multiple sends', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const runtime = new FakeRuntimePort();
+
+    await act(async () => {
+      root.render(<CockpitApp runtime={runtime} />);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      changeInput('任务', '第一次检查页面摘要');
+      button('启动任务').click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      changeInput('任务', '继续检查表单字段');
+      button('启动任务').click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('第一次检查页面摘要');
+    expect(container.textContent).toContain('继续检查表单字段');
+    expect(container.textContent?.indexOf('第一次检查页面摘要')).toBeLessThan(
+      container.textContent?.indexOf('继续检查表单字段') ?? -1
+    );
+    root.unmount();
+    container.remove();
+  });
+
+  it('keeps the initial automatic observation once before user chat messages', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const runtime = new FakeRuntimePort({
+      snapshots: [
+        {
+          runId: 'auto_seed',
+          mode: 'ask',
+          status: 'observed',
+          refs: []
+        },
+        {
+          runId: 'user_seed',
+          mode: 'ask',
+          status: 'observed',
+          refs: []
+        }
+      ]
+    });
+
+    await act(async () => {
+      root.render(<CockpitApp runtime={runtime} targetTabId={123} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('已完成页面观察');
+    expect(container.textContent).toContain('页面摘要');
+    expect(container.textContent).not.toContain('观察当前页面');
+
+    await act(async () => {
+      changeInput('任务', 'hello');
+      button('启动任务').click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('hello');
+    expect(container.textContent).not.toContain('观察当前页面');
+    expect(container.textContent).toContain('已完成页面观察');
+    expect(container.textContent).toContain('页面摘要');
+    expect(container.querySelectorAll('[data-message-kind="page_summary"]')).toHaveLength(1);
+    expect(container.textContent?.indexOf('页面摘要')).toBeLessThan(
+      container.textContent?.indexOf('hello') ?? -1
+    );
+    root.unmount();
+    container.remove();
+  });
+
+  it('keeps background auto-observe retries out of the chat waterfall', async () => {
+    vi.useFakeTimers();
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const retryStructuredData = structuredData();
+    const retryObservationItem = retryStructuredData.observation.items[0];
+    if (!retryObservationItem) {
+      throw new Error('Expected structured observation fixture item');
+    }
+    const runtime = new FakeRuntimePort({
+      snapshots: [
+        {
+          runId: 'auto_seed',
+          mode: 'ask',
+          status: 'observed',
+          refs: [],
+          observation: {
+            url: 'https://example.com/iframe-host',
+            title: 'iframe host',
+            currentDomain: 'example.com',
+            origin: 'https://example.com',
+            visibleTextSummary: 'iframe host',
+            pageStateSummary: '页面包含 iframe',
+            interactiveCount: 0,
+            warnings: []
+          }
+        },
+        {
+          runId: 'user_seed',
+          mode: 'ask',
+          status: 'observed',
+          refs: []
+        },
+        {
+          runId: 'auto_retry_seed',
+          mode: 'ask',
+          status: 'observed',
+          refs: [],
+          structuredPageData: {
+            ...retryStructuredData,
+            observation: {
+              ...retryStructuredData.observation,
+              items: [
+                {
+                  ...retryObservationItem,
+                  title: 'GitHub',
+                  currentDomain: 'github.com',
+                  pageStateSummary: '页面包含 686 个可交互元素'
+                }
+              ]
+            }
+          }
+        }
+      ]
+    });
+
+    await act(async () => {
+      root.render(<CockpitApp runtime={runtime} targetTabId={123} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      changeInput('任务', 'hello');
+      button('启动任务').click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('hello');
+    expect(container.querySelectorAll('[data-message-kind="page_summary"]')).toHaveLength(1);
+    expect(container.textContent).not.toContain('GitHub');
+    expect(container.textContent).not.toContain('686 个可交互元素');
     root.unmount();
     container.remove();
   });
@@ -77,10 +303,14 @@ describe('CockpitApp interaction', () => {
       await Promise.resolve();
     });
     await act(async () => {
+      button('打开模型配置').click();
+      await Promise.resolve();
+    });
+    await act(async () => {
       changeInput('Base URL', 'https://api.new.example/v1');
       changeInput('Model', 'gpt-new');
       changeInput('API Key', 'sk-new-secret');
-      button('Save').click();
+      button('保存配置').click();
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -88,9 +318,9 @@ describe('CockpitApp interaction', () => {
     await expectProviderSettings(runtime, {
       baseUrl: 'https://api.new.example/v1',
       model: 'gpt-new',
-      apiKey: 'sk-new-secret'
+      apiKey: 'sk-new-secret',
+      streamingEnabled: true
     });
-    expect(container.textContent).toContain('sk-...cret');
     expect(container.textContent).not.toContain('sk-new-secret');
     root.unmount();
     container.remove();
@@ -114,9 +344,13 @@ describe('CockpitApp interaction', () => {
       await Promise.resolve();
     });
     await act(async () => {
+      button('打开模型配置').click();
+      await Promise.resolve();
+    });
+    await act(async () => {
       changeInput('Base URL', 'https://api.next.example/v1');
       changeInput('Model', 'gpt-next');
-      button('Save').click();
+      button('保存配置').click();
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -124,9 +358,9 @@ describe('CockpitApp interaction', () => {
     await expectProviderSettings(runtime, {
       baseUrl: 'https://api.next.example/v1',
       model: 'gpt-next',
-      apiKey: 'sk-existing-secret'
+      apiKey: 'sk-existing-secret',
+      streamingEnabled: true
     });
-    expect(container.textContent).toContain('sk-...cret');
     expect(container.textContent).not.toContain('sk-existing-secret');
     root.unmount();
     container.remove();
@@ -192,35 +426,50 @@ describe('CockpitApp interaction', () => {
       await Promise.resolve();
     });
     await act(async () => {
+      changeInput('任务', '点击删除账号');
       button('启动任务').click();
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain('https://example.com/register');
+    expect(container.textContent).not.toContain('example.com');
+    expect(container.textContent).not.toContain('https://example.com/register');
     expect(container.textContent).not.toContain('ref_submit');
 
     await act(async () => {
-      button('Ref 映射').click();
+      button('高级开发者选项').click();
       await Promise.resolve();
     });
-    expect(container.textContent).toContain('ref_submit');
-    expect(container.textContent).toContain('ref_cancel');
+    await act(async () => {
+      button('元素与表单').click();
+      await Promise.resolve();
+    });
+    expect(document.body.textContent).toContain('ref_submit');
+    expect(document.body.textContent).toContain('ref_cancel');
+    const highlightRef = vi.spyOn(runtime, 'highlightRef');
+    await act(async () => {
+      button('取消').click();
+      await Promise.resolve();
+    });
+    expect(highlightRef).toHaveBeenCalledWith({
+      runId: 'fake_run_1',
+      refId: 'ref_cancel'
+    });
 
     act(() => {
-      changeInput('搜索 Ref', 'cancel');
+      changeInput('搜索元素与表单', 'cancel');
     });
-    expect(container.textContent).not.toContain('ref_submit');
-    expect(container.textContent).toContain('ref_cancel');
+    expect(document.body.textContent).not.toContain('ref_submit');
+    expect(document.body.textContent).toContain('ref_cancel');
 
     await act(async () => {
-      button('交互元素').click();
+      chip('按钮').click();
       await Promise.resolve();
     });
     act(() => {
-      changeInput('筛选交互元素', 'delete');
+      changeInput('搜索元素与表单', 'delete');
     });
-    expect(container.textContent).not.toContain('ref_email');
-    expect(container.textContent).toContain('ref_delete');
+    expect(document.body.textContent).not.toContain('ref_email');
+    expect(document.body.textContent).toContain('ref_delete');
     root.unmount();
     container.remove();
   });
@@ -247,7 +496,11 @@ describe('CockpitApp interaction', () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain('https://example.com/register');
+    expect(container.textContent).toContain('example.com');
+    expect(container.textContent).toContain('已完成页面观察');
+    expect(container.textContent).toContain('页面摘要');
+    expect(container.textContent).not.toContain('观察当前页面');
+    expect(container.textContent).not.toContain('https://example.com/register');
     root.unmount();
     container.remove();
   });
@@ -326,6 +579,7 @@ describe('CockpitApp interaction', () => {
       await Promise.resolve();
     });
     await act(async () => {
+      changeInput('任务', '点击删除账号');
       button('启动任务').click();
       await Promise.resolve();
     });
@@ -340,6 +594,10 @@ describe('CockpitApp interaction', () => {
     });
 
     expect(container.textContent).toContain('USER_DENIED_APPROVAL');
+    expect(countText(container.textContent ?? '', 'USER_DENIED_APPROVAL')).toBe(1);
+    expect(container.querySelector('.bh-approvalResult[role="status"]')?.textContent).toContain(
+      'USER_DENIED_APPROVAL'
+    );
     root.unmount();
     container.remove();
   });
@@ -382,7 +640,80 @@ describe('CockpitApp interaction', () => {
     container.remove();
   });
 
-  it('maps fine-grained runtime statuses into RunStateBadge labels', async () => {
+  it('does not start a duplicate auto-observe run when an initial run id is present', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const runtime = new FakeRuntimePort({
+      snapshots: [
+        {
+          runId: 'run_existing',
+          mode: 'ask',
+          status: 'observed',
+          refs: [],
+          structuredPageData: structuredData()
+        }
+      ]
+    });
+    const startRun = vi.spyOn(runtime, 'startRun');
+
+    await act(async () => {
+      root.render(
+        <CockpitApp
+          runtime={runtime}
+          initialRunId="run_existing"
+          targetTabId={99}
+        />
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(startRun).not.toHaveBeenCalled();
+    root.unmount();
+    container.remove();
+  });
+
+  it('revises the current run goal from the composer', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const runtime = new FakeRuntimePort({
+      snapshots: [
+        {
+          runId: 'run_existing',
+          mode: 'form',
+          status: 'observed',
+          refs: [],
+          canReviseGoal: true,
+          structuredPageData: structuredData()
+        }
+      ]
+    });
+    const reviseGoal = vi.spyOn(runtime, 'reviseGoal');
+
+    await act(async () => {
+      root.render(<CockpitApp runtime={runtime} initialRunId="run_existing" />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      changeInput('任务', '改为只检查提交按钮为什么不可用');
+      button('修改目标').click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(reviseGoal).toHaveBeenCalledWith({
+      runId: 'run_existing',
+      goal: '改为只检查提交按钮为什么不可用'
+    });
+    expect(container.textContent).toContain('当前 run 可修改目标');
+    root.unmount();
+    container.remove();
+  });
+
+  it('maps fine-grained runtime statuses into the header status label', async () => {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
@@ -403,10 +734,11 @@ describe('CockpitApp interaction', () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain('执行工具');
+    expect(container.textContent).toContain('Running');
     root.unmount();
     container.remove();
   });
+
 });
 
 function button(name: string): HTMLButtonElement {
@@ -422,10 +754,7 @@ function button(name: string): HTMLButtonElement {
 }
 
 function changeInput(label: string, value: string): void {
-  const element = document.querySelector(`input[aria-label="${label}"]`);
-  if (!(element instanceof HTMLInputElement)) {
-    throw new Error(`Input not found: ${label}`);
-  }
+  const element = input(label);
   const setter = Object.getOwnPropertyDescriptor(
     HTMLInputElement.prototype,
     'value'
@@ -435,9 +764,27 @@ function changeInput(label: string, value: string): void {
   element.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
+function input(label: string): HTMLInputElement {
+  const element = document.querySelector(`input[aria-label="${label}"]`);
+  if (!(element instanceof HTMLInputElement)) {
+    throw new Error(`Input not found: ${label}`);
+  }
+  return element;
+}
+
+function chip(name: string): HTMLButtonElement {
+  const element = [...document.querySelectorAll('button')].find(
+    (candidate) => candidate.textContent?.trim() === name
+  );
+  if (!(element instanceof HTMLButtonElement)) {
+    throw new Error(`Chip not found: ${name}`);
+  }
+  return element;
+}
+
 async function expectProviderSettings(
   runtime: FakeRuntimePort,
-  expected: { baseUrl: string; model: string; apiKey: string }
+  expected: { baseUrl: string; model: string; apiKey: string; streamingEnabled?: boolean }
 ): Promise<void> {
   await expect(runtime.getProviderSettings()).resolves.toEqual(expected);
 }
@@ -502,4 +849,8 @@ function structuredData(
       warnings: []
     }
   };
+}
+
+function countText(value: string, needle: string): number {
+  return value.split(needle).length - 1;
 }

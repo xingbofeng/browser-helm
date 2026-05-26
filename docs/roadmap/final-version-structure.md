@@ -65,6 +65,15 @@
 | Observability metrics | v1.0 | `src/agent/metrics` | failure rates and latency |
 | HITL runtime | v1.0 | `src/agent/policy`, `src/runtime/approval`, `src/ui/approval` | 完整 policy/approval guard |
 | Form/debug product loop | v1.0 | `src/tools/form`, `src/tools/debug` | Page Inspector + Form Doctor |
+| Agent streaming side panel | v1.0.1 | `src/ui`, `src/runtime`, `src/agent/model` | 单 Agent 面板、真实 streaming、精简 Debug |
+| AgentMessage snapshot | v1.0.1 | `src/runtime`, `src/shared/schemas` | 默认 UI 的可恢复消息模型 |
+| Model config modal | v1.0.1 | `src/ui`, `src/storage` | 本地 provider 配置和测试连接 |
+| Debug minimal tabs | v1.0.1 | `src/ui/components` | Trace / 工具 / 元素与表单 / Streaming |
+| v1.0 required tools completion | v1.0.2 | `src/tools/page`, `src/tools/element`, `src/tools/nav`, `src/tools/debug`, `src/tools/policy` | 一次性补齐 v1.0 必须工具缺口 |
+| Long page reading | v1.0.2 | `src/tools/page`, `src/page/observe` | 分页读取可见文本与正文，避免长页面只看摘要 |
+| Iframe reading | v1.0.2 | `src/tools/iframe`, `src/page/messaging` | 列出和读取 iframe 页面内容与滚动状态 |
+| Viewport scroll context | v1.0.2 | `src/tools/viewport`, `src/page/observe` | 统一滚动 top page / iframe，不单独新增 iframe scroll |
+| AgentLoop user task path | v1.0.2 | `src/background/runtime`, `src/agent/kernel` | 用户任务进入真实 tool-calling loop，而不是只基于 snapshot provider answer |
 | Assisted form fill | v1.1 | `src/tools/form`, `src/page/dom` | fill/verify/submit approval |
 | Memory | v1.2 | `src/memory`, `src/storage/dexie` | scratch/domain/workflow/preference |
 | 旧会话压缩 | v1.2 | `src/agent/context`, `src/memory/session-summary` | trace -> summary |
@@ -334,7 +343,47 @@ tool_call
 - AC11：PlanBuilder 使用 mode template + task + observation 生成轻量 plan；完整 PlanState 进 trace，模型上下文只接收 plan progress summary。
 - AC12：plan 可动态修改，例如无表单时从 Form plan 切到 Debug/Ask plan，REF_STALE 时插入 re-observe。
 
-## 9. v1.1 Assisted Form Fill + Frontend Debug
+## 9. v1.0.1 Agent Streaming Side Panel
+
+### 做什么
+
+- 将 v0.4 Cockpit 的四个产品一级 Tab 收敛为单 Agent 聊天瀑布流。
+- 引入 `AgentMessage`，让默认 UI 从可恢复消息模型渲染，而不是临时拼 raw trace。
+- 做 OpenAI-compatible provider 的真实 token/chunk streaming。
+- 工具和运行过程使用 event streaming，普通 UI 显示产品化状态。
+- Debug 收敛为 Trace / 工具 / 元素与表单 / Streaming 四个 Tab。
+- Ref、交互元素、表单字段合并为一张“元素与表单”排障表。
+- 右上角三个点进入模型配置弹窗，配置 API Key、Base URL、Model、Streaming 开关和测试连接。
+- 引入 `animal-island-ui` 与 lucide，统一动物岛主题组件风格。
+- 删除不用的旧 Cockpit UI 入口、旧四 Tab 包装、重复 Settings 入口和无引用组件代码。
+
+### 不做什么
+
+- 不做完整多轮聊天。
+- 不做自动填写或提交。
+- 不做新的高风险动作。
+- 不做长期 memory、workflow replay、DevTools deep inspector 或 vision。
+- 不做所有 provider 的 streaming 适配；只承诺 OpenAI-compatible。
+
+### 用户故事
+
+- US1：作为用户，我打开 BrowserHelm 后看到 Agent 正在观察、诊断和输出建议。
+- US2：作为用户，我能看到真实流式回复，并在失败时得到 fallback 后的诊断结果。
+- US3：作为开发者，我能展开 Debug 查看 Trace、工具、元素与表单和 Streaming 状态。
+- US4：作为用户，我能在模型配置弹窗中本地保存 provider 设置并测试连接。
+- US5：作为维护者，我能确认旧四 Tab UI 不再残留为隐藏代码。
+
+### 验收标准
+
+- AC1：默认首屏不再显示旧四个产品一级 Tab。
+- AC2：`RunSnapshot.messages` 能在刷新后恢复 Agent 瀑布流。
+- AC3：streaming enabled 时 OpenAI-compatible provider 使用真实 chunk streaming。
+- AC4：streaming 失败时 fallback 到非流式 `complete()`。
+- AC5：Debug 只保留 Trace / 工具 / 元素与表单 / Streaming。
+- AC6：模型配置弹窗不泄露完整 API Key。
+- AC7：不用的旧 UI 代码被删除，而不是仅隐藏。
+
+## 10. v1.1 Assisted Form Fill + Frontend Debug
 
 ### 做什么
 
@@ -350,7 +399,7 @@ tool_call
 - AC3：用户 approve 后才执行提交。
 - AC4：用户 deny 后返回 `USER_DENIED_APPROVAL`，不会继续提交。
 
-## 10. v1.2 Memory + Workflow Replay
+## 11. v1.2 Memory + Workflow Replay
 
 ### 做什么
 
@@ -378,7 +427,7 @@ tool_call
 - AC5：trace replay 可以复现一次 run 的模型输出、parsed decision、tool args、tool result 和错误码。
 - AC6：成功 plan 可以生成 workflow draft，进入 replay preview / approval，而不是静默保存为可执行 workflow。
 
-## 11. v1.3+ Eval / Skill / MCP
+## 12. v1.3+ Eval / Skill / MCP
 
 ### 做什么
 
@@ -398,7 +447,7 @@ tool_call
 - AC5：prompt injection eval 验证页面内容不能覆盖 system/developer/tool policy。
 - AC6：execute_js、MCP、skill 默认走 sandbox / approval policy。
 
-## 12. v1.4+ / v2.0 Sub-agent and Multi-agent
+## 13. v1.4+ / v2.0 Sub-agent and Multi-agent
 
 ### 做什么
 

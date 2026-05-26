@@ -20,11 +20,37 @@ export function findInteractiveCandidates(document: Document): Element[] {
 }
 
 export function isVisibleElement(element: Element): boolean {
-  if (element.hasAttribute('hidden')) {
-    return false;
+  const view = element.ownerDocument.defaultView;
+  for (let current: Element | null = element; current; current = current.parentElement) {
+    if (
+      current.hasAttribute('hidden') ||
+      current.getAttribute('aria-hidden') === 'true'
+    ) {
+      return false;
+    }
+
+    const inlineStyle = current.getAttribute('style')?.toLowerCase() ?? '';
+    if (
+      /display\s*:\s*none/u.test(inlineStyle) ||
+      /visibility\s*:\s*(hidden|collapse)/u.test(inlineStyle) ||
+      /opacity\s*:\s*0(?:[;\s]|$)/u.test(inlineStyle)
+    ) {
+      return false;
+    }
+
+    const computedStyle = view?.getComputedStyle(current);
+    if (
+      computedStyle &&
+      (computedStyle.display === 'none' ||
+        computedStyle.visibility === 'hidden' ||
+        computedStyle.visibility === 'collapse' ||
+        computedStyle.opacity === '0')
+    ) {
+      return false;
+    }
   }
-  const style = element.getAttribute('style')?.toLowerCase() ?? '';
-  return !/display\s*:\s*none/u.test(style) && !/visibility\s*:\s*hidden/u.test(style);
+
+  return true;
 }
 
 export function isDisabledElement(element: Element): boolean {

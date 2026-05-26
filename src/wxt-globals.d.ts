@@ -7,6 +7,7 @@ declare function defineContentScript(config: {
 }): unknown;
 
 declare module '*.css';
+declare module 'animal-island-ui/style';
 
 interface ImportMeta {
   glob<T = unknown>(

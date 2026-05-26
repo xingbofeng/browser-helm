@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { elementRefSchema } from './observation.schema';
+import { elementRefSchema, pageZoneSchema } from './observation.schema';
 
 export const tabDataStatusSchema = z.enum([
   'ready',
@@ -62,6 +62,7 @@ export const interactiveElementSchema = z.object({
   checked: z.boolean().optional(),
   selected: z.boolean().optional(),
   domOrder: z.number().int().nonnegative().optional(),
+  pageZone: pageZoneSchema.optional(),
   warnings: z.array(structuredPageWarningSchema.or(z.string())).default([])
 });
 
