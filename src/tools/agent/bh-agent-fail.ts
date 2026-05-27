@@ -10,12 +10,11 @@ const argsSchema = z.object({
 });
 
 /**
- * Ends the current Agent run with a structured failure.
+ * 以结构化失败状态结束当前 Agent run。
  *
- * Use this safe internal tool when the Agent has determined that the task
- * cannot continue or has failed. `message` becomes the run summary and `code`
- * can override the default failure code; the tool does not mutate the page,
- * never triggers approval, and returns a failed ToolResult.
+ * Agent 确认任务无法继续或已失败时调用此安全内部工具。`message` 作为 run 摘要；
+ * `code` 可覆写默认失败码。该工具不修改页面状态，永不触发 approval，返回失败
+ * ToolResult。
  */
 export const bhAgentFail: ToolSpec<
   z.infer<typeof argsSchema>,

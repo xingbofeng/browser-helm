@@ -10,12 +10,11 @@ import type { ToolSpec } from '../core/tool-spec';
 const argsSchema = z.object({});
 
 /**
- * Refreshes the page stable ref map without mutating the page.
+ * 刷新页面 stable ref 映射，不修改页面状态。
  *
- * Use this safe Ask/Debug/Form tool after DOM changes or stale-ref failures to
- * rebuild the a11y snapshot and stable refs. It accepts no parameters, never
- * triggers approval, and returns the refreshed snapshot with `requiresObserve`
- * set on failures that need a new observation cycle.
+ * 面向 Ask/Debug/Form 模式的安全工具，在 DOM 变化或 stale ref 错误后重建 a11y
+ * 快照和 stable refs。不接受参数，永不触发 approval，返回刷新后的快照，失败时设置
+ * `requiresObserve` 以提示需要新的 observation 周期。
  */
 export function bhA11yRefreshRefs(
   rpc: ContentRpcClient

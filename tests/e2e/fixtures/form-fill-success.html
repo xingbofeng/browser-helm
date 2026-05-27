@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Form Fill Success</title>
+  </head>
+  <body>
+    <h1>Simple Signup</h1>
+    <form id="signup">
+      <label for="name">Full Name</label>
+      <input id="name" name="name" type="text" required />
+
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" required />
+
+      <label for="country">Country</label>
+      <select id="country" name="country" required>
+        <option value="">Select...</option>
+        <option value="us">United States</option>
+        <option value="cn">China</option>
+      </select>
+
+      <label>
+        <input name="agree" type="checkbox" required />
+        I agree to the terms
+      </label>
+
+      <button id="submit" type="submit">Submit</button>
+    </form>
+    <p id="success" role="status" hidden>Submission successful</p>
+    <script>
+      const form = document.querySelector('#signup');
+      const success = document.querySelector('#success');
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        if (!form.checkValidity()) return;
+        form.hidden = true;
+        success.hidden = false;
+      });
+    </script>
+  </body>
+</html>

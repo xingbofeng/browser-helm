@@ -8,7 +8,7 @@ import { loadDomFixture } from '../../../helpers/dom-test-page';
 describe('element-state-reader', () => {
   it('reads visible and disabled state from DOM and ARIA signals', () => {
     const page = loadDomFixture(
-      'v0-31-interactive-complete.html',
+      'interactive-complete.html',
       'https://demo.example.com/interactive'
     );
     const disabledButton = page.document.querySelector('button[disabled]');
@@ -54,7 +54,7 @@ describe('element-state-reader', () => {
 
   it('reads checked and selected state when available', () => {
     const page = loadDomFixture(
-      'v0-31-interactive-complete.html',
+      'interactive-complete.html',
       'https://demo.example.com/interactive'
     );
 

@@ -40,6 +40,10 @@ export function createContentRpcStrategies(
   return [
     new FrameListStrategy(context),
     new AllFrameObservationStrategy(context),
+    new TargetFrameStrategy(context, CONTENT_RPC_MESSAGES.PAGE_READ_VISIBLE_TEXT),
+    new TargetFrameStrategy(context, CONTENT_RPC_MESSAGES.PAGE_READ_ARTICLE),
+    new TargetFrameStrategy(context, CONTENT_RPC_MESSAGES.VIEWPORT_GET_INFO),
+    new TargetFrameStrategy(context, CONTENT_RPC_MESSAGES.VIEWPORT_SCROLL),
     new AllFrameSnapshotStrategy(context, CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT),
     new AllFrameSnapshotStrategy(context, CONTENT_RPC_MESSAGES.A11Y_REFRESH_REFS),
     new ResolveRefStrategy(context),
@@ -129,7 +133,7 @@ class ResolveRefStrategy implements ContentRpcStrategy {
       };
     }
     const parsed = parseFrameRefId(message.refId);
-    const response = await this.context.sendFrameMessage(parsed.frameId, {
+    const response = await this.context.sendFrameMessage(parsed.frameId ?? 0, {
       type: CONTENT_RPC_MESSAGES.A11Y_RESOLVE_REF,
       refId: parsed.refId
     });
@@ -157,7 +161,7 @@ class HighlightRefStrategy implements ContentRpcStrategy {
       };
     }
     const parsed = parseFrameRefId(message.refId);
-    const response = await this.context.sendFrameMessage(parsed.frameId, {
+    const response = await this.context.sendFrameMessage(parsed.frameId ?? 0, {
       type: CONTENT_RPC_MESSAGES.A11Y_HIGHLIGHT_REF,
       refId: parsed.refId
     });
@@ -180,6 +184,9 @@ class TargetFrameStrategy implements ContentRpcStrategy {
 
   async execute(message: ContentRpcRequest): Promise<ContentRpcResponse> {
     if (!('frameId' in message) || typeof message.frameId !== 'number') {
+      if (isTopFrameDefaultableMessage(message)) {
+        return safeSendFrameMessage(this.context, undefined, message);
+      }
       return {
         ok: false,
         code: ERROR_CODES.CONTENT_SCRIPT_UNAVAILABLE,
@@ -196,6 +203,16 @@ class TargetFrameStrategy implements ContentRpcStrategy {
     }
     return safeSendFrameMessage(this.context, message.frameId, message);
   }
+}
+
+function isTopFrameDefaultableMessage(message: ContentRpcRequest): boolean {
+  const defaultableTypes = new Set<ContentRpcRequest['type']>([
+    CONTENT_RPC_MESSAGES.PAGE_READ_VISIBLE_TEXT,
+    CONTENT_RPC_MESSAGES.PAGE_READ_ARTICLE,
+    CONTENT_RPC_MESSAGES.VIEWPORT_GET_INFO,
+    CONTENT_RPC_MESSAGES.VIEWPORT_SCROLL
+  ]);
+  return defaultableTypes.has(message.type);
 }
 
 export function mergeFrameObservationResponses(
@@ -430,7 +447,7 @@ function joinText(values: string[]): string {
 
 async function safeSendFrameMessage(
   context: ContentRpcStrategyContext,
-  frameId: number,
+  frameId: number | undefined,
   message: ContentRpcRequest
 ): Promise<ContentRpcResponse> {
   try {

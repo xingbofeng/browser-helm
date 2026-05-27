@@ -14,13 +14,11 @@ import type { ToolSpec } from '../core/tool-spec';
 const argsSchema = actionIntentSchema;
 
 /**
- * Checks whether a proposed browser action has a valid target and safety state.
+ * 检查拟执行的浏览器动作是否具备有效目标和安全状态。
  *
- * Use this read-only tool in Debug or Act mode before attempting controlled
- * iframe/page actions. It resolves the target stable ref, reports whether the
- * action can proceed, predicts risk/approval needs, and tells the Agent when a
- * fresh page observation is required. The tool never mutates the page and never
- * creates an ApprovalRequest by itself.
+ * 面向 Debug/Act 模式的只读工具，在尝试受控 iframe/page 动作之前使用。解析目标
+ * stable ref，报告动作能否执行、预测风险/approval 需求，并告知 Agent 何时需要重新
+ * 观察页面。工具本身不修改页面，也不自行创建 ApprovalRequest。
  */
 export function bhActionCheckReadiness(
   rpc: ContentRpcClient

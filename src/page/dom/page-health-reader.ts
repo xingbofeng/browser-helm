@@ -33,7 +33,7 @@ export function readPageHealthSummary(doc: Document): PageHealthSummary {
       issueCount > 0
         ? `检测到 ${consoleErrors.length} 类 console error 和 ${networkFailures.length} 个 network failure`
         : '未发现明显页面异常',
-    limitations: ['CDP deep inspection is not used in v1.0']
+    limitations: ['CDP deep inspection is not available in this mode']
   });
 }
 

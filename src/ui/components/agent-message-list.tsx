@@ -1,11 +1,21 @@
-import { AlertCircle, Bot, CheckCircle2, FileText, UserRound } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import {
+  AlertCircle,
+  Bot,
+  CheckCircle2,
+  ChevronDown,
+  FileText,
+  Link,
+  LoaderCircle,
+  UserRound
+} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { RunSnapshot } from '../../runtime/runtime-messages';
 import { buildUserFacingPageSummary } from '../../shared/page-summary';
 import type { AgentMessage } from '../../shared/schemas/agent-message.schema';
 import type { DebugReport } from '../../shared/schemas/diagnosis.schema';
 import { StreamingMarkdown } from './streaming-markdown';
+import { FormActionCard } from './form-action-card';
 
 type AgentMessageListProps = {
   snapshot?: RunSnapshot | undefined;
@@ -15,14 +25,17 @@ export function AgentMessageList({ snapshot }: AgentMessageListProps) {
   const waterfallRef = useRef<HTMLElement>(null);
   const hasRuntimeMessages = Boolean(snapshot?.messages?.length);
   const baseMessages = hasRuntimeMessages ? snapshot?.messages ?? [] : fallbackMessages(snapshot);
-  const messages = snapshot && !hasRuntimeMessages
+  const rawMessages = snapshot
     ? withDerivedPageSummary(baseMessages, snapshot)
     : baseMessages;
+  const messages = prepareDisplayMessages(rawMessages);
+  const progress = buildRunProgress(snapshot);
+  const nowTick = useNowTick(Boolean(progress));
   const scrollAnchor = messages
     .map((message) =>
       `${message.id}:${message.status}:${message.updatedAt}:${message.content.length}`
     )
-    .join('|');
+    .join('|') + (progress ? `|progress:${progress.label}:${nowTick}` : '');
 
   useEffect(() => {
     if (waterfallRef.current) {
@@ -43,11 +56,18 @@ export function AgentMessageList({ snapshot }: AgentMessageListProps) {
             {iconForMessage(message)}
           </div>
           <div className="bh-agentMessageBody">
-            {message.title ? <h2>{message.title}</h2> : null}
-            {message.role === 'agent' && message.content ? (
-              <StreamingMarkdown content={message.content} className="bh-markdownContent" />
+            {message.kind === 'page_summary' ? (
+              <PageObservationCard message={message} snapshot={snapshot} />
+            ) : message.role === 'agent' && message.content ? (
+              <>
+                {message.title ? <h2>{message.title}</h2> : null}
+                <StreamingMarkdown content={message.content} className="bh-markdownContent" />
+              </>
             ) : message.content ? (
-              <p>{message.content}</p>
+              <>
+                {message.title ? <h2>{message.title}</h2> : null}
+                <p>{message.content}</p>
+              </>
             ) : (
               <p>等待 BrowserHelm 输出...</p>
             )}
@@ -58,6 +78,72 @@ export function AgentMessageList({ snapshot }: AgentMessageListProps) {
           </div>
         </article>
       ))}
+      {snapshot?.toolResult && snapshot.toolResult.tool.startsWith('bh_form_') ? (
+        <FormActionCard toolResult={snapshot.toolResult} snapshot={snapshot} />
+      ) : null}
+      {progress ? <RunProgressCard progress={progress} now={nowTick} /> : null}
+    </section>
+  );
+}
+
+function prepareDisplayMessages(messages: AgentMessage[]): AgentMessage[] {
+  const lastPageSummaryIndex = messages.reduce(
+    (lastIndex, message, index) => message.kind === 'page_summary' ? index : lastIndex,
+    -1
+  );
+  if (lastPageSummaryIndex < 0) {
+    return messages;
+  }
+  return messages.filter((message, index) => {
+    if (message.kind === 'page_summary') {
+      return index === lastPageSummaryIndex;
+    }
+    const isCompletedObserveStatus =
+      message.id.endsWith(':observe-status') && message.status === 'complete';
+    return !isCompletedObserveStatus;
+  });
+}
+
+function PageObservationCard({
+  message,
+  snapshot
+}: {
+  message: AgentMessage;
+  snapshot?: RunSnapshot | undefined;
+}) {
+  const observation = snapshot?.structuredPageData?.observation.items[0];
+  const currentDomain =
+    observation?.currentDomain ??
+    snapshot?.observation?.currentDomain ??
+    domainFromSummary(message.content) ??
+    '当前页面';
+  const url = observation?.url ?? snapshot?.observation?.url;
+  const textCount = countSummaryText(observation?.visibleTextSummary ?? message.content);
+  const linkCount = countLinks(snapshot);
+  const formCount = snapshot?.structuredPageData?.forms.count ?? 0;
+  const updatedAt = message.updatedAt || snapshot?.structuredPageData?.observation.updatedAt;
+  return (
+    <section className="bh-qaCard bh-pageObservationCard">
+      <header className="bh-qaCardHeader">
+        <span className="bh-qaCardStatusIcon" aria-hidden="true">
+          <CheckCircle2 size={24} />
+        </span>
+        <h2>已完成页面观察</h2>
+        {updatedAt ? <time>{formatMessageTime(updatedAt)}</time> : null}
+        <ChevronDown size={17} aria-hidden="true" />
+      </header>
+      <div className="bh-pageObservationBody">
+        <p>
+          <strong>当前页面：</strong>
+          {url ? <span title={url}>{currentDomain}</span> : currentDomain}
+        </p>
+        <StreamingMarkdown content={message.content} className="bh-markdownContent" />
+      </div>
+      <ul className="bh-pageObservationStats" aria-label="页面观察统计">
+        <li><FileText size={15} />文本 {textCount}</li>
+        <li><Link size={15} />链接 {linkCount}</li>
+        <li><FileText size={15} />表单 {formCount}</li>
+      </ul>
     </section>
   );
 }
@@ -126,6 +212,125 @@ function withDerivedPageSummary(messages: AgentMessage[], snapshot: RunSnapshot)
   return nextMessages;
 }
 
+type RunProgress = {
+  label: string;
+  detail: string;
+  startedAt: number;
+};
+
+function RunProgressCard({
+  progress,
+  now
+}: {
+  progress: RunProgress;
+  now: number;
+}) {
+  const elapsedSeconds = Math.max(0, Math.floor((now - progress.startedAt) / 1000));
+  return (
+    <article className="bh-runProgressCard" role="status" aria-live="polite">
+      <span className="bh-runProgressSpinner" aria-hidden="true">
+        <LoaderCircle size={17} />
+      </span>
+      <div>
+        <strong>{progress.label}</strong>
+        <p>{progress.detail}</p>
+      </div>
+      <time>{elapsedSeconds}s</time>
+    </article>
+  );
+}
+
+function buildRunProgress(snapshot: RunSnapshot | undefined): RunProgress | undefined {
+  if (!snapshot || !isActiveRunStatus(snapshot.status)) {
+    return undefined;
+  }
+  const trace = snapshot.trace ?? [];
+  const latestToolStarted = [...trace].reverse().find((event) => event.type === 'tool_started');
+  const latestModelStarted = [...trace].reverse().find((event) => event.type === 'model_stream_started');
+  if (snapshot.status === 'thinking' || latestModelStarted) {
+    return {
+      label: '正在思考下一步',
+      detail: 'BrowserHelm 正在结合页面观察、历史对话和工具结果组织回复。',
+      startedAt: latestModelStarted?.timestamp ?? Date.now()
+    };
+  }
+  if (snapshot.status === 'executing_tool' && latestToolStarted) {
+    const payload = recordPayload(latestToolStarted.payload);
+    const tool = stringValue(payload.tool) ?? '工具';
+    return {
+      label: humanToolLabel(tool),
+      detail: `正在运行 ${tool}，完成后会自动更新卡片和调试信息。`,
+      startedAt: latestToolStarted.timestamp ?? Date.now()
+    };
+  }
+  if (snapshot.status === 'observing') {
+    return {
+      label: '正在观察当前页面',
+      detail: '正在读取标题、正文摘要、链接、表单和可交互元素。',
+      startedAt: latestToolStarted?.timestamp ?? Date.now()
+    };
+  }
+  if (snapshot.status === 'waiting_for_user') {
+    return {
+      label: '等待你的补充',
+      detail: 'Agent 需要更多信息才能继续。',
+      startedAt: Date.now()
+    };
+  }
+  if (snapshot.status === 'recovering') {
+    return {
+      label: '正在恢复运行',
+      detail: '正在根据错误信息选择下一步。',
+      startedAt: Date.now()
+    };
+  }
+  return undefined;
+}
+
+function isActiveRunStatus(status: RunSnapshot['status']): boolean {
+  return status === 'observing' ||
+    status === 'thinking' ||
+    status === 'executing_tool' ||
+    status === 'waiting_for_user' ||
+    status === 'recovering';
+}
+
+function humanToolLabel(tool: string): string {
+  if (tool.includes('page_observe')) return '正在观察页面结构';
+  if (tool.includes('page_read_article')) return '正在读取页面正文';
+  if (tool.includes('page_read_visible_text')) return '正在读取可见文本';
+  if (tool.includes('iframe_list')) return '正在查找 iframe';
+  if (tool.includes('iframe_read')) return '正在读取 iframe 内容';
+  if (tool.includes('viewport_scroll')) return '正在滚动页面';
+  if (tool.includes('form_infer_fill_plan')) return '正在规划表单填写';
+  if (tool.includes('form_fill')) return '正在填写表单字段';
+  if (tool.includes('form_verify')) return '正在验证表单状态';
+  if (tool.includes('form_submit')) return '正在准备提交确认';
+  return '正在运行页面工具';
+}
+
+function recordPayload(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function useNowTick(enabled: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!enabled) {
+      return undefined;
+    }
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [enabled]);
+  return now;
+}
+
 function fallbackMessages(snapshot: RunSnapshot | undefined): AgentMessage[] {
   if (!snapshot) {
     return [
@@ -176,6 +381,38 @@ function iconForMessage(message: AgentMessage) {
     return <CheckCircle2 size={16} />;
   }
   return <Bot size={16} />;
+}
+
+function countSummaryText(text: string | undefined): number {
+  const normalized = text?.trim();
+  if (!normalized) {
+    return 0;
+  }
+  return normalized.split(/\s+/u).filter(Boolean).length;
+}
+
+function countLinks(snapshot: RunSnapshot | undefined): number {
+  const refs = snapshot?.structuredPageData?.refs.items ?? snapshot?.refs ?? [];
+  return refs.filter((ref) =>
+    ref.role === 'link' || ref.tagName.toLowerCase() === 'a'
+  ).length;
+}
+
+function domainFromSummary(text: string): string | undefined {
+  const match = text.match(/来源：([^。\n]+)。/u);
+  return match?.[1];
+}
+
+function formatMessageTime(value: number | string): string {
+  const date = typeof value === 'number' ? new Date(value) : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  return date.toLocaleTimeString('zh-CN', {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 }
 
 function DebugReportSummary({ report }: { report: DebugReport }) {

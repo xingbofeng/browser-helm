@@ -17,9 +17,9 @@ describe('traceEventSchema', () => {
         maxSteps: 5,
         metadata: {
           schemaVersion: '1.0.0',
-          promptVersion: 'v0.1.0',
-          toolSchemaVersion: 'v0.1.0',
-          contextPolicyVersion: 'v0.1.0',
+          promptVersion: '0.1.0',
+          toolSchemaVersion: '0.1.0',
+          contextPolicyVersion: '0.1.0',
           model: 'gpt-5-mini',
           runMode: 'ask'
         }
@@ -89,9 +89,9 @@ describe('traceEventSchema', () => {
     ).toThrowError();
   });
 
-  it('accepts v1.0 diagnosis trace events', () => {
+  it('accepts diagnosis trace events', () => {
     const base = {
-      id: 'evt_v1',
+      id: 'evt_diag',
       runId: 'run_1',
       timestamp: 1710000000000,
       schemaVersion: '1.0.0'

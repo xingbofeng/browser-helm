@@ -2,6 +2,7 @@ import { ERROR_CODES } from '../shared/constants/error-codes';
 import { APPROVAL_EVENT_NAMES, TRACE_EVENT_NAMES } from '../shared/constants/event-names';
 import type {
   DecideApprovalInput,
+  ExecuteToolInput,
   HighlightRefInput,
   RuntimeEvent,
   RuntimeProviderSettings,
@@ -141,6 +142,44 @@ export class FakeRuntimePort implements RuntimePort {
     });
   }
 
+  async executeTool(input: ExecuteToolInput): Promise<RuntimeToolExecutionResult> {
+    const snapshot = await this.getRunSnapshot(input.runId);
+    const result: RuntimeToolExecutionResult = {
+      ok: true,
+      code: ERROR_CODES.OK,
+      summary: `Executed ${input.tool}`,
+      changedPage: input.tool === 'bh_form_fill_field',
+      requiresObserve: false
+    };
+    const event = {
+      runId: input.runId,
+      type: TRACE_EVENT_NAMES.TOOL_RESULT,
+      payload: {
+        tool: input.tool,
+        ok: result.ok,
+        code: result.code,
+        summary: result.summary
+      }
+    };
+    this.snapshots.set(input.runId, {
+      ...snapshot,
+      status: input.tool === 'bh_form_submit_with_approval'
+        ? 'waiting_for_approval'
+        : snapshot.status,
+      toolResult: {
+        tool: input.tool,
+        ok: result.ok,
+        code: result.code,
+        summary: result.summary,
+        changedPage: result.changedPage,
+        requiresObserve: result.requiresObserve
+      },
+      trace: [...(snapshot.trace ?? []), event]
+    });
+    this.emit(input.runId, event);
+    return result;
+  }
+
   getRunSnapshot(runId: string): Promise<RunSnapshot> {
     return Promise.resolve(
       this.snapshots.get(runId) ?? {
@@ -257,16 +296,6 @@ function fakeInitialMessages(
   if (observeOnly) {
     const item = seed?.structuredPageData?.observation.items[0];
     return [
-      {
-        id: `${runId}:observe-status`,
-        role: 'agent' as const,
-        kind: 'agent_status' as const,
-        status: 'complete' as const,
-        title: '已完成页面观察',
-        content: 'BrowserHelm 已完成当前页面摘要和可交互结构读取。',
-        createdAt: now,
-        updatedAt: now
-      },
       {
         id: `${runId}:page-summary`,
         role: 'agent' as const,

@@ -7,7 +7,9 @@ export class PageObservationPanel {
     await expect(this.page.getByRole('heading', { name: /BrowserHelm/u })).toBeVisible();
     await expect(this.page.getByLabel('BrowserHelm Agent 消息')).toBeVisible();
     await expect(this.page.getByText(expected.title)).toBeVisible();
-    await expect(this.page.getByText(new URL(expected.url).hostname)).toBeVisible();
+    await expect(
+      this.page.locator('.bh-pageObservationBody span').getByText(new URL(expected.url).hostname, { exact: true })
+    ).toBeVisible();
     await expect(this.page.getByText(expected.url)).toHaveCount(0);
     await this.openDebugTab('工具');
     await expect(this.page.getByRole('heading', { name: 'bh_page_observe' })).toBeVisible();
@@ -18,7 +20,7 @@ export class PageObservationPanel {
     await this.expectVisible(expected);
     await expect(this.page.getByText(/empty/u).first()).toBeVisible();
     await this.openDebugTab('元素与表单');
-    await expect(this.page.locator('.bh-dataTable tbody tr')).toHaveCount(0);
+    await expect(this.page.locator('.bh-elementListItem')).toHaveCount(0);
     await expect(this.page.locator('.bh-debugSummary').getByText('元素 0')).toBeVisible();
   }
 

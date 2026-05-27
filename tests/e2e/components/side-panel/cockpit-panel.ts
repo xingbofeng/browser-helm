@@ -15,8 +15,43 @@ export class CockpitPanel {
 
   async expectObservedPage(expected: { title: string; url: string }): Promise<void> {
     await expect(this.page.getByText(expected.title)).toBeVisible();
-    await expect(this.page.getByText(new URL(expected.url).hostname)).toBeVisible();
+    await expect(
+      this.page.locator('.bh-pageObservationBody span').getByText(new URL(expected.url).hostname, { exact: true })
+    ).toBeVisible();
     await expect(this.page.getByText(expected.url)).toHaveCount(0);
+  }
+
+  async openDebugTab(tabName: string): Promise<void> {
+    await this.openDebug();
+    await this.page.getByRole('button', { name: tabName, exact: true }).click();
+  }
+
+  async expectNoLegacyObserveStatusCard(): Promise<void> {
+    await expect(
+      this.page.getByText('BrowserHelm 已完成当前页面摘要和可交互结构读取。')
+    ).toHaveCount(0);
+  }
+
+  async expectLongPageArticleRead(): Promise<void> {
+    await expect(this.page.getByText('正文读取完成')).toBeVisible();
+    await this.openDebugTab('Trace');
+    await expect(this.page.getByText('调用工具：bh_page_read_article').first()).toBeVisible();
+    await expect(this.page.getByText(/工具结果：bh_page_read_article/u).first()).toBeVisible();
+  }
+
+  async expectStreamingMergedResponse(expectedText: string): Promise<void> {
+    await expect(this.page.getByText(expectedText, { exact: true })).toBeVisible();
+    await this.openDebugTab('Streaming');
+    await expect(this.page.locator('.bh-streamingMetrics').getByText('true').first()).toBeVisible();
+    await expect(this.page.locator('.bh-streamingMetrics')).toContainText('3');
+    await expect(this.page.getByText(expectedText, { exact: true }).first()).toBeVisible();
+  }
+
+  async inspectElement(label: string): Promise<void> {
+    await this.openDebugTab('元素与表单');
+    await this.page.getByRole('button', {
+      name: new RegExp(`^检查元素 ${escapeRegExp(label)} `, 'u')
+    }).click();
   }
 
   async stopRun(): Promise<void> {
@@ -97,4 +132,8 @@ export class CockpitPanel {
     await this.page.getByRole('button', { name: '高级开发者选项' }).click();
     await expect(this.page.getByRole('button', { name: /Trace/u }).first()).toBeVisible();
   }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }

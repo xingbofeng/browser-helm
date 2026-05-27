@@ -46,7 +46,7 @@ describe('action readiness schemas', () => {
     ).toThrowError();
   });
 
-  it('accepts all v0.33 action kinds', () => {
+  it('accepts all action kinds', () => {
     expect(actionKindSchema.options).toEqual([
       'click',
       'type',

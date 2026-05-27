@@ -8,7 +8,7 @@ describe('value-preview', () => {
   it('summarizes ordinary text-like field previews without exposing values', () => {
     document.body.innerHTML = `<input id="name" value="abcdefghijklmnopqrstuvwxyz1234567890" />`;
 
-    expect(readValuePreview(field('#name'))).toBe('[MASKED]');
+    expect(readValuePreview(field('#name'))).toBe('non-empty');
   });
 
   it('summarizes textarea previews without exposing values', () => {
@@ -32,17 +32,17 @@ describe('value-preview', () => {
 
     expect(readValuePreview(field('#terms'))).toBe('checked');
     expect(readValuePreview(field('#plan'))).toBe('unchecked');
-    expect(readValuePreview(field('#city'))).toBe('[MASKED]');
+    expect(readValuePreview(field('#city'))).toBe('non-empty');
   });
 
-  it('masks sensitive field previews before exposing the value', () => {
+  it('masks sensitive field previews while ordinary email remains fillable', () => {
     document.body.innerHTML = `
       <input id="password" type="password" value="super-secret-password" />
       <input id="email" type="email" value="me@example.com" />
     `;
 
     expect(readValuePreview(field('#password'))).toBe('[MASKED]');
-    expect(readValuePreview(field('#email'))).toBe('[MASKED]');
+    expect(readValuePreview(field('#email'))).toBe('non-empty');
   });
 });
 

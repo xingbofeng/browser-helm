@@ -1,4 +1,5 @@
 import { Bug, Download, ListTree, MousePointerClick, RadioTower, Wrench } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { Button } from 'animal-island-ui';
 import { useMemo, useState } from 'react';
 
@@ -23,13 +24,15 @@ const debugTabs = [
   { key: 'trace', label: 'Trace', icon: ListTree },
   { key: 'tools', label: '工具', icon: Wrench },
   { key: 'elements', label: '元素与表单', icon: MousePointerClick },
+  { key: 'form', label: '表单执行', icon: FileText },
   { key: 'streaming', label: 'Streaming', icon: RadioTower }
 ] as const;
 type DebugTabKey = (typeof debugTabs)[number]['key'];
 
 export function AdvancedDebugDrawer({
   snapshot,
-  structuredPageData
+  structuredPageData,
+  onInspectElement
 }: AdvancedDebugDrawerProps) {
   const [open, setOpen] = useState(() =>
     typeof localStorage !== 'undefined'
@@ -62,7 +65,7 @@ export function AdvancedDebugDrawer({
           structuredPageData={structuredPageData}
           activeTab={activeTab}
           onTabChange={setActiveTab}
-          onInspectElement={undefined}
+          onInspectElement={onInspectElement}
         />
       ) : null}
     </section>
@@ -108,6 +111,7 @@ export function AdvancedDebugPanel({
         />
       ) : null}
       {activeTab === 'streaming' ? <StreamingTab snapshot={snapshot} /> : null}
+      {activeTab === 'form' ? <FormExecutionTab snapshot={snapshot} /> : null}
     </div>
   );
 }
@@ -206,6 +210,7 @@ function ElementsFormsTab({
             key={row.id}
             type="button"
             className="bh-elementListItem"
+            aria-label={`检查元素 ${row.label} ${row.refId}`}
             aria-pressed={row.id === selected?.id}
             onClick={() => selectRow(row)}
           >
@@ -343,4 +348,47 @@ function matchRow(
     .join(' ')
     .toLowerCase()
     .includes(normalized);
+}
+
+
+function FormExecutionTab({ snapshot }: { snapshot?: RunSnapshot | undefined }) {
+  if (!snapshot) {
+    return <p className="bh-emptyMsg">暂无运行快照</p>;
+  }
+
+  const toolResult = snapshot.toolResult;
+  const events = snapshot.trace ?? [];
+  const formTraceEvents = events.filter((e: RuntimeEvent) =>
+    (e as { type?: string }).type?.startsWith('fill_') ||
+    (e as { type?: string }).type?.startsWith('field_') ||
+    (e as { type?: string }).type?.startsWith('form_') ||
+    (e as { type?: string }).type?.startsWith('submit_')
+  );
+
+  return (
+    <div className="bh-debugSection">
+      <h3>表单执行状态</h3>
+      {toolResult ? (
+        <div className="bh-debugDetail">
+          <p><strong>工具:</strong> {toolResult.tool}</p>
+          <p><strong>代码:</strong> {toolResult.code}</p>
+          <p><strong>摘要:</strong> {toolResult.summary}</p>
+          <p><strong>成功:</strong> {toolResult.ok ? '是' : '否'}</p>
+        </div>
+      ) : null}
+
+      <h3>表单生命周期事件 ({formTraceEvents.length})</h3>
+      {formTraceEvents.length === 0 ? (
+        <p className="bh-emptyMsg">暂无表单相关事件</p>
+      ) : (
+        <ul className="bh-eventList">
+          {formTraceEvents.map((evt: RuntimeEvent, i: number) => (
+            <li key={i} className="bh-eventItem">
+              <span className="bh-eventType">{(evt as { type: string }).type}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }

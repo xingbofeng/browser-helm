@@ -10,12 +10,10 @@ import type { ToolSpec } from '../core/tool-spec';
 const argsSchema = z.object({});
 
 /**
- * Captures an a11y-like snapshot and stable refs for the current page.
+ * 捕获当前页面的 a11y-like 快照及 stable refs。
  *
- * Use this safe Ask/Debug/Form tool as a low-level page structure reader. It
- * accepts no parameters, does not modify page state, never triggers approval,
- * and returns the bounded snapshot with a compact summary suitable for Agent
- * context.
+ * 面向 Ask/Debug/Form 模式的安全只读工具，作为底层页面结构读取入口。不接受参数，
+ * 不修改页面状态，永不触发 approval，返回有界的快照及紧凑摘要，适于 Agent 上下文。
  */
 export function bhA11ySnapshot(
   rpc: ContentRpcClient

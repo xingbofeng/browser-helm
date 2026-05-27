@@ -9,12 +9,11 @@ const argsSchema = z.object({
 });
 
 /**
- * Requests user input and pauses the Agent run.
+ * 请求用户输入并暂停 Agent run。
  *
- * Use this safe internal tool only when the Agent cannot continue without a
- * human decision. The `question` parameter is the visible prompt to return to
- * the user; the tool does not touch page state, never triggers approval, and
- * returns an `ASK_USER_REQUIRED` result for run orchestration.
+ * 仅在 Agent 缺少必要人工决策无法继续时调用此安全内部工具。`question` 参数是返回给
+ * 用户的可见提示语；该工具不触碰页面状态，永不触发 approval，返回
+ * `ASK_USER_REQUIRED` 结果供运行编排层处理。
  */
 export const bhAgentAskUser: ToolSpec<
   z.infer<typeof argsSchema>,

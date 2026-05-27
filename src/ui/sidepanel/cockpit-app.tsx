@@ -7,6 +7,7 @@ import type { RuntimePort } from '../../runtime/runtime-port';
 import type { AgentMessage } from '../../shared/schemas/agent-message.schema';
 import type { StructuredPageData } from '../../shared/schemas/structured-page-data.schema';
 import type { RunMode } from '../../shared/schemas/tool.schema';
+import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { ApprovalDrawer } from '../approval/approval-drawer';
 import { AdvancedDebugPanel } from '../components/advanced-debug-drawer';
 import { AgentMessageList } from '../components/agent-message-list';
@@ -25,10 +26,16 @@ const browserHelmLogoUrl = new URL('../assets/browserhelm-logo.png', import.meta
 type CockpitAppProps = {
   runtime: RuntimePort;
   targetTabId?: number | undefined;
+  targetRevision?: number | undefined;
   initialRunId?: string | undefined;
 };
 
-export function CockpitApp({ runtime, targetTabId, initialRunId }: CockpitAppProps) {
+export function CockpitApp({
+  runtime,
+  targetTabId,
+  targetRevision = 0,
+  initialRunId
+}: CockpitAppProps) {
   const [task, setTask] = useState('');
   const [mode, setMode] = useState<RunMode>('ask');
   const [busy, setBusy] = useState(false);
@@ -36,7 +43,7 @@ export function CockpitApp({ runtime, targetTabId, initialRunId }: CockpitAppPro
   const [approvalResult, setApprovalResult] = useState<RuntimeToolExecutionResult>();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
-  const [debugTab, setDebugTab] = useState<'trace' | 'tools' | 'elements' | 'streaming'>('trace');
+  const [debugTab, setDebugTab] = useState<'trace' | 'tools' | 'elements' | 'streaming' | 'form'>('trace');
   const [conversationMessages, setConversationMessages] = useState<AgentMessage[]>([]);
   const unsubscribeRunRef = useRef<(() => void) | undefined>(undefined);
   const agentStore = useMemo(() => createAgentStore(), []);
@@ -59,6 +66,7 @@ export function CockpitApp({ runtime, targetTabId, initialRunId }: CockpitAppPro
         messages: conversationMessages
       }
     : undefined;
+  const showReviseGoal = Boolean(snapshot?.canReviseGoal && isRunActiveForGoalRevision(snapshot.status));
 
   const applySnapshot = useCallback((
     nextSnapshot: RunSnapshot,
@@ -166,7 +174,7 @@ export function CockpitApp({ runtime, targetTabId, initialRunId }: CockpitAppPro
         window.clearTimeout(timer);
       }
     };
-  }, [applySnapshot, runtime, subscribeToRun, targetTabId, initialRunId]);
+  }, [applySnapshot, runtime, subscribeToRun, targetTabId, targetRevision, initialRunId]);
 
   const start = async () => {
     const submittedTask = task.trim();
@@ -187,6 +195,15 @@ export function CockpitApp({ runtime, targetTabId, initialRunId }: CockpitAppPro
       const nextSnapshot = await runtime.getRunSnapshot(started.runId);
       applySnapshot(nextSnapshot, { persistMessages: true });
       setMode(nextSnapshot.mode);
+    } catch (error) {
+      setConversationMessages((messages) => [
+        ...messages,
+        localErrorMessage(
+          `local-error:${Date.now()}`,
+          '发送失败',
+          error instanceof Error ? error.message : 'BrowserHelm 未能启动当前任务。'
+        )
+      ]);
     } finally {
       setBusy(false);
     }
@@ -237,6 +254,58 @@ export function CockpitApp({ runtime, targetTabId, initialRunId }: CockpitAppPro
       approvalStore.getState().failDecision(result.code);
     }
     setApprovalResult(result);
+    applySnapshot(await runtime.getRunSnapshot(currentSnapshot.runId), { persistMessages: true });
+  };
+
+  const updateApprovalField = async (input: {
+    fieldRefId: string;
+    value: string;
+  }) => {
+    const currentSnapshot = snapshot;
+    const pendingApproval = currentSnapshot?.pendingApproval;
+    const submitArgs = readSubmitApprovalArgs(pendingApproval?.argsPreview);
+    if (!currentSnapshot || !submitArgs) {
+      throw new Error('当前没有可修改的提交审批');
+    }
+
+    const fillResult = await runtime.executeTool({
+      runId: currentSnapshot.runId,
+      tool: TOOL_NAMES.FORM_FILL_FIELD,
+      args: {
+        fieldRefId: input.fieldRefId,
+        value: input.value
+      }
+    });
+    if (!fillResult.ok) {
+      throw new Error(fillResult.error?.message ?? fillResult.summary);
+    }
+
+    const nextFields = submitArgs.fields.map((field) =>
+      field.fieldRefId === input.fieldRefId
+        ? { ...field, valuePreview: input.value }
+        : field
+    );
+    const verifyResult = await runtime.executeTool({
+      runId: currentSnapshot.runId,
+      tool: TOOL_NAMES.FORM_VERIFY,
+      args: {
+        fieldRefIds: nextFields.map((field) => field.fieldRefId),
+        ...(submitArgs.submitTargetRefId ? { submitRefId: submitArgs.submitTargetRefId } : {})
+      }
+    });
+    const verifyData = isRecord(verifyResult.data) ? verifyResult.data : undefined;
+    const verifyStatus = readString(verifyData?.status) ?? submitArgs.verifyStatus;
+
+    await runtime.executeTool({
+      runId: currentSnapshot.runId,
+      tool: TOOL_NAMES.FORM_SUBMIT_WITH_APPROVAL,
+      args: {
+        ...submitArgs,
+        fields: nextFields,
+        verifyStatus,
+        verifyFailed: verifyStatus === 'fail'
+      }
+    });
     applySnapshot(await runtime.getRunSnapshot(currentSnapshot.runId), { persistMessages: true });
   };
 
@@ -295,7 +364,7 @@ export function CockpitApp({ runtime, targetTabId, initialRunId }: CockpitAppPro
       <AgentMessageList snapshot={waterfallSnapshot} />
 
       <div className="bh-agentComposerDock">
-        {snapshot?.canReviseGoal ? (
+        {showReviseGoal ? (
           <div className="bh-reviseGoalBar">
             <span>当前 run 可修改目标</span>
             <Button
@@ -333,6 +402,7 @@ export function CockpitApp({ runtime, targetTabId, initialRunId }: CockpitAppPro
             request={approvalState.pending}
             decision={toDrawerDecision(approvalState.decision)}
             decisionError={approvalState.decisionError ?? (approvalResult?.ok === false ? approvalResult.code : undefined)}
+            onFieldValueChange={updateApprovalField}
             onApprove={() => {
               void decide('approved');
             }}
@@ -506,6 +576,29 @@ function statusLabel(status: RunDisplayState): string {
   return labels[status];
 }
 
+function isRunActiveForGoalRevision(status: RunSnapshot['status'] | undefined): boolean {
+  return status === 'observing' ||
+    status === 'thinking' ||
+    status === 'executing_tool' ||
+    status === 'waiting_for_user' ||
+    status === 'recovering' ||
+    status === 'waiting_for_approval';
+}
+
+function localErrorMessage(id: string, title: string, content: string): AgentMessage {
+  const now = Date.now();
+  return {
+    id,
+    role: 'agent',
+    kind: 'error',
+    status: 'error',
+    title,
+    content,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
 function emptyStructuredPageData(): StructuredPageData {
   const updatedAt = '2026-05-25T00:00:00.000Z';
   return {
@@ -542,4 +635,98 @@ function emptyStructuredPageData(): StructuredPageData {
       warnings: []
     }
   };
+}
+
+type SubmitApprovalArgsPreview = {
+  formRefId?: string | undefined;
+  formName: string;
+  submitMethod: 'button-click' | 'enter-submit';
+  submitTargetRefId?: string | undefined;
+  verifyStatus: 'pass' | 'fail' | 'warn';
+  verifyFailed: boolean;
+  fieldCount: number;
+  filledCount: number;
+  skippedCount: number;
+  riskExplanation: string;
+  fields: Array<{
+    fieldRefId: string;
+    label: string;
+    name?: string | undefined;
+    type: string;
+    valuePreview: string;
+    isSensitive: boolean;
+    skipped?: boolean | undefined;
+  }>;
+  warnings: string[];
+};
+
+function readSubmitApprovalArgs(value: unknown): SubmitApprovalArgsPreview | undefined {
+  if (!isRecord(value) || !Array.isArray(value.fields)) {
+    return undefined;
+  }
+  const formName = readString(value.formName);
+  const submitMethod = readSubmitMethod(value.submitMethod);
+  const verifyStatus = readVerifyStatus(value.verifyStatus);
+  const riskExplanation = readString(value.riskExplanation);
+  if (!formName || !submitMethod || !verifyStatus || !riskExplanation) {
+    return undefined;
+  }
+  const fields = value.fields.flatMap(readSubmitApprovalField);
+  if (fields.length === 0) {
+    return undefined;
+  }
+  return {
+    formRefId: readString(value.formRefId),
+    formName,
+    submitMethod,
+    submitTargetRefId: readString(value.submitTargetRefId),
+    verifyStatus,
+    verifyFailed: value.verifyFailed === true,
+    fieldCount: readNumber(value.fieldCount),
+    filledCount: readNumber(value.filledCount),
+    skippedCount: readNumber(value.skippedCount),
+    riskExplanation,
+    fields,
+    warnings: Array.isArray(value.warnings)
+      ? value.warnings.flatMap((warning) => readString(warning) ?? [])
+      : []
+  };
+}
+
+function readSubmitApprovalField(value: unknown): SubmitApprovalArgsPreview['fields'] {
+  if (!isRecord(value)) return [];
+  const fieldRefId = readString(value.fieldRefId);
+  const label = readString(value.label);
+  const type = readString(value.type);
+  const valuePreview = readString(value.valuePreview);
+  if (!fieldRefId || !label || !type || !valuePreview) return [];
+  return [{
+    fieldRefId,
+    label,
+    name: readString(value.name),
+    type,
+    valuePreview,
+    isSensitive: value.isSensitive === true,
+    skipped: value.skipped === true
+  }];
+}
+
+function readVerifyStatus(value: unknown): SubmitApprovalArgsPreview['verifyStatus'] | undefined {
+  return value === 'pass' || value === 'fail' || value === 'warn' ? value : undefined;
+}
+
+function readSubmitMethod(value: unknown): SubmitApprovalArgsPreview['submitMethod'] | undefined {
+  return value === 'button-click' || value === 'enter-submit' ? value : undefined;
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function readNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

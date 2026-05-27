@@ -9,12 +9,11 @@ import type { ToolSpec } from '../core/tool-spec';
 const argsSchema = z.object({});
 
 /**
- * Lists the frame tree for the current browser page.
+ * 列出当前浏览器页面的 frame 树。
  *
- * Use this read-only Debug/Form/Act helper when diagnosing iframe-hosted forms,
- * widgets, and cross-frame refs. It never changes page state, carries safe risk,
- * and returns frame ids, URLs, parent frame ids, and top-frame markers that later
- * frame tools can use for routing and troubleshooting.
+ * 面向 Debug/Form/Act 模式的只读辅助工具，用于诊断 iframe 承载的表单、widget 及
+ * 跨 frame ref。不修改页面状态，风险等级 safe，返回 frame id、URL、parent frame id
+ * 和 top-frame 标记，供后续 frame 工具进行路由和排障。
  */
 export function bhFrameList(
   rpc: ContentRpcClient

@@ -10,12 +10,11 @@ import { isToolResult, loadFormToolData } from './form-tool-data';
 const argsSchema = z.object({});
 
 /**
- * Reads current form field snapshots.
+ * 读取当前表单字段快照。
  *
- * Use this safe Debug/Form tool when the Agent needs labels, names, types,
- * required flags, masked value previews, and validation state. It accepts no
- * parameters, never writes page state, never triggers approval, and returns the
- * field list, count, submit summary, and warnings.
+ * 面向 Debug/Form 模式的安全工具，供 Agent 获取 label、name、type、required 标志、
+ * masked value preview 和 validation 状态。不接受参数，不写入页面状态，永不触发
+ * approval，返回字段列表、数量、submit 摘要及警告。
  */
 export function bhFormReadFields(
   rpc: ContentRpcClient

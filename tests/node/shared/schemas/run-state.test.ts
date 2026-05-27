@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { loopSessionStatusSchema } from '../../../../src/shared/schemas/run-state.schema';
 
 describe('loopSessionStatusSchema', () => {
-  it('accepts v0.1 statuses', () => {
+  it('accepts valid statuses', () => {
     expect(loopSessionStatusSchema.parse('running')).toBe('running');
     expect(loopSessionStatusSchema.parse('recovering')).toBe('recovering');
     expect(loopSessionStatusSchema.parse('waiting_for_user')).toBe(

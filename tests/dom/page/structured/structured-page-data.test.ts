@@ -39,9 +39,9 @@ describe('structured page data builder', () => {
     expect(structured.forms.emptyReason).toBeUndefined();
   });
 
-  it('uses v0.31 interactive element data instead of shallow ref-only derivation', () => {
+  it('uses interactive element data instead of shallow ref-only derivation', () => {
     const page = loadDomFixture(
-      'v0-31-interactive-complete.html',
+      'interactive-complete.html',
       'https://demo.example.com/interactive'
     );
     const observation = buildObservation(page.document);

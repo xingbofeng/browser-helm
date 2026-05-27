@@ -59,9 +59,9 @@ type AgentLoopDeps = {
 };
 
 const TRACE_SCHEMA_VERSION = '1.0.0';
-const PROMPT_VERSION = 'v0.1.0';
-const TOOL_SCHEMA_VERSION = 'v0.1.0';
-const CONTEXT_POLICY_VERSION = 'v0.1.0';
+const PROMPT_VERSION = '0.1.0';
+const TOOL_SCHEMA_VERSION = '0.1.0';
+const CONTEXT_POLICY_VERSION = '0.1.0';
 
 export class AgentLoop {
   constructor(private readonly deps: AgentLoopDeps) {}

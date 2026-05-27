@@ -18,9 +18,20 @@ export const TOOL_NAMES = {
   FORM_READ_FIELDS: 'bh_form_read_fields',
   FRAME_LIST: 'bh_frame_list',
   IFRAME_CLICK: 'bh_iframe_click',
+  IFRAME_LIST: 'bh_iframe_list',
   IFRAME_READ: 'bh_iframe_read',
   IFRAME_TYPE: 'bh_iframe_type',
-  PAGE_OBSERVE: 'bh_page_observe'
+  PAGE_OBSERVE: 'bh_page_observe',
+  PAGE_READ_VISIBLE_TEXT: 'bh_page_read_visible_text',
+  PAGE_READ_ARTICLE: 'bh_page_read_article',
+  PAGE_WAIT_UNTIL_STABLE: 'bh_page_wait_until_stable',
+  VIEWPORT_GET_INFO: 'bh_viewport_get_info',
+  VIEWPORT_SCROLL: 'bh_viewport_scroll',
+  FORM_INFER_FILL_PLAN: 'bh_form_infer_fill_plan',
+  FORM_FILL_FIELD: 'bh_form_fill_field',
+  FORM_FILL_MANY: 'bh_form_fill_many',
+  FORM_VERIFY: 'bh_form_verify',
+  FORM_SUBMIT_WITH_APPROVAL: 'bh_form_submit_with_approval',
 } as const;
 
 export type ToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];

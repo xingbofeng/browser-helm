@@ -88,6 +88,25 @@ export const formFieldValidationSchema = z.object({
   ariaInvalid: z.boolean().optional()
 });
 
+// 字段可写元数据
+export const fieldWritabilityMetaSchema = z.object({
+  visible: z.boolean(),
+  readonly: z.boolean(),
+  hidden: z.boolean(),
+  isFileUpload: z.boolean(),
+  isContentEditable: z.boolean(),
+  honeypotCandidate: z.boolean(),
+  actualTagName: z.string().min(1),
+  actualValue: z.string().optional(),
+  checked: z.boolean().optional(),
+  selectedIndex: z.number().int().nonnegative().optional(),
+  options: z.array(z.object({
+    value: z.string(),
+    label: z.string(),
+    selected: z.boolean()
+  })).optional()
+});
+
 export const formFieldSnapshotSchema = z.object({
   refId: z.string().min(1),
   label: z.string().optional(),
@@ -99,6 +118,7 @@ export const formFieldSnapshotSchema = z.object({
   valuePreview: z.string(),
   validation: formFieldValidationSchema,
   submit: formSubmitSummarySchema.optional(),
+  writable: fieldWritabilityMetaSchema.optional(),
   warnings: z.array(structuredPageWarningSchema.or(z.string())).default([])
 });
 
@@ -202,6 +222,7 @@ export type DisabledSubmitReason = z.infer<typeof disabledSubmitReasonSchema>;
 export type FormSubmitSummary = z.infer<typeof formSubmitSummarySchema>;
 export type FormFieldSnapshot = z.infer<typeof formFieldSnapshotSchema>;
 export type FormFieldTabItem = FormFieldSnapshot;
+export type FieldWritabilityMeta = z.infer<typeof fieldWritabilityMetaSchema>;
 export type StructuredPageData = z.infer<typeof structuredPageDataSchema>;
 export type StructuredPageContextSummary = z.infer<
   typeof structuredPageContextSummarySchema

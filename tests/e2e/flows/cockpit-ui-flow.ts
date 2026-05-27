@@ -1,5 +1,8 @@
+import { expect } from '@playwright/test';
 import { CockpitPanel } from '../components/side-panel/cockpit-panel';
 import { TOOL_NAMES } from '../../../src/shared/constants/tool-names';
+import type { RuntimeToolExecutionResult, RunSnapshot } from '../../../src/runtime/runtime-messages';
+import type { FormFieldSnapshot } from '../../../src/shared/schemas/structured-page-data.schema';
 import { E2EFlowContext } from './e2e-flow-context';
 import { findFrameRef } from './page-observation-flow';
 
@@ -23,6 +26,64 @@ export class CockpitUiFlow {
       title: '欢迎注册 - 示例网站',
       url: `${this.flowContext.origin}/basic-form.html`
     });
+    await cockpit.expectNoLegacyObserveStatusCard();
+  }
+
+  async expectLongPageArticleReadBeforeStreamingAnswer(): Promise<void> {
+    const fixture = await this.flowContext.fixturePage();
+    await fixture.goto('long-page.html');
+
+    const tabId = await this.flowContext.shell().activeTabId();
+    const sidePanel = this.flowContext.sidePanel();
+    await sidePanel.open(tabId);
+    await sidePanel.setProviderSettings({
+      baseUrl: `${this.flowContext.origin}/v1`,
+      model: 'mock-stream',
+      apiKey: 'sk-e2e-secret'
+    });
+    const snapshot = await sidePanel.runOnTab({
+      tabId,
+      task: '总结这个长页面',
+      mode: 'ask'
+    });
+    const page = await sidePanel.openRun(snapshot.runId);
+    const cockpit = new CockpitPanel(page);
+    const finalSnapshot = await sidePanel.snapshot(snapshot.runId);
+
+    await cockpit.expectLongPageArticleRead();
+    await cockpit.expectStreamingMergedResponse('BrowserHelm streaming 已合并到回复。 长页面正文已读取。');
+    await cockpit.expectNoLegacyObserveStatusCard();
+    expect((finalSnapshot.trace ?? []).some((event) =>
+      event.type === 'tool_started' &&
+      payloadRecord(event.payload).tool === TOOL_NAMES.PAGE_READ_ARTICLE
+    )).toBe(true);
+    expect((finalSnapshot.trace ?? []).some((event) =>
+      event.type === 'model_stream_delta'
+    )).toBe(true);
+  }
+
+  async expectElementInspectHighlightsPageRef(): Promise<void> {
+    const fixture = await this.flowContext.fixturePage();
+    await fixture.goto('basic-form.html');
+
+    const tabId = await this.flowContext.shell().activeTabId();
+    const sidePanel = this.flowContext.sidePanel();
+    const snapshot = await sidePanel.runOnTab({
+      tabId,
+      task: '观察当前页面',
+      mode: 'ask'
+    });
+    const sidePanelPage = await sidePanel.openRun(snapshot.runId);
+    const cockpit = new CockpitPanel(sidePanelPage);
+
+    await cockpit.expectObservedPage({
+      title: '欢迎注册 - 示例网站',
+      url: `${this.flowContext.origin}/basic-form.html`
+    });
+    await cockpit.inspectElement('提交');
+    await expect(fixture.page.getByRole('button', { name: '提交' })).toHaveClass(
+      /bh-page-ref-highlight/u
+    );
   }
 
   async expectApprovalDrawerFromPendingRuntimeRequest(): Promise<void> {
@@ -78,7 +139,7 @@ export class CockpitUiFlow {
     });
   }
 
-  async expectV1FormDoctorDiagnosis(): Promise<void> {
+  async expectFormDoctorDiagnosis(): Promise<void> {
     const fixture = await this.flowContext.fixturePage();
     await fixture.goto('invalid-form.html');
 
@@ -98,7 +159,7 @@ export class CockpitUiFlow {
     });
   }
 
-  async expectV1PageInspectorDiagnosis(): Promise<void> {
+  async expectPageInspectorDiagnosis(): Promise<void> {
     const fixture = await this.flowContext.fixturePage();
     await fixture.goto('console-network-errors.html');
 
@@ -131,7 +192,272 @@ export class CockpitUiFlow {
     });
   }
 
+  async expectAssistedFormFillSubmitAndDebug(): Promise<void> {
+    const fixture = await this.flowContext.fixturePage();
+    await fixture.goto('form-fill-success.html');
+
+    const tabId = await this.flowContext.shell().activeTabId();
+    const sidePanel = this.flowContext.sidePanel();
+    const snapshot = await sidePanel.runOnTab({
+      tabId,
+      task: '填写并提交本地表单',
+      mode: 'form'
+    });
+    const fields = snapshot.structuredPageData?.forms.items ?? [];
+    const fillTargets = [
+      { fieldRefId: requireField(fields, 'name').refId, value: 'Counter User' },
+      { fieldRefId: requireField(fields, 'email').refId, value: 'counter@example.com' },
+      { fieldRefId: requireField(fields, 'country').refId, value: 'us' },
+      { fieldRefId: requireField(fields, 'agree').refId, value: 'true' }
+    ];
+    const submitTargetRefId = fields.find((field) => field.submit?.refId)?.submit?.refId ??
+      snapshot.refs?.find((ref) => ref.role === 'button' && ref.name === 'Submit')?.refId;
+
+    const fillResult = await executeToolResult(sidePanel.executeTool({
+      runId: snapshot.runId,
+      tool: TOOL_NAMES.FORM_FILL_MANY,
+      args: { fields: fillTargets }
+    }));
+    expect(fillResult).toMatchObject({
+      ok: true,
+      code: 'OK',
+      changedPage: true
+    });
+
+    const verifyResult = await executeToolResult(sidePanel.executeTool({
+      runId: snapshot.runId,
+      tool: TOOL_NAMES.FORM_VERIFY,
+      args: {
+        fieldRefIds: fillTargets.map((field) => field.fieldRefId),
+        ...(submitTargetRefId ? { submitRefId: submitTargetRefId } : {})
+      }
+    }));
+    if (!isRecord(verifyResult.data) || verifyResult.data.status !== 'pass' || verifyResult.data.submitAvailable !== true) {
+      throw new Error(`Expected form verification to pass: ${JSON.stringify(verifyResult.data)}`);
+    }
+
+    await executeToolResult(sidePanel.executeTool({
+      runId: snapshot.runId,
+      tool: TOOL_NAMES.FORM_SUBMIT_WITH_APPROVAL,
+      args: buildSubmitApprovalArgs({
+        formName: 'Form Fill Success',
+        submitTargetRefId,
+        verifyStatus: 'pass',
+        verifyFailed: false,
+        fields,
+        fillTargets
+      })
+    }));
+
+    const approvalSnapshot = await sidePanel.snapshot(snapshot.runId);
+    expect(approvalSnapshot.status).toBe('waiting_for_approval');
+    expect(approvalSnapshot.pendingApproval).toBeDefined();
+
+    const approvalPage = await sidePanel.openRun(snapshot.runId);
+    await expect(approvalPage.getByLabel('Approval')).toBeVisible();
+    await expect(approvalPage.getByText('Form Fill Success', { exact: true })).toBeVisible();
+    await expect(approvalPage.getByLabel('Approval').getByText('******').first()).toBeVisible();
+    await expect(approvalPage.getByText('Counter User')).toHaveCount(0);
+    await approvalPage.getByRole('button', { name: /显示字段值/u }).click();
+    await expect(approvalPage.getByText('Counter User')).toBeVisible();
+    await approvalPage.getByRole('button', { name: /隐藏字段值/u }).click();
+    await expect(approvalPage.getByText('Counter User')).toHaveCount(0);
+
+    await approvalPage.getByRole('button', { name: '高级开发者选项' }).click();
+    await approvalPage.getByRole('button', { name: '表单执行' }).click();
+    await expect(approvalPage.getByText('field_fill_started').first()).toBeVisible();
+    await expect(approvalPage.getByText('form_verify_result')).toBeVisible();
+    await expect(approvalPage.getByText('submit_approval_requested')).toBeVisible();
+    await approvalPage.getByRole('button', { name: '关闭' }).click();
+
+    await approvalPage.getByRole('button', { name: 'Approve' }).click();
+    await expect(approvalPage.getByText(/Form submit executed after approval/u).first()).toBeVisible();
+    const finalSnapshot = await waitForObservedSnapshot(sidePanel, snapshot.runId);
+    const traceJson = JSON.stringify(finalSnapshot.trace ?? []);
+    expect(finalSnapshot.toolResult).toMatchObject({
+      tool: TOOL_NAMES.FORM_SUBMIT_WITH_APPROVAL,
+      ok: true,
+      code: 'OK'
+    });
+    expect(traceJson).not.toContain('Counter User');
+    expect(traceJson).not.toContain('counter@example.com');
+    expect((finalSnapshot.trace ?? []).map((event) => event.type)).toEqual(
+      expect.arrayContaining([
+        'field_fill_started',
+        'field_fill_result',
+        'form_verify_result',
+        'submit_approval_requested',
+        'form_submit_result'
+      ])
+    );
+  }
+
+  async expectAssistedFormVerifyFailureStillSubmit(): Promise<void> {
+    const fixture = await this.flowContext.fixturePage();
+    await fixture.goto('form-fill-test.html');
+
+    const tabId = await this.flowContext.shell().activeTabId();
+    const sidePanel = this.flowContext.sidePanel();
+    const snapshot = await sidePanel.runOnTab({
+      tabId,
+      task: '填写本地测试表单并检查提交审批',
+      mode: 'form'
+    });
+    const fields = snapshot.structuredPageData?.forms.items ?? [];
+    const fillTargets = [
+      { fieldRefId: requireField(fields, 'name').refId, value: 'Counter User' },
+      { fieldRefId: requireField(fields, 'email').refId, value: 'counter@example.com' },
+      { fieldRefId: requireField(fields, 'country').refId, value: 'us' },
+      { fieldRefId: requireField(fields, 'agree').refId, value: 'true' }
+    ];
+    const submitTargetRefId = fields.find((field) => field.submit?.refId)?.submit?.refId ??
+      snapshot.refs?.find((ref) => ref.role === 'button' && ref.name === 'Submit')?.refId;
+
+    await executeToolResult(sidePanel.executeTool({
+      runId: snapshot.runId,
+      tool: TOOL_NAMES.FORM_FILL_MANY,
+      args: { fields: fillTargets }
+    }));
+    const verifyResult = await executeToolResult(sidePanel.executeTool({
+      runId: snapshot.runId,
+      tool: TOOL_NAMES.FORM_VERIFY,
+      args: {
+        fieldRefIds: fillTargets.map((field) => field.fieldRefId),
+        ...(submitTargetRefId ? { submitRefId: submitTargetRefId } : {})
+      }
+    }));
+    expect(verifyResult.data).toMatchObject({
+      status: 'fail',
+      submitAvailable: false
+    });
+
+    await executeToolResult(sidePanel.executeTool({
+      runId: snapshot.runId,
+      tool: TOOL_NAMES.FORM_SUBMIT_WITH_APPROVAL,
+      args: buildSubmitApprovalArgs({
+        formName: 'Form Fill Test',
+        submitTargetRefId,
+        verifyStatus: 'fail',
+        verifyFailed: true,
+        fields,
+        fillTargets,
+        skippedCount: 1,
+        extraFields: [{
+          fieldRefId: requireField(fields, 'password').refId,
+          label: 'Password',
+          name: 'password',
+          type: 'password',
+          valuePreview: '******',
+          isSensitive: true,
+          skipped: true
+        }],
+        warnings: ['password 字段因敏感策略未自动填写']
+      })
+    }));
+
+    const approvalPage = await sidePanel.openRun(snapshot.runId);
+    await expect(approvalPage.getByLabel('Approval')).toBeVisible();
+    await expect(approvalPage.getByText(/Verification failed, still submitting/u)).toBeVisible();
+    await expect(approvalPage.getByText('password 字段因敏感策略未自动填写')).toBeVisible();
+    await approvalPage.getByRole('button', { name: 'Approve' }).click();
+    await expect(approvalPage.getByText(/Form submit executed after approval/u).first()).toBeVisible();
+
+    const finalSnapshot = await waitForObservedSnapshot(sidePanel, snapshot.runId);
+    expect((finalSnapshot.trace ?? []).map((event) => event.type)).toEqual(
+      expect.arrayContaining([
+        'submit_approval_requested',
+        'form_submit_result'
+      ])
+    );
+  }
+
   async close(): Promise<void> {
     await this.flowContext.close();
   }
+}
+
+function requireField(fields: FormFieldSnapshot[], name: string): FormFieldSnapshot {
+  const field = fields.find((item) => item.name === name);
+  if (!field) {
+    throw new Error(`Expected form field: ${name}`);
+  }
+  return field;
+}
+
+async function executeToolResult(
+  promise: Promise<unknown>
+): Promise<RuntimeToolExecutionResult> {
+  const result = await promise;
+  if (
+    typeof result !== 'object' ||
+    result === null ||
+    typeof (result as RuntimeToolExecutionResult).ok !== 'boolean' ||
+    typeof (result as RuntimeToolExecutionResult).code !== 'string'
+  ) {
+    throw new Error('Unexpected runtime tool result');
+  }
+  return result as RuntimeToolExecutionResult;
+}
+
+function buildSubmitApprovalArgs(input: {
+  formName: string;
+  submitTargetRefId?: string | undefined;
+  verifyStatus: 'pass' | 'fail' | 'warn';
+  verifyFailed: boolean;
+  fields: FormFieldSnapshot[];
+  fillTargets: Array<{ fieldRefId: string; value: string }>;
+  skippedCount?: number | undefined;
+  extraFields?: Array<Record<string, unknown>> | undefined;
+  warnings?: string[] | undefined;
+}): Record<string, unknown> {
+  return {
+    formName: input.formName,
+    submitMethod: input.submitTargetRefId ? 'button-click' : 'enter-submit',
+    ...(input.submitTargetRefId ? { submitTargetRefId: input.submitTargetRefId } : {}),
+    verifyStatus: input.verifyStatus,
+    verifyFailed: input.verifyFailed,
+    fieldCount: input.fillTargets.length + (input.extraFields?.length ?? 0),
+    filledCount: input.fillTargets.length,
+    skippedCount: input.skippedCount ?? 0,
+    riskExplanation: 'E2E submit approval before real submit',
+    fields: [
+      ...input.fillTargets.map((target) => {
+        const field = input.fields.find((candidate) => candidate.refId === target.fieldRefId);
+        return {
+          fieldRefId: target.fieldRefId,
+          label: field?.label ?? field?.name ?? target.fieldRefId,
+          name: field?.name,
+          type: field?.type ?? 'text',
+          valuePreview: target.value === 'true' ? 'checked' : target.value,
+          isSensitive: Boolean(field?.sensitive)
+        };
+      }),
+      ...(input.extraFields ?? [])
+    ],
+    warnings: input.warnings ?? []
+  };
+}
+
+async function waitForObservedSnapshot(
+  sidePanel: ReturnType<E2EFlowContext['sidePanel']>,
+  runId: string
+): Promise<RunSnapshot> {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const snapshot = await sidePanel.snapshot(runId);
+    if (!['created', 'observing', 'thinking', 'executing_tool', 'waiting_for_approval'].includes(snapshot.status)) {
+      return snapshot;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return await sidePanel.snapshot(runId);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function payloadRecord(payload: unknown): Record<string, unknown> {
+  return typeof payload === 'object' && payload !== null
+    ? payload as Record<string, unknown>
+    : {};
 }

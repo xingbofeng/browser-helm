@@ -40,7 +40,20 @@ export const ERROR_CODE_DEFINITIONS = [
   { number: 3404, code: 'ACTION_TARGET_MISMATCH', description: '动作目标类型不匹配' },
   { number: 3500, code: 'FIELD_LABEL_MISSING', description: '字段 label 缺失' },
   { number: 3501, code: 'FORM_SUBMIT_NOT_FOUND', description: '未找到表单提交控件' },
-  { number: 3502, code: 'FORM_FIELDS_UNAVAILABLE', description: '表单字段快照不可用' }
+  { number: 3502, code: 'FORM_FIELDS_UNAVAILABLE', description: '表单字段快照不可用' },
+  { number: 3503, code: 'FIELD_SENSITIVE_SKIPPED', description: '敏感字段已跳过填写' },
+  { number: 3504, code: 'FIELD_UNSUPPORTED_FILE_UPLOAD', description: '不支持文件上传字段' },
+  { number: 3505, code: 'FIELD_UNSAFE_HIDDEN', description: '隐藏字段不安全已跳过' },
+  { number: 3506, code: 'FIELD_HONEYPOT_CANDIDATE', description: '疑似蜜罐字段已跳过' },
+  { number: 3507, code: 'FORM_VERIFY_FAILED', description: '表单验证未通过' },
+  { number: 3508, code: 'SUBMIT_APPROVAL_DENIED', description: '提交审批被拒绝' },
+  { number: 3509, code: 'SUBMIT_RESULT_UNKNOWN', description: '提交结果无法判定' },
+  { number: 3510, code: 'NATIVE_DIALOG_UNSUPPORTED', description: '不支持原生 alert/confirm/prompt' },
+  { number: 3511, code: 'FILL_RETRY_EXHAUSTED', description: '填写重试已耗尽' },
+  { number: 3512, code: 'FIELD_NOT_WRITABLE', description: '字段不可写' },
+  { number: 3513, code: 'FIELD_NOT_VISIBLE', description: '字段不可见' },
+  { number: 3514, code: 'CROSS_FORM_FILL_REJECTED', description: '跨表单批量填写已拒绝' },
+  { number: 3515, code: 'SUBMIT_DISABLED', description: '提交按钮处于禁用状态' }
 ] as const;
 
 export const ERROR_CODES = {
@@ -85,7 +98,20 @@ export const ERROR_CODES = {
   ACTION_TARGET_MISMATCH: 'ACTION_TARGET_MISMATCH',
   FIELD_LABEL_MISSING: 'FIELD_LABEL_MISSING',
   FORM_SUBMIT_NOT_FOUND: 'FORM_SUBMIT_NOT_FOUND',
-  FORM_FIELDS_UNAVAILABLE: 'FORM_FIELDS_UNAVAILABLE'
+  FORM_FIELDS_UNAVAILABLE: 'FORM_FIELDS_UNAVAILABLE',
+  FIELD_SENSITIVE_SKIPPED: 'FIELD_SENSITIVE_SKIPPED',
+  FIELD_UNSUPPORTED_FILE_UPLOAD: 'FIELD_UNSUPPORTED_FILE_UPLOAD',
+  FIELD_UNSAFE_HIDDEN: 'FIELD_UNSAFE_HIDDEN',
+  FIELD_HONEYPOT_CANDIDATE: 'FIELD_HONEYPOT_CANDIDATE',
+  FORM_VERIFY_FAILED: 'FORM_VERIFY_FAILED',
+  SUBMIT_APPROVAL_DENIED: 'SUBMIT_APPROVAL_DENIED',
+  SUBMIT_RESULT_UNKNOWN: 'SUBMIT_RESULT_UNKNOWN',
+  NATIVE_DIALOG_UNSUPPORTED: 'NATIVE_DIALOG_UNSUPPORTED',
+  FILL_RETRY_EXHAUSTED: 'FILL_RETRY_EXHAUSTED',
+  FIELD_NOT_WRITABLE: 'FIELD_NOT_WRITABLE',
+  FIELD_NOT_VISIBLE: 'FIELD_NOT_VISIBLE',
+  CROSS_FORM_FILL_REJECTED: 'CROSS_FORM_FILL_REJECTED',
+  SUBMIT_DISABLED: 'SUBMIT_DISABLED',
 } as const;
 
 export const ERROR_CODE_NUMBERS = Object.fromEntries(

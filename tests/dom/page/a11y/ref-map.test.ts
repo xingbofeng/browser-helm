@@ -74,7 +74,7 @@ describe('a11y snapshot and ref map', () => {
 
   it('preserves checked and selected state when resolving interactive refs', () => {
     const page = loadDomFixture(
-      'v0-31-interactive-complete.html',
+      'interactive-complete.html',
       'https://demo.example.com/interactive'
     );
     const refMap = new RefMap({

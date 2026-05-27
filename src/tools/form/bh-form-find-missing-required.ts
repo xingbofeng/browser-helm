@@ -10,12 +10,10 @@ import { isToolResult, loadFormToolData, missingRequiredFields } from './form-to
 const argsSchema = z.object({});
 
 /**
- * Lists required form fields that currently have empty value previews.
+ * 列出当前值为空的 required 表单字段。
  *
- * Use this safe Form-mode diagnostic to explain why a form may be incomplete.
- * It accepts no parameters, reads the current form snapshot only, never
- * triggers approval, and returns the missing required field list with count and
- * warnings.
+ * 面向 Form 模式的安全诊断工具，用于解释表单可能不完整的原因。不接受参数，仅读取当前
+ * 表单快照，永不触发 approval，返回缺失必填字段列表及数量和警告。
  */
 export function bhFormFindMissingRequired(
   rpc: ContentRpcClient

@@ -114,7 +114,7 @@ describe('agent-loop', () => {
     ['debug', '检查 console 错误'],
     ['form', '诊断表单为什么不能提交'],
     ['act', '准备点击提交按钮']
-  ] as const)('finishes %s mode with v1 classification and plan traces', async (mode, task) => {
+  ] as const)('finishes %s mode with classification and plan traces', async (mode, task) => {
     const registry = new ToolRegistry();
     const loop = new AgentLoop({
       modelClient: new MockModelClient([

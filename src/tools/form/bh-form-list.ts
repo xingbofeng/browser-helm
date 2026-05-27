@@ -10,12 +10,11 @@ import { isToolResult, loadFormToolData } from './form-tool-data';
 const argsSchema = z.object({});
 
 /**
- * Lists detected form groups and high-level submit state.
+ * 列出检测到的表单组及 submit 高层次状态。
  *
- * Use this safe Debug/Form tool to decide whether a page has form data worth
- * inspecting. It accepts no parameters, does not mutate the page, never
- * triggers approval, and returns form count, field count, submit summary, and
- * warnings.
+ * 面向 Debug/Form 模式的安全工具，用于判断页面是否包含值得检查的表单数据。不接受
+ * 参数，不修改页面状态，永不触发 approval，返回表单数量、字段数量、submit 摘要及
+ * 警告。
  */
 export function bhFormList(
   rpc: ContentRpcClient

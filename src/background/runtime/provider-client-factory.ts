@@ -18,10 +18,16 @@ export function validateProviderConfig(config: ProviderConfig): void {
     throw new Error('Invalid provider baseUrl');
   }
 
-  if (parsed.protocol !== 'https:' && parsed.hostname !== 'localhost') {
+  if (parsed.protocol !== 'https:' && !isLoopbackHost(parsed.hostname)) {
     throw new Error('Invalid provider baseUrl: HTTPS is required');
   }
   if (/\s/u.test(config.baseUrl)) {
     throw new Error('Invalid provider baseUrl');
   }
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '[::1]';
 }

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>延迟加载测试页</title>
+<style>
+  .lazy-section { display: none; }
+  .lazy-section.visible { display: block; }
+</style>
+</head>
+<body>
+<main>
+<h1>延迟加载内容测试</h1>
+<div id="initial"><p>初始可见内容。浏览器应能看到这段文字。</p></div>
+<div id="lazy-1" class="lazy-section"><p>首次滚动后出现的延迟内容段落一。包含足够多的文字来验证页面读取是否真正获取到了这些文字。浏览器需要等待稳定后再观察。</p></div>
+<div id="lazy-2" class="lazy-section"><p>二次滚动后出现的延迟内容段落二。这部分内容在初始加载时不可见，只有用户滚动到此处才会变得可见。这模拟了典型的无限滚动或 lazy-load 场景。</p></div>
+<div id="spacer" style="height: 2000px;"></div>
+</main>
+<footer><p>BrowserHelm E2E Test Fixture — lazy-load</p></footer>
+<script>
+function checkScroll() {
+  const sections = document.querySelectorAll('.lazy-section');
+  sections.forEach((el) => {
+    const rect = el.getBoundingClientRect();
+    if (rect.top < window.innerHeight + 200) {
+      el.classList.add('visible');
+    }
+  });
+}
+window.addEventListener('scroll', checkScroll);
+checkScroll();
+</script>
+</body>
+</html>

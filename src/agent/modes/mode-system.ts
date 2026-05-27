@@ -36,7 +36,7 @@ export function resolveRunMode(input: ResolveRunModeInput): ResolvedRunMode {
 
 function boundaryReason(mode: RunMode): string {
   if (mode === 'act') {
-    return 'v1.0 的 Act 仅用于动作准备和审批边界，不自动执行填写或提交。';
+    return 'Act 仅用于动作准备和审批边界，不自动执行填写或提交。';
   }
-  return 'v1.0 默认先诊断，再行动。';
+  return '默认先诊断，再行动。';
 }

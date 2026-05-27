@@ -169,7 +169,7 @@ function createRefForElement(selector: string) {
   const page = loadDomFixture(
     selector === '#remove-me'
       ? 'dynamic-page.html'
-      : 'v0-31-interactive-complete.html',
+      : 'interactive-complete.html',
     'https://demo.example.com/interactive'
   );
   const refMap = createRefMap();

@@ -6,7 +6,7 @@ import {
 } from '../../../../src/agent/context/context-policy';
 
 describe('context-policy', () => {
-  it('uses v0.1 defaults', () => {
+  it('uses defaults', () => {
     expect(DEFAULT_CONTEXT_POLICY).toEqual({
       maxRecentSteps: 3,
       maxToolResultChars: 1200,

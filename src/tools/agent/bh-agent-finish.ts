@@ -9,12 +9,11 @@ const argsSchema = z.object({
 });
 
 /**
- * Ends the current Agent run with a successful final summary.
+ * 以成功状态结束当前 Agent run，返回最终摘要。
  *
- * Use this safe internal tool when the Agent has completed the task. The
- * `message` parameter is the final user-facing summary; the tool does not
- * mutate page state, never triggers approval, and returns an `AGENT_FINISH`
- * result for terminal run orchestration.
+ * Agent 确认任务完成时调用此安全内部工具。`message` 参数是最终面向用户的汇总信息；
+ * 该工具不修改页面状态，永不触发 approval，返回 `AGENT_FINISH` 结果供运行编排层
+ * 作为终止信号处理。
  */
 export const bhAgentFinish: ToolSpec<
   z.infer<typeof argsSchema>,

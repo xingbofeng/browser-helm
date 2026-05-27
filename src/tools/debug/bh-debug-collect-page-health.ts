@@ -11,19 +11,18 @@ import type { ToolSpec } from '../core/tool-spec';
 const argsSchema = z.object({});
 
 /**
- * Collects the v1.0 read-only page health summary for Page Inspector.
+ * 收集页面健康只读摘要。
  *
- * Use this safe Debug-mode diagnostic when the Agent needs shallow page health
- * signals. It reads the current observation through content RPC, does not use
- * chrome.debugger/CDP, does not mutate the page, never triggers approval, and
- * returns console/network limitations when shallow signals are unavailable.
+ * 面向 Debug 模式的安全诊断工具，供 Agent 获取浅层页面健康信号。通过 content RPC
+ * 读取当前 observation，不使用 chrome.debugger/CDP，不修改页面状态，永不触发
+ * approval，在浅层信号不可用时返回 console/network 的限制说明。
  */
 export function bhDebugCollectPageHealth(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
   return {
     name: TOOL_NAMES.DEBUG_COLLECT_PAGE_HEALTH,
-    // 收集 v1.0 页面健康浅层摘要，只用于 Debug 模式诊断。
+    // 收集页面健康浅层摘要，只用于 Debug 模式诊断。
     title: 'Collect Page Health',
     description: 'Collects a read-only shallow page health summary',
     modes: ['debug'],
@@ -82,7 +81,7 @@ export function bhDebugCollectPageHealth(
         networkFailures: [],
         hasForm,
         pageStateSummary: observation.pageStateSummary,
-        limitations: ['CDP deep inspection is not used in v1.0']
+        limitations: ['CDP deep inspection unavailable']
       });
 
       return {

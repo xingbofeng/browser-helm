@@ -53,7 +53,7 @@ const passwordField = {
   warnings: []
 };
 
-describe('v0.32 form read-only tools', () => {
+describe('form read-only tools', () => {
   it('lists, inspects, and reads form fields in form/debug modes', async () => {
     const registry = new ToolRegistry();
     const rpc = formRpc();
@@ -105,7 +105,7 @@ describe('v0.32 form read-only tools', () => {
     expect(errors.data).toMatchObject({ count: 1, fields: [emailField] });
   });
 
-  it('treats v1.0 empty value previews as missing required fields', async () => {
+  it('treats empty value previews as missing required fields', async () => {
     const fieldWithPresencePreview = {
       ...emailField,
       valuePreview: 'empty'

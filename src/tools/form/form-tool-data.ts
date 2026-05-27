@@ -90,7 +90,7 @@ export function disabledSubmitReason(data: FormToolData) {
     ? disabledSubmitReasonSchema.parse(reason)
     : disabledSubmitReasonSchema.parse({
         kind: 'unknown',
-        message: '未发现 disabled submit reason'
+        message: 'No disabled submit reason found'
       });
 }
 

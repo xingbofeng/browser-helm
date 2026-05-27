@@ -10,12 +10,11 @@ import { isToolResult, loadFormToolData, validationErrorFields } from './form-to
 const argsSchema = z.object({});
 
 /**
- * Lists form fields that currently fail validation.
+ * 列出当前校验失败的表单字段。
  *
- * Use this safe Form-mode diagnostic when the Agent needs browser validation or
- * `aria-invalid` evidence. It accepts no parameters, does not modify fields or
- * submit forms, never triggers approval, and returns invalid field snapshots
- * with count and warnings.
+ * 面向 Form 模式的安全诊断工具，供 Agent 获取浏览器校验或 `aria-invalid` 证据。
+ * 不接受参数，不修改字段、不提交表单，永不触发 approval，返回无效字段快照及数量
+ * 和警告。
  */
 export function bhFormFindValidationErrors(
   rpc: ContentRpcClient

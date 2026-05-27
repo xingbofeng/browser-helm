@@ -6,33 +6,24 @@ import { recoveryStateSchema } from '../../shared/schemas/recovery.schema';
 
 export function chooseRecoveryAction(code: string): RecoveryAction {
   if (code === 'REF_STALE' || code === 'PAGE_CHANGED') {
-    return {
-      type: 're_observe',
-      reason: code
-    };
+    return { type: 're_observe', reason: code };
   }
   if (code === 'TOOL_ARGS_INVALID' || code === 'MODEL_OUTPUT_INVALID') {
-    return {
-      type: 'repair_tool_args',
-      reason: code
-    };
+    return { type: 'repair_tool_args', reason: code };
   }
   if (code === 'ELEMENT_NOT_FOUND') {
-    return {
-      type: 'find_alternative_ref',
-      reason: code
-    };
+    return { type: 'find_alternative_ref', reason: code };
+  }
+  if (code === 'FORM_VERIFY_FAILED' || code === 'SUBMIT_DISABLED') {
+    return { type: 'repair_tool_args', reason: code };
+  }
+  if (code === 'SUBMIT_RESULT_UNKNOWN' || code === 'FILL_RETRY_EXHAUSTED') {
+    return { type: 're_observe', reason: code };
   }
   if (code === 'MAX_STEPS_EXCEEDED') {
-    return {
-      type: 'ask_user',
-      question: '已达到最大步骤数。要继续诊断还是修改目标？'
-    };
+    return { type: 'ask_user', question: '已达到最大步骤数。要继续诊断还是修改目标？' };
   }
-  return {
-    type: 'fail',
-    reason: code
-  };
+  return { type: 'fail', reason: code };
 }
 
 export class RecoveryBudget {

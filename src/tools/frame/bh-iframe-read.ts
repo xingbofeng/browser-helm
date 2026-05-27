@@ -3,37 +3,88 @@ import { z } from 'zod';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
+import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ToolSpec } from '../core/tool-spec';
 import { parseFrameRef } from './frame-ref';
 
-const argsSchema = z.object({
-  refId: z.string().min(1),
-  frameId: z.number().int().nonnegative().optional()
-});
+const argsSchema = z.union([
+  z.object({
+    refId: z.string().min(1),
+    frameId: z.number().int().nonnegative().optional()
+  }),
+  z.object({
+    iframeId: z.string().min(1),
+    mode: z.enum(['summary', 'visible_text', 'article']).optional(),
+    cursor: z.number().int().nonnegative().optional(),
+    maxChars: z.number().int().positive().max(50_000).optional(),
+    includeHeadings: z.boolean().optional(),
+    includeLinks: z.boolean().optional(),
+    linkLimit: z.number().int().nonnegative().max(200).optional()
+  })
+]);
 
 /**
- * Reads a target element inside an iframe by composite stable ref.
+ * 通过复合 stable ref 读取 iframe 内的目标元素。
  *
- * Use this read-only Debug/Act tool when the Agent needs to inspect an iframe
- * target before deciding whether a controlled action is appropriate. It parses
- * `frame_<id>:ref_<id>`, routes the request to the target frame, returns a
- * prefixed ref summary, and asks the caller to re-observe when the frame/ref is
- * unavailable. It never mutates page state and never triggers approval.
+ * 面向 Debug/Act 模式的只读工具，供 Agent 在决定是否执行受控动作之前检查 iframe
+ * 目标。解析 `frame_<id>:ref_<id>`，将请求路由到目标 frame，返回带前缀的 ref
+ * 摘要，当 frame/ref 不可用时提示调用方重新 observation。不修改页面状态，永不触发
+ * approval。
  */
 export function bhIframeRead(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
   return {
-    name: 'bh_iframe_read',
-    // 读取 iframe 内 stable ref 的只读摘要，用于动作前确认目标。
+    name: TOOL_NAMES.IFRAME_READ,
+    // 读取 iframe 文档或 iframe 内 stable ref 的只读摘要。
     title: 'Read Iframe Target',
-    description: 'Reads an iframe target by composite stable ref_id',
-    modes: ['debug', 'act'],
-    risk: 'low',
+    description: 'Reads an iframe document by iframeId or a target by composite stable ref_id',
+    modes: ['ask', 'debug', 'form', 'act'],
+    risk: 'safe',
     argsSchema,
     resultSchema: toolResultSchema,
     async execute(args) {
+      if ('iframeId' in args) {
+        const frameId = parseIframeId(args.iframeId);
+        const type = args.mode === 'article'
+          ? CONTENT_RPC_MESSAGES.PAGE_READ_ARTICLE
+          : CONTENT_RPC_MESSAGES.PAGE_READ_VISIBLE_TEXT;
+        const response = await rpc.request({
+          type,
+          frameId,
+          cursor: args.cursor,
+          maxChars: args.maxChars,
+          ...(type === CONTENT_RPC_MESSAGES.PAGE_READ_ARTICLE
+            ? {
+                includeHeadings: args.includeHeadings,
+                includeLinks: args.includeLinks,
+                linkLimit: args.linkLimit
+              }
+            : {})
+        });
+        if (!response.ok || !('pageRead' in response)) {
+          const message = response.ok ? 'Iframe read did not return text' : response.message;
+          return failure(response.ok ? ERROR_CODES.OBSERVATION_FAILED : response.code, message, false);
+        }
+        return {
+          ok: true,
+          code: ERROR_CODES.OK,
+          summary: `Read iframe ${args.iframeId}${response.pageRead.hasMore ? ' (truncated)' : ''}`,
+          data: {
+            iframeId: args.iframeId,
+            frameId,
+            ...response.pageRead
+          },
+          nextHints: response.pageRead.hasMore ? ['IFRAME_TRUNCATED: Continue with nextCursor'] : undefined,
+          changedPage: false,
+          requiresObserve: false,
+          context: {
+            visibility: 'summary',
+            summary: `${args.iframeId}: ${response.pageRead.text.slice(0, 1_200)}`
+          }
+        };
+      }
       const parsed = parseFrameRef(args);
       if (!parsed.ok) {
         return failure(parsed.code, parsed.message, false);
@@ -71,6 +122,14 @@ export function bhIframeRead(
       };
     }
   };
+}
+
+function parseIframeId(iframeId: string): number {
+  const match = /^frame_(\d+)$/u.exec(iframeId);
+  if (!match) {
+    throw new Error('iframeId must look like frame_<number>');
+  }
+  return Number(match[1]);
 }
 
 function failure(

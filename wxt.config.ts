@@ -41,7 +41,22 @@ export default defineConfig({
       },
       default_title: 'Open BrowserHelm side panel'
     },
+    commands: {
+      'open-browserhelm-side-panel': {
+        suggested_key: {
+          default: 'Alt+Shift+B',
+          mac: 'Alt+Shift+B'
+        },
+        description: 'Toggle BrowserHelm floating panel'
+      }
+    },
     permissions: ['storage', 'tabs', 'scripting', 'sidePanel', 'webNavigation'],
-    host_permissions: ['<all_urls>']
+    host_permissions: ['<all_urls>'],
+    web_accessible_resources: [
+      {
+        resources: ['sidepanel.html', 'assets/*', 'icons/*'],
+        matches: ['<all_urls>']
+      }
+    ]
   }
 });

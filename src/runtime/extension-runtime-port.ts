@@ -2,6 +2,7 @@ import type { RuntimePort } from './runtime-port';
 import {
   runtimeResponseSchema,
   type DecideApprovalInput,
+  type ExecuteToolInput,
   type HighlightRefInput,
   type RuntimeEvent,
   type RuntimeProviderSettings,
@@ -68,6 +69,20 @@ export class ExtensionRuntimePort implements RuntimePort {
     }
     if (!isToolResult(response.data)) {
       throw new Error('Runtime highlight ref response is invalid');
+    }
+    return response.data;
+  }
+
+  async executeTool(input: ExecuteToolInput): Promise<RuntimeToolExecutionResult> {
+    const response = await sendRuntimeMessage({
+      type: RUNTIME_MESSAGES.EXECUTE_TOOL,
+      input
+    });
+    if (!response.ok) {
+      throw new Error(response.message);
+    }
+    if (!isToolResult(response.data)) {
+      throw new Error('Runtime tool execution response is invalid');
     }
     return response.data;
   }

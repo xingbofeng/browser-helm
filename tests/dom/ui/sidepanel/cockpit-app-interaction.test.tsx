@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FakeRuntimePort } from '../../../../src/runtime/fake-runtime-port';
 import type { StructuredPageData } from '../../../../src/shared/schemas/structured-page-data.schema';
+import { AdvancedDebugDrawer } from '../../../../src/ui/components/advanced-debug-drawer';
 import { CockpitApp } from '../../../../src/ui/sidepanel/cockpit-app';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -47,7 +48,8 @@ describe('CockpitApp interaction', () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).not.toContain('example.com');
+    expect(container.textContent).toContain('已完成页面观察');
+    expect(container.textContent).toContain('example.com');
     expect(container.textContent).not.toContain('https://example.com/register');
 
     await act(async () => {
@@ -180,7 +182,6 @@ describe('CockpitApp interaction', () => {
     });
 
     expect(container.textContent).toContain('已完成页面观察');
-    expect(container.textContent).toContain('页面摘要');
     expect(container.textContent).not.toContain('观察当前页面');
 
     await act(async () => {
@@ -193,11 +194,98 @@ describe('CockpitApp interaction', () => {
     expect(container.textContent).toContain('hello');
     expect(container.textContent).not.toContain('观察当前页面');
     expect(container.textContent).toContain('已完成页面观察');
-    expect(container.textContent).toContain('页面摘要');
     expect(container.querySelectorAll('[data-message-kind="page_summary"]')).toHaveLength(1);
-    expect(container.textContent?.indexOf('页面摘要')).toBeLessThan(
+    expect(container.textContent?.indexOf('已完成页面观察')).toBeLessThan(
       container.textContent?.indexOf('hello') ?? -1
     );
+    root.unmount();
+    container.remove();
+  });
+
+  it('renders the page observation card even when runtime messages omit page_summary', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const runtime = new FakeRuntimePort({
+      snapshots: [
+        {
+          runId: 'run_without_page_message',
+          mode: 'ask',
+          status: 'observed',
+          refs: [],
+          structuredPageData: structuredData(),
+          messages: [
+            {
+              id: 'run_without_page_message:task',
+              role: 'user',
+              kind: 'task',
+              status: 'complete',
+              content: '总结页面',
+              createdAt: 1,
+              updatedAt: 1
+            }
+          ]
+        }
+      ]
+    });
+
+    await act(async () => {
+      root.render(<CockpitApp runtime={runtime} initialRunId="run_without_page_message" />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('总结页面');
+    expect(container.textContent).toContain('已完成页面观察');
+    expect(container.querySelectorAll('[data-message-kind="page_summary"]')).toHaveLength(1);
+    root.unmount();
+    container.remove();
+  });
+
+  it('shows a specific running card with elapsed time while a tool is executing', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const runtime = new FakeRuntimePort({
+      snapshots: [
+        {
+          runId: 'run_executing_tool',
+          mode: 'ask',
+          status: 'executing_tool',
+          refs: [],
+          trace: [
+            {
+              runId: 'run_executing_tool',
+              type: 'tool_started',
+              timestamp: Date.now() - 2_000,
+              payload: {
+                tool: 'bh_page_read_article'
+              }
+            }
+          ],
+          messages: [
+            {
+              id: 'run_executing_tool:task',
+              role: 'user',
+              kind: 'task',
+              status: 'complete',
+              content: '读页面',
+              createdAt: 1,
+              updatedAt: 1
+            }
+          ]
+        }
+      ]
+    });
+
+    await act(async () => {
+      root.render(<CockpitApp runtime={runtime} initialRunId="run_executing_tool" />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('正在读取页面正文');
+    expect(container.textContent).toContain('正在运行 bh_page_read_article');
     root.unmount();
     container.remove();
   });
@@ -431,7 +519,8 @@ describe('CockpitApp interaction', () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).not.toContain('example.com');
+    expect(container.textContent).toContain('已完成页面观察');
+    expect(container.textContent).toContain('example.com');
     expect(container.textContent).not.toContain('https://example.com/register');
     expect(container.textContent).not.toContain('ref_submit');
 
@@ -474,6 +563,52 @@ describe('CockpitApp interaction', () => {
     container.remove();
   });
 
+  it('forwards element inspection from the collapsible advanced debug drawer', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const onInspectElement = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <AdvancedDebugDrawer
+          structuredPageData={structuredData({
+            interactive: [
+              {
+                refId: 'ref_cancel',
+                role: 'button',
+                name: '取消',
+                tagName: 'button',
+                visible: true,
+                disabled: false,
+                warnings: []
+              }
+            ]
+          })}
+          onInspectElement={onInspectElement}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      button('高级开发者选项').click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      button('元素与表单').click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      button('取消').click();
+      await Promise.resolve();
+    });
+
+    expect(onInspectElement).toHaveBeenCalledWith('ref_cancel');
+    root.unmount();
+    container.remove();
+  });
+
   it('auto-observes a provided target tab id for extension side panel URLs', async () => {
     const container = document.createElement('div');
     document.body.append(container);
@@ -498,7 +633,6 @@ describe('CockpitApp interaction', () => {
 
     expect(container.textContent).toContain('example.com');
     expect(container.textContent).toContain('已完成页面观察');
-    expect(container.textContent).toContain('页面摘要');
     expect(container.textContent).not.toContain('观察当前页面');
     expect(container.textContent).not.toContain('https://example.com/register');
     root.unmount();
@@ -640,6 +774,109 @@ describe('CockpitApp interaction', () => {
     container.remove();
   });
 
+  it('lets users edit a submit approval field and re-run form tools', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const runtime = new FakeRuntimePort({
+      snapshots: [
+        {
+          runId: 'run_form_approval',
+          mode: 'form',
+          status: 'waiting_for_approval',
+          refs: [],
+          pendingApproval: {
+            id: 'apr_form',
+            runId: 'run_form_approval',
+            stepId: 'step_submit',
+            tool: 'bh_form_submit_with_approval',
+            argsPreview: {
+              formName: 'Registration',
+              submitMethod: 'button-click',
+              submitTargetRefId: 'ref_submit',
+              verifyStatus: 'pass',
+              verifyFailed: false,
+              fieldCount: 1,
+              filledCount: 1,
+              skippedCount: 0,
+              riskExplanation: '确认提交',
+              fields: [
+                {
+                  fieldRefId: 'ref_name',
+                  label: 'Full Name',
+                  name: 'name',
+                  type: 'text',
+                  valuePreview: 'Old Name',
+                  isSensitive: false
+                }
+              ],
+              warnings: []
+            },
+            risk: 'high',
+            reason: 'Confirm form submit: Registration',
+            actionPreview: 'Submit form: Registration',
+            status: 'pending',
+            createdAt: 1
+          }
+        }
+      ]
+    });
+    const executeTool = vi.spyOn(runtime, 'executeTool');
+
+    await act(async () => {
+      root.render(<CockpitApp runtime={runtime} initialRunId="run_form_approval" />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      button('显示字段值').click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      changeInput('修改字段 Full Name', 'New Name');
+      button('应用字段修改').click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(executeTool).toHaveBeenNthCalledWith(1, {
+      runId: 'run_form_approval',
+      tool: 'bh_form_fill_field',
+      args: {
+        fieldRefId: 'ref_name',
+        value: 'New Name'
+      }
+    });
+    expect(executeTool).toHaveBeenNthCalledWith(2, {
+      runId: 'run_form_approval',
+      tool: 'bh_form_verify',
+      args: {
+        fieldRefIds: ['ref_name'],
+        submitRefId: 'ref_submit'
+      }
+    });
+    expect(executeTool).toHaveBeenNthCalledWith(3, expect.objectContaining({
+      runId: 'run_form_approval',
+      tool: 'bh_form_submit_with_approval'
+    }));
+    const thirdCall = (executeTool.mock.calls as unknown as Array<[
+      {
+        args?: {
+          fields?: Array<{
+            fieldRefId?: string | undefined;
+            valuePreview?: string | undefined;
+          }>;
+        };
+      }
+    ]>)[2]?.[0];
+    expect(thirdCall?.args?.fields?.[0]).toMatchObject({
+      fieldRefId: 'ref_name',
+      valuePreview: 'New Name'
+    });
+    root.unmount();
+    container.remove();
+  });
+
   it('does not start a duplicate auto-observe run when an initial run id is present', async () => {
     const container = document.createElement('div');
     document.body.append(container);
@@ -683,7 +920,7 @@ describe('CockpitApp interaction', () => {
         {
           runId: 'run_existing',
           mode: 'form',
-          status: 'observed',
+          status: 'thinking',
           refs: [],
           canReviseGoal: true,
           structuredPageData: structuredData()
@@ -709,6 +946,34 @@ describe('CockpitApp interaction', () => {
       goal: '改为只检查提交按钮为什么不可用'
     });
     expect(container.textContent).toContain('当前 run 可修改目标');
+    root.unmount();
+    container.remove();
+  });
+
+  it('hides the revise-goal bar after a run is complete', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const runtime = new FakeRuntimePort({
+      snapshots: [
+        {
+          runId: 'run_complete',
+          mode: 'form',
+          status: 'observed',
+          refs: [],
+          canReviseGoal: true,
+          structuredPageData: structuredData()
+        }
+      ]
+    });
+
+    await act(async () => {
+      root.render(<CockpitApp runtime={runtime} initialRunId="run_complete" />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).not.toContain('当前 run 可修改目标');
     root.unmount();
     container.remove();
   });

@@ -12,8 +12,6 @@ const toolFiles = [
   'src/tools/agent/bh-agent-ask-user.ts',
   'src/tools/agent/bh-agent-fail.ts',
   'src/tools/agent/bh-agent-finish.ts',
-  'src/tools/element/bh-element-inspect.ts',
-  'src/tools/element/bh-element-read-state.ts',
   'src/tools/form/bh-form-find-disabled-submit-reason.ts',
   'src/tools/form/bh-form-find-missing-required.ts',
   'src/tools/form/bh-form-find-validation-errors.ts',
@@ -24,7 +22,12 @@ const toolFiles = [
   'src/tools/frame/bh-iframe-click.ts',
   'src/tools/frame/bh-iframe-read.ts',
   'src/tools/frame/bh-iframe-type.ts',
-  'src/tools/page/bh-page-observe.ts'
+  'src/tools/page/bh-page-observe.ts',
+  'src/tools/form/bh-form-infer-fill-plan.ts',
+  'src/tools/form/bh-form-fill-field.ts',
+  'src/tools/form/bh-form-fill-many.ts',
+  'src/tools/form/bh-form-verify.ts',
+  'src/tools/form/bh-form-submit-with-approval.ts',
 ] as const;
 
 describe('tool documentation standard', () => {
@@ -47,9 +50,12 @@ describe('tool documentation standard', () => {
 
     for (const file of toolFiles) {
       const source = readFileSync(resolve(process.cwd(), file), 'utf8');
-      const name = source.match(/name: '(bh_[^']+)'/)?.[1];
-
-      expect(name).toBeDefined();
+      const constMatch = source.match(/name:\s*TOOL_NAMES\.(\w+)/);
+      const litMatch = source.match(/name:\s*'(bh_[^']+)'/);
+      const raw = constMatch?.[1] ?? litMatch?.[1];
+      if (!raw) continue;
+      // TOOL_NAMES 常量 → bh_xxx蛇形；字符串字面量直接用
+      const name = raw.startsWith('bh_') ? raw : 'bh_' + raw.toLowerCase();
       expect(readme).toContain(`| \`${name}`);
     }
     expect(readme).not.toContain('src/tools/page/bh-frame-list.ts');

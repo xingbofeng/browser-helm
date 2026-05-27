@@ -6,9 +6,9 @@ describe('runMetadataSchema', () => {
   it('accepts required metadata fields', () => {
     const result = runMetadataSchema.parse({
       schemaVersion: '1.0.0',
-      promptVersion: 'v0.1.0',
-      toolSchemaVersion: 'v0.1.0',
-      contextPolicyVersion: 'v0.1.0',
+      promptVersion: '0.1.0',
+      toolSchemaVersion: '0.1.0',
+      contextPolicyVersion: '0.1.0',
       model: 'gpt-5-mini',
       runMode: 'ask'
     });
@@ -21,9 +21,9 @@ describe('runMetadataSchema', () => {
   it('accepts optional provider and capabilities fields', () => {
     const result = runMetadataSchema.parse({
       schemaVersion: '1.0.0',
-      promptVersion: 'v0.1.0',
-      toolSchemaVersion: 'v0.1.0',
-      contextPolicyVersion: 'v0.1.0',
+      promptVersion: '0.1.0',
+      toolSchemaVersion: '0.1.0',
+      contextPolicyVersion: '0.1.0',
       model: 'gpt-5-mini',
       runMode: 'form',
       providerBaseUrl: 'https://example.com/v1',
@@ -45,9 +45,9 @@ describe('runMetadataSchema', () => {
     expect(() =>
       runMetadataSchema.parse({
         schemaVersion: '',
-        promptVersion: 'v0.1.0',
-        toolSchemaVersion: 'v0.1.0',
-        contextPolicyVersion: 'v0.1.0',
+        promptVersion: '0.1.0',
+        toolSchemaVersion: '0.1.0',
+        contextPolicyVersion: '0.1.0',
         model: 'gpt-5-mini',
         runMode: 'ask'
       })

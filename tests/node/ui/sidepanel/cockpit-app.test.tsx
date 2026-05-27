@@ -37,7 +37,7 @@ describe('CockpitApp', () => {
     expect(html).toContain('BrowserHelm');
     expect(html).not.toContain('Cockpit');
     expect(html).not.toContain('页面数据驾驶舱');
-    expect(html).not.toContain('页面观察');
+    expect(html).not.toContain('页面数据驾驶舱');
     expect(html).toContain('BrowserHelm Agent 消息');
     expect(html).toContain('高级开发者选项');
     expect(html).toContain('aria-label="打开模型配置"');

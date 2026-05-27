@@ -306,6 +306,76 @@ const modelStreamFallbackFinishedEventSchema = traceEventBaseSchema.extend({
   })
 });
 
+// ---------------------------------------------------------------------------
+// Form lifecycle trace events
+// ---------------------------------------------------------------------------
+
+const fillPlanCreatedEventSchema = traceEventBaseSchema.extend({
+  type: z.literal(TRACE_EVENT_NAMES.FILL_PLAN_CREATED),
+  payload: z.object({
+    formRefId: z.string().min(1).optional(),
+    fieldCount: z.number().int().nonnegative(),
+    skippedCount: z.number().int().nonnegative(),
+    summary: z.string().min(1),
+  }),
+});
+
+const fieldFillStartedEventSchema = traceEventBaseSchema.extend({
+  type: z.literal(TRACE_EVENT_NAMES.FIELD_FILL_STARTED),
+  payload: z.object({
+    fieldRefId: z.string().min(1),
+    label: z.string().optional(),
+    type: z.string().min(1),
+    isRetry: z.boolean().optional(),
+  }),
+});
+
+const fieldFillResultEventSchema = traceEventBaseSchema.extend({
+  type: z.literal(TRACE_EVENT_NAMES.FIELD_FILL_RESULT),
+  payload: z.object({
+    fieldRefId: z.string().min(1),
+    label: z.string().optional(),
+    status: z.string().min(1),
+    maskedActualValue: z.string().optional(),
+    skipReason: z.string().min(1).optional(),
+    error: z.string().min(1).optional(),
+    retried: z.boolean().optional(),
+  }),
+});
+
+const formVerifyResultEventSchema = traceEventBaseSchema.extend({
+  type: z.literal(TRACE_EVENT_NAMES.FORM_VERIFY_RESULT),
+  payload: z.object({
+    formRefId: z.string().min(1).optional(),
+    status: z.string().min(1),
+    allValid: z.boolean(),
+    missingRequiredCount: z.number().int().nonnegative(),
+    invalidCount: z.number().int().nonnegative(),
+    submitAvailable: z.boolean(),
+  }),
+});
+
+const submitApprovalRequestedEventSchema = traceEventBaseSchema.extend({
+  type: z.literal(TRACE_EVENT_NAMES.SUBMIT_APPROVAL_REQUESTED),
+  payload: z.object({
+    formRefId: z.string().min(1).optional(),
+    formName: z.string().min(1),
+    verifyStatus: z.string().min(1),
+    risk: toolRiskSchema,
+    highRisk: z.boolean(),
+  }),
+});
+
+const formSubmitResultEventSchema = traceEventBaseSchema.extend({
+  type: z.literal(TRACE_EVENT_NAMES.FORM_SUBMIT_RESULT),
+  payload: z.object({
+    formRefId: z.string().min(1).optional(),
+    outcome: z.string().min(1),
+    urlChanged: z.boolean().optional(),
+    summary: z.string().min(1),
+  }),
+});
+
 export const traceEventSchema = z.discriminatedUnion('type', [
   runStartedEventSchema,
   runFinishedEventSchema,
@@ -336,7 +406,13 @@ export const traceEventSchema = z.discriminatedUnion('type', [
   modelStreamFinishedEventSchema,
   modelStreamFailedEventSchema,
   modelStreamFallbackStartedEventSchema,
-  modelStreamFallbackFinishedEventSchema
+  modelStreamFallbackFinishedEventSchema,
+  fillPlanCreatedEventSchema,
+  fieldFillStartedEventSchema,
+  fieldFillResultEventSchema,
+  formVerifyResultEventSchema,
+  submitApprovalRequestedEventSchema,
+  formSubmitResultEventSchema
 ]);
 
 export type TraceEvent = z.infer<typeof traceEventSchema>;

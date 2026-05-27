@@ -18,7 +18,7 @@ const rules: Rule[] = [
   },
   {
     mode: 'act',
-    reason: '任务要求页面动作；v1.0 将其作为动作准备 / Act 处理，不自动执行填写或提交。',
+    reason: '任务要求页面动作；将其作为动作准备 / Act 处理，不自动执行填写或提交。',
     confidence: 'high',
     patterns: [
       /点击|click|输入|type|提交|submit|发送|send|删除|delete|上传|upload|执行|execute/iu

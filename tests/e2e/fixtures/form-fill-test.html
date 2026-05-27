@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Form Fill Test</title>
+<style>
+  body { font-family: system-ui; max-width: 600px; margin: 2rem auto; }
+  .form-group { margin-bottom: 1rem; }
+  label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
+  input, select, textarea { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
+  input:invalid, textarea:invalid { border-color: #e44; }
+  .error { color: #e44; font-size: 0.85rem; display: none; }
+  input:invalid + .error, textarea:invalid + .error { display: block; }
+  button { padding: 0.6rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; }
+  .btn-primary { background: #2463eb; color: #fff; }
+  .btn-primary:disabled { background: #999; cursor: not-allowed; }
+  .honeypot { position: absolute; left: -9999px; opacity: 0; }
+  .success-msg { display: none; background: #d4edda; padding: 1rem; border-radius: 4px; margin-top: 1rem; }
+</style></head>
+<body>
+
+<h1>Registration Form</h1>
+<form id="reg-form" novalidate>
+  <div class="form-group">
+    <label for="name">Full Name</label>
+    <input type="text" id="name" name="name" required placeholder="Enter your name">
+    <span class="error">Name is required</span>
+  </div>
+  <div class="form-group">
+    <label for="email">Email</label>
+    <input type="email" id="email" name="email" required placeholder="you@example.com">
+    <span class="error">Valid email required</span>
+  </div>
+  <div class="form-group">
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" required minlength="6" autocomplete="current-password">
+    <span class="error">Min 6 characters</span>
+  </div>
+  <div class="form-group">
+    <label for="country">Country</label>
+    <select id="country" name="country">
+      <option value="">Select...</option>
+      <option value="us">United States</option>
+      <option value="cn">China</option>
+      <option value="jp">Japan</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label>
+      <input type="checkbox" name="agree" required> I agree to the terms
+    </label>
+    <span class="error">You must agree</span>
+  </div>
+  <div class="form-group">
+    <label for="bio">Bio</label>
+    <textarea id="bio" name="bio" rows="3" placeholder="Tell us about yourself"></textarea>
+  </div>
+  <div class="form-group">
+    <label for="birthdate">Birth Date</label>
+    <input type="date" id="birthdate" name="birthdate">
+  </div>
+  <div class="form-group">
+    <label for="color">Favorite Color</label>
+    <input type="radio" name="color" value="red"> Red
+    <input type="radio" name="color" value="blue"> Blue
+    <input type="radio" name="color" value="green"> Green
+  </div>
+  <!-- honeypot field -->
+  <input type="text" name="hpot_name" class="honeypot" tabindex="-1" aria-hidden="true" autocomplete="off">
+
+  <div class="form-group">
+    <button type="submit" id="submit-btn" class="btn-primary" disabled>Submit</button>
+    <span id="submit-hint" class="error">Please fill all required fields</span>
+  </div>
+</form>
+<div id="success-msg" class="success-msg" role="status">Submission successful! Thank you.</div>
+
+<script>
+  const form = document.getElementById('reg-form');
+  const submitBtn = document.getElementById('submit-btn');
+  const submitHint = document.getElementById('submit-hint');
+  const successMsg = document.getElementById('success-msg');
+
+  function checkValidity() {
+    const valid = form.checkValidity();
+    submitBtn.disabled = !valid;
+    submitHint.style.display = valid ? 'none' : 'block';
+  }
+
+  form.addEventListener('input', checkValidity);
+  form.addEventListener('change', checkValidity);
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!form.checkValidity()) return;
+    form.style.display = 'none';
+    successMsg.style.display = 'block';
+  });
+</script>
+</body>
+</html>

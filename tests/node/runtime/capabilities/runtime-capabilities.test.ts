@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { resolveRuntimeCapabilities } from '../../../../src/runtime/capabilities/runtime-capabilities';
 
 describe('resolveRuntimeCapabilities', () => {
-  it('captures v1.0 capability state with CDP reserved', () => {
+  it('captures capability state with CDP reserved', () => {
     const result = resolveRuntimeCapabilities({
       hasActiveTab: true,
       hostPermissions: ['https://example.com/*'],

@@ -1,7 +1,12 @@
 import type { AgentDecision } from '../../shared/schemas/agent-decision.schema';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 
-const SENSITIVE_TEXT_TOOLS = new Set<string>([TOOL_NAMES.IFRAME_TYPE]);
+const SENSITIVE_TEXT_TOOLS = new Set<string>([
+  TOOL_NAMES.IFRAME_TYPE,
+  TOOL_NAMES.FORM_FILL_FIELD,
+  TOOL_NAMES.FORM_FILL_MANY,
+  TOOL_NAMES.FORM_SUBMIT_WITH_APPROVAL,
+]);
 
 export function redactToolArgs(tool: string, args: unknown): unknown {
   if (!isRecord(args)) {
@@ -15,6 +20,12 @@ export function redactToolArgs(tool: string, args: unknown): unknown {
   if ('text' in redacted) {
     delete redacted.text;
   }
+  if ('value' in redacted) {
+    delete redacted.value;
+  }
+  if (Array.isArray(redacted.fields)) {
+    redacted.fields = redacted.fields.map(redactFieldTarget);
+  }
   if (!('valuePreview' in redacted)) {
     redacted.valuePreview = {
       masked: true,
@@ -22,6 +33,22 @@ export function redactToolArgs(tool: string, args: unknown): unknown {
       reason: 'redacted'
     };
   }
+  return redacted;
+}
+
+function redactFieldTarget(value: unknown): unknown {
+  if (!isRecord(value)) {
+    return value;
+  }
+  const redacted = cloneRecord(value);
+  if ('value' in redacted) {
+    delete redacted.value;
+  }
+  redacted.valuePreview = {
+    masked: true,
+    preview: '[MASKED]',
+    reason: 'redacted'
+  };
   return redacted;
 }
 

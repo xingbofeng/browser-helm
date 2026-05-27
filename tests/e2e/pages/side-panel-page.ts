@@ -122,6 +122,29 @@ export class SidePanelPage {
     }, { ...input, runtimeMessages: RUNTIME_MESSAGES });
   }
 
+  async highlightRef(input: {
+    runId: string;
+    refId: string;
+  }): Promise<unknown> {
+    const page = this.pageObject;
+    return await page.evaluate(async ({ runtimeMessages, ...highlightInput }) => {
+      type RuntimeSuccess<T> = { ok: true; data: T };
+      const result: unknown = await chrome.runtime.sendMessage({
+        type: runtimeMessages.HIGHLIGHT_REF,
+        input: highlightInput
+      });
+      if (
+        typeof result !== 'object' ||
+        result === null ||
+        (result as { ok?: unknown }).ok !== true ||
+        !('data' in result)
+      ) {
+        throw new Error('Unable to highlight ref');
+      }
+      return (result as RuntimeSuccess<unknown>).data;
+    }, { ...input, runtimeMessages: RUNTIME_MESSAGES });
+  }
+
   async snapshot(runId: string): Promise<RunSnapshot> {
     const page = this.pageObject;
     return await page.evaluate(async ({ runId: targetRunId, runtimeMessages }) => {

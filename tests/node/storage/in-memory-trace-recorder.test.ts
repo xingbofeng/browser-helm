@@ -16,9 +16,9 @@ describe('InMemoryTraceRecorder', () => {
         maxSteps: 3,
         metadata: {
           schemaVersion: '1.0.0',
-          promptVersion: 'v0.1.0',
-          toolSchemaVersion: 'v0.1.0',
-          contextPolicyVersion: 'v0.1.0',
+          promptVersion: '0.1.0',
+          toolSchemaVersion: '0.1.0',
+          contextPolicyVersion: '0.1.0',
           model: 'mock',
           runMode: 'ask'
         }
@@ -35,9 +35,9 @@ describe('InMemoryTraceRecorder', () => {
         maxSteps: 3,
         metadata: {
           schemaVersion: '1.0.0',
-          promptVersion: 'v0.1.0',
-          toolSchemaVersion: 'v0.1.0',
-          contextPolicyVersion: 'v0.1.0',
+          promptVersion: '0.1.0',
+          toolSchemaVersion: '0.1.0',
+          contextPolicyVersion: '0.1.0',
           model: 'mock',
           runMode: 'ask'
         }

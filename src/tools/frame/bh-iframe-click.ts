@@ -15,12 +15,11 @@ const argsSchema = z.object({
 });
 
 /**
- * Clicks a target inside an iframe after readiness and policy checks.
+ * 在经过 readiness 和 policy 检查后点击 iframe 内目标。
  *
- * Use this Act-mode prototype for controlled iframe clicks only. It first reads
- * the target ref, checks visibility/disabled/risk through Action Readiness, and
- * returns approval-required results for high-risk targets before any mutation.
- * Successful clicks mark the page as changed and require a fresh observation.
+ * 面向 Act 模式的原型工具，仅用于受控 iframe 点击。先读取目标 ref，通过 Action
+ * Readiness 检查 visibility/disabled/risk 状态，高风险目标返回 approval-required
+ * 结果方允许变更。成功点击后标记页面已变更，并要求重新 observation。
  */
 export function bhIframeClick(
   rpc: ContentRpcClient

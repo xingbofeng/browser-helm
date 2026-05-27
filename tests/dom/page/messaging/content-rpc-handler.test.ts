@@ -7,6 +7,41 @@ import { CONTENT_RPC_MESSAGES } from '../../../../src/shared/constants/event-nam
 import { ERROR_CODES } from '../../../../src/shared/constants/error-codes';
 
 describe('content-rpc-handler iframe actions', () => {
+  it('resolves submit ref when verifying a filled form', () => {
+    document.body.innerHTML = `
+      <form>
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" required value="counter@example.com" />
+        <button id="submit" type="submit">Submit</button>
+      </form>
+    `;
+    const handler = new ContentRpcHandler(document);
+    const snapshot = handler.handle({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
+    if (!snapshot.ok || !('snapshot' in snapshot)) {
+      throw new Error('expected snapshot');
+    }
+    const fieldRefId = snapshot.snapshot.elements.find(
+      (element) => element.tagName === 'input'
+    )?.refId;
+    const submitRefId = snapshot.snapshot.elements.find(
+      (element) => element.tagName === 'button'
+    )?.refId;
+
+    expect(
+      handler.handle({
+        type: CONTENT_RPC_MESSAGES.FORM_VERIFY,
+        fieldRefIds: [fieldRefId ?? 'missing'],
+        submitRefId
+      })
+    ).toMatchObject({
+      ok: true,
+      verifyResult: {
+        status: 'pass',
+        submitAvailable: true
+      }
+    });
+  });
+
   it('reads, clicks, and types iframe-routed targets inside the current frame', () => {
     document.body.innerHTML = `
       <button id="toggle" type="button">展开详情</button>

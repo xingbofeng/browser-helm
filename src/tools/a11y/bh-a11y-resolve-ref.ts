@@ -11,12 +11,11 @@ const argsSchema = z.object({
 });
 
 /**
- * Resolves one stable `refId` to the current element summary.
+ * 将单个 stable `refId` 解析为当前元素摘要。
  *
- * Use this safe Ask/Debug/Form tool before inspecting or diagnosing a specific
- * element. The `refId` parameter names the stable ref to resolve; the tool is
- * read-only, never triggers approval, and returns either the current ref
- * summary or a structured stale/unavailable error.
+ * 面向 Ask/Debug/Form 模式的安全只读工具，用于在对特定元素进行检查或诊断之前确认
+ * ref 是否仍然有效。`refId` 参数指定要解析的 stable ref；工具永不修改页面、永不
+ * 触发 approval，返回当前 ref 摘要或结构化 stale/unavailable 错误。
  */
 export function bhA11yResolveRef(
   rpc: ContentRpcClient

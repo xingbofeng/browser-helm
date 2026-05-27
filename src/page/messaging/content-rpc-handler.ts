@@ -3,6 +3,7 @@ import { RefMap } from '../a11y/ref-map';
 import { resolveRef, type ResolvedRefElement } from '../a11y/ref-resolver';
 import { checkResolvedActionReadiness } from '../dom/action-readiness';
 import { buildObservation } from '../observe/build-observation';
+import { fillSingleField, fillManyFields, verifyForm, executeSubmit } from '../dom/form-fill-dom';
 import { readPageMetadata } from '../observe/page-metadata';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
@@ -58,6 +59,56 @@ export class ContentRpcHandler {
           observation: buildObservation(this.document, { refMap })
         };
       }
+      case CONTENT_RPC_MESSAGES.PAGE_READ_VISIBLE_TEXT: {
+        return {
+          ok: true,
+          pageRead: readPagedDocumentText(this.document, {
+            cursor: message.cursor,
+            maxChars: message.maxChars,
+            source: 'visible_text'
+          })
+        };
+      }
+      case CONTENT_RPC_MESSAGES.PAGE_READ_ARTICLE: {
+        return {
+          ok: true,
+          pageRead: readPagedDocumentText(this.document, {
+            cursor: message.cursor,
+            maxChars: message.maxChars,
+            source: 'article',
+            includeHeadings: message.includeHeadings,
+            includeLinks: message.includeLinks,
+            linkLimit: message.linkLimit
+          })
+        };
+      }
+      case CONTENT_RPC_MESSAGES.PAGE_WAIT_UNTIL_STABLE: {
+        return {
+          ok: true,
+          stable: true,
+          readyState: this.document.readyState,
+          waitedMs: 0
+        };
+      }
+      case CONTENT_RPC_MESSAGES.VIEWPORT_GET_INFO: {
+        return {
+          ok: true,
+          viewport: readViewportInfo(this.document)
+        };
+      }
+      case CONTENT_RPC_MESSAGES.VIEWPORT_SCROLL: {
+        const before = readViewportInfo(this.document);
+        scrollViewport(this.document, message.direction, message.amount);
+        const after = readViewportInfo(this.document);
+        return {
+          ok: true,
+          viewport: after,
+          before,
+          after,
+          didScroll: before.scrollX !== after.scrollX || before.scrollY !== after.scrollY,
+          atBoundary: before.scrollX === after.scrollX && before.scrollY === after.scrollY
+        };
+      }
       case CONTENT_RPC_MESSAGES.FRAME_LIST: {
         return {
           ok: false,
@@ -86,18 +137,22 @@ export class ContentRpcHandler {
         };
       }
       case CONTENT_RPC_MESSAGES.A11Y_HIGHLIGHT_REF: {
-        const response = this.readIframeTarget(message.refId);
-        if (!response.ok || !('ref' in response)) {
-          return response;
-        }
         const element = this.resolveAnyElement(message.refId);
         if (!element.ok) {
           return element;
         }
         highlightElement(element.element);
+        const response = resolveRef(this.ensureRefMap(), message.refId);
+        if (!response.ok) {
+          return {
+            ok: false,
+            code: response.code,
+            message: response.message
+          };
+        }
         return {
           ok: true,
-          ref: response.ref,
+          ref: response.element,
           changedPage: false
         };
       }
@@ -200,6 +255,37 @@ export class ContentRpcHandler {
           ref: response.ref,
           changedPage: true
         };
+      }
+      // form fill actions
+      case CONTENT_RPC_MESSAGES.FORM_FILL_FIELD: {
+        const fr = fillSingleField(this.document, this.ensureRefMap(), { fieldRefId: message.fieldRefId, value: message.value, clear: message.clear });
+        if (fr.status === 'failed') {
+          return { ok: false, code: ERROR_CODES.TOOL_EXECUTION_FAILED, message: 'fill field failed' };
+        }
+        return { ok: true, fillFieldResult: fr } as unknown as ContentRpcResponse;
+      }
+      case CONTENT_RPC_MESSAGES.FORM_FILL_MANY: {
+        const mr = fillManyFields(this.document, this.ensureRefMap(), message.targets);
+        return { ok: true, fillManyResult: mr } as unknown as ContentRpcResponse;
+      }
+      case CONTENT_RPC_MESSAGES.FORM_VERIFY: {
+        const vm = this.ensureRefMap();
+        const fm = new Map<string, HTMLElement>();
+        for (const rid of message.fieldRefIds) { const re = vm.resolve(rid); if (re?.element instanceof HTMLElement) fm.set(rid, re.element); }
+        if (message.submitRefId) {
+          const submit = vm.resolve(message.submitRefId);
+          if (submit?.element instanceof HTMLElement) {
+            fm.set(message.submitRefId, submit.element);
+          }
+        }
+        return { ok: true, verifyResult: verifyForm(this.document, fm, message.submitRefId) } as unknown as ContentRpcResponse;
+      }
+      case CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT: {
+        const sr = executeSubmit(this.document, this.ensureRefMap(), message.submitTargetRefId);
+        if (sr === 'submitted') {
+          return { ok: true, submitResult: sr } as unknown as ContentRpcResponse;
+        }
+        return { ok: false, code: ERROR_CODES.TOOL_EXECUTION_FAILED, message: sr };
       }
     }
   }
@@ -413,6 +499,129 @@ function ensureHighlightStyle(document: Document): void {
     }
   `;
   document.head?.append(style);
+}
+
+type PageReadOptions = {
+  cursor?: number | undefined;
+  maxChars?: number | undefined;
+  source: 'visible_text' | 'article';
+  includeHeadings?: boolean | undefined;
+  includeLinks?: boolean | undefined;
+  linkLimit?: number | undefined;
+};
+
+type ScrollAmount = 'half' | 'page' | 'end' | { pixels: number };
+
+const READ_SKIP_TAGS = new Set(['script', 'style', 'noscript', 'template']);
+
+function readPagedDocumentText(document: Document, options: PageReadOptions) {
+  const root = options.source === 'article'
+    ? findArticleRoot(document)
+    : document.body ?? document.documentElement;
+  const rawText = collectReadableText(root).replace(/\s+/gu, ' ').trim();
+  const cursor = options.cursor ?? 0;
+  const maxChars = options.maxChars ?? 8_000;
+  const text = rawText.slice(cursor, cursor + maxChars);
+  const nextCursor = cursor + text.length < rawText.length ? cursor + text.length : undefined;
+  const headings = options.includeHeadings
+    ? Array.from(root.querySelectorAll('h1,h2,h3,h4,h5,h6')).slice(0, 40).map((heading) => ({
+      level: Number(heading.tagName.slice(1)),
+      text: (heading.textContent ?? '').replace(/\s+/gu, ' ').trim()
+    })).filter((heading) => heading.text.length > 0)
+    : undefined;
+  const links = options.includeLinks
+    ? Array.from(root.querySelectorAll('a[href]')).slice(0, options.linkLimit ?? 30).map((link) => ({
+      text: (link.textContent ?? '').replace(/\s+/gu, ' ').trim(),
+      href: (link as HTMLAnchorElement).href
+    })).filter((link) => link.text.length > 0 || link.href.length > 0)
+    : undefined;
+
+  return {
+    text,
+    cursor,
+    ...(nextCursor === undefined ? {} : { nextCursor }),
+    hasMore: nextCursor !== undefined,
+    totalTextLength: rawText.length,
+    warnings: nextCursor === undefined ? [] : ['VISIBLE_TEXT_TRUNCATED'],
+    contentSource: options.source,
+    ...(headings === undefined ? {} : { headings }),
+    ...(links === undefined ? {} : { links })
+  };
+}
+
+function findArticleRoot(document: Document): Element {
+  return document.querySelector('article, main, [role="main"], .article, .post, .content, #content')
+    ?? document.body
+    ?? document.documentElement;
+}
+
+function collectReadableText(element: Element | null): string {
+  if (!element || READ_SKIP_TAGS.has(element.tagName.toLowerCase()) || isElementHidden(element)) {
+    return '';
+  }
+  return Array.from(element.childNodes).map((node) => {
+    if (node.nodeType === node.TEXT_NODE) {
+      return node.textContent ?? '';
+    }
+    if (node.nodeType === node.ELEMENT_NODE) {
+      return collectReadableText(node as Element);
+    }
+    return '';
+  }).join(' ');
+}
+
+function isElementHidden(element: Element): boolean {
+  if (element.hasAttribute('hidden') || element.getAttribute('aria-hidden') === 'true') {
+    return true;
+  }
+  const style = element.getAttribute('style')?.toLowerCase() ?? '';
+  return style.includes('display: none') || style.includes('visibility: hidden');
+}
+
+function readViewportInfo(document: Document) {
+  const view = document.defaultView;
+  const element = document.scrollingElement ?? document.documentElement;
+  const scrollX = view?.scrollX ?? element.scrollLeft;
+  const scrollY = view?.scrollY ?? element.scrollTop;
+  const viewportWidth = view?.innerWidth ?? element.clientWidth;
+  const viewportHeight = view?.innerHeight ?? element.clientHeight;
+  const scrollWidth = element.scrollWidth;
+  const scrollHeight = element.scrollHeight;
+  return {
+    scrollX,
+    scrollY,
+    viewportWidth,
+    viewportHeight,
+    scrollWidth,
+    scrollHeight,
+    canScrollDown: scrollY + viewportHeight < scrollHeight - 1,
+    canScrollUp: scrollY > 0,
+    canScrollLeft: scrollX > 0,
+    canScrollRight: scrollX + viewportWidth < scrollWidth - 1,
+    atBottom: scrollY + viewportHeight >= scrollHeight - 1,
+    atTop: scrollY <= 0
+  };
+}
+
+function scrollViewport(document: Document, direction: string, amount: ScrollAmount): void {
+  const view = document.defaultView;
+  const element = document.scrollingElement ?? document.documentElement;
+  const viewport = readViewportInfo(document);
+  const pixels = typeof amount === 'object'
+    ? amount.pixels
+    : amount === 'half'
+      ? Math.round(viewport.viewportHeight / 2)
+      : amount === 'page'
+        ? viewport.viewportHeight
+        : Number.MAX_SAFE_INTEGER;
+  const left = direction === 'left' ? -pixels : direction === 'right' ? pixels : 0;
+  const top = direction === 'up' ? -pixels : direction === 'down' ? pixels : 0;
+  if (view) {
+    view.scrollBy({ left, top, behavior: 'auto' });
+    return;
+  }
+  element.scrollLeft += left;
+  element.scrollTop += top;
 }
 
 function iframeActionUnauthorized(): ContentRpcResponse {

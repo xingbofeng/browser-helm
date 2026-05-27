@@ -4,7 +4,7 @@ import { bhDebugCollectPageHealth } from '../../../../src/tools/debug/bh-debug-c
 import type { ContentRpcClient } from '../../../../src/page/messaging/content-rpc-client';
 import { CONTENT_RPC_MESSAGES } from '../../../../src/shared/constants/event-names';
 
-describe('v1.0 debug read-only tools', () => {
+describe('debug read-only tools', () => {
   it('collects page health summary from observation without CDP', async () => {
     const result = await bhDebugCollectPageHealth(debugRpc()).execute(
       {},
@@ -19,7 +19,7 @@ describe('v1.0 debug read-only tools', () => {
     expect(result.data).toMatchObject({
       hasForm: true,
       pageStateSummary: '页面包含表单',
-      limitations: ['CDP deep inspection is not used in v1.0']
+      limitations: ['CDP deep inspection unavailable']
     });
   });
 
@@ -42,7 +42,7 @@ describe('v1.0 debug read-only tools', () => {
         ],
         hasForm: false,
         pageStateSummary: '检测到 1 类 console error 和 1 个 network failure',
-        limitations: ['CDP deep inspection is not used in v1.0']
+        limitations: ['CDP deep inspection unavailable']
       }
     })).execute(
       {},

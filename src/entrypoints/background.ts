@@ -3,7 +3,8 @@ import {
   bindSidePanelToActiveTab,
   bindSidePanelToTab,
   notifySidePanelsActiveTab,
-  notifySidePanelsTargetTabChanged
+  notifySidePanelsTargetTabChanged,
+  sidePanelPathForTab
 } from '../background/runtime/side-panel-target';
 import { RUNTIME_MESSAGES, SIDE_PANEL_MESSAGES } from '../shared/constants/event-names';
 
@@ -56,7 +57,34 @@ export default defineBackground(() => {
     }
   });
 
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  chrome.commands?.onCommand.addListener((command) => {
+    if (command !== 'open-browserhelm-side-panel') {
+      return;
+    }
+    void chrome.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
+      const tabId = tabs[0]?.id;
+      if (!tabId) {
+        return;
+      }
+      void chrome.tabs.sendMessage(tabId, {
+        type: SIDE_PANEL_MESSAGES.FLOATING_PANEL_TOGGLE
+      }).catch(() => {
+        if (chrome.sidePanel?.open) {
+          void bindSidePanelToTab(tabId).then(() => chrome.sidePanel.open({ tabId }));
+        }
+      });
+    });
+  });
+
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (isFloatingPanelUrlMessage(message)) {
+      const tabId = sender.tab?.id;
+      sendResponse({
+        ok: Boolean(tabId),
+        ...(tabId ? { url: chrome.runtime.getURL(sidePanelPathForTab(tabId)) } : {})
+      });
+      return false;
+    }
     void host.handleMessage(message).then(sendResponse);
     return true;
   });
@@ -68,4 +96,12 @@ function parseRunSubscription(message: unknown): string | undefined {
   }
   const runId = (message as { runId?: unknown }).runId;
   return typeof runId === 'string' && runId.length > 0 ? runId : undefined;
+}
+
+function isFloatingPanelUrlMessage(value: unknown): value is {
+  type: typeof SIDE_PANEL_MESSAGES.FLOATING_PANEL_URL;
+} {
+  return Boolean(value) &&
+    typeof value === 'object' &&
+    (value as Record<string, unknown>).type === SIDE_PANEL_MESSAGES.FLOATING_PANEL_URL;
 }

@@ -94,11 +94,11 @@ describe('FakeRuntimePort', () => {
     });
   });
 
-  it('preserves v1 diagnosis fields on seeded snapshots', async () => {
+  it('preserves diagnosis fields on seeded snapshots', async () => {
     const port = new FakeRuntimePort({
       snapshots: [
         {
-          runId: 'seed_v1',
+          runId: 'seed_diag',
           mode: 'form',
           status: 'observed',
           refs: [],

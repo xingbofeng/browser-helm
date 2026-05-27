@@ -18,13 +18,11 @@ const argsSchema = z.object({
 });
 
 /**
- * Types text into a target inside an iframe after readiness and policy checks.
+ * 在经过 readiness 和 policy 检查后向 iframe 内目标输入文本。
  *
- * Use this Act-mode prototype for controlled iframe text entry only. It reads
- * the target first, blocks stale/disabled/mismatched refs, masks sensitive
- * previews in visible results, and returns approval-required results before any
- * high-risk mutation. Successful typing marks the page changed and requires a
- * fresh observation.
+ * 面向 Act 模式的原型工具，仅用于受控 iframe 文本输入。先读取目标，拦截 stale/
+ * disabled/mismatched ref，在可见结果中对敏感预览进行脱敏，高风险变更前返回
+ * approval-required 结果。成功输入后标记页面已变更，并要求重新 observation。
  */
 export function bhIframeType(
   rpc: ContentRpcClient

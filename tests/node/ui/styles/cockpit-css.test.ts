@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 describe('Cockpit CSS', () => {
-  it('defines concrete styles for the v1.0.1 agent side panel and narrow states', () => {
+  it('defines concrete styles for the agent side panel and narrow states', () => {
     const css = readFileSync(
       join(process.cwd(), 'src/entrypoints/sidepanel/app.css'),
       'utf8'

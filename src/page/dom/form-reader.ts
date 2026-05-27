@@ -14,6 +14,7 @@ import { isSensitiveField } from './sensitive-field';
 import { detectSubmitSummary, findSubmitButton } from './submit-detector';
 import { readValuePreview } from './value-preview';
 import { readFieldValidation } from './validation-reader';
+import { readWritabilityMeta } from './form-fill-dom';
 
 export type FormReaderResult = {
   status: Exclude<TabDataStatus, 'unsupported' | 'error'>;
@@ -24,8 +25,7 @@ export type FormReaderResult = {
   emptyReason?: string | undefined;
 };
 
-const FIELD_SELECTOR = 'input:not([type="hidden"]), select, textarea';
-
+const FIELD_SELECTOR = 'input:not([type="hidden"]), select, textarea, [contenteditable="true"]';
 export function readFormFields(
   document: Document,
   refMap: RefMap
@@ -115,6 +115,7 @@ function readFieldSnapshot(
     sensitive: isSensitiveField(element),
     valuePreview: readValuePreview(element),
     validation: validation.validation,
+    writable: readWritabilityMeta(element),
     warnings: label.warnings.map((warning) => ({
       ...warning,
       detail: { refId: ref.refId, domOrder }

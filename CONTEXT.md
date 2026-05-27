@@ -92,6 +92,23 @@ _避免使用_：ToolSelector、TaskClassifier
 v1.0 的完整模式系统，包含任务分类、工具选择、权限感知和策略化裁剪。
 _避免使用_：Run Mode Gate
 
+
+**Assisted Form Fill**：
+Agent 自动推断字段值并批量填写表单的模式，填写阶段不逐字段确认，安全边界通过跳过敏感/隐藏/禁用字段、填写后 verify 和提交前 approval 卡阻断来实现。
+_避免使用_：autofill、form executor
+
+**Fill Plan**：
+根据用户任务、页面摘要和当前表单字段快照推断出的单字段填空方案，包含 requestedValue、source、confidence、reason 和 maskedValuePreview。
+_避免使用_：form autocomplete、field suggestion
+
+**Form Verify**：
+提交前的必做验证步骤，读取 HTML5 validity、required、validationMessage、可见错误文本、submit disabled reason 和实际 DOM 值，返回 pass/fail/warn。
+_避免使用_：validation check、form validation
+
+**Submit Approval Card**：
+提交前阻断 Agent run 的主屏卡片，展示表单名、字段摘要、skipped 字段、验证状态、风险说明和 masked 字段值；支持 verify failed 时"仍然提交"高风险路径。
+_避免使用_：submit dialog、confirm dialog
+
 **Disabled Submit Reason**：
 对提交按钮不可用原因的只读诊断结果，置信类型为已确认、推断或无法判断。
 _避免使用_：submit blocker、autofill diagnosis

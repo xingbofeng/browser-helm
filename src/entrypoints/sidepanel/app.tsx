@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import 'animal-island-ui/style';
 import './app.css';
 
@@ -9,13 +9,48 @@ import { CockpitApp } from '../../ui/sidepanel/cockpit-app';
 
 export function App() {
   const runtime = useMemo<RuntimePort>(() => new ExtensionRuntimePort(), []);
+  const search = readCurrentSearch();
+  const initialTargetTabId = readNumberSearchParam('tabId');
+  const targetMode = resolveTargetModeFromSearch(search);
+  const [target, setTarget] = useState({
+    tabId: initialTargetTabId,
+    revision: 0
+  });
+
+  useEffect(() => {
+    if (targetMode !== 'active' || !globalThis.chrome?.runtime?.connect) {
+      return undefined;
+    }
+    const port = chrome.runtime.connect({ name: SIDE_PANEL_MESSAGES.TARGET_PORT });
+    const onMessage = (message: unknown) => {
+      const tabId = readTargetTabChangedTabId(message);
+      if (!tabId) {
+        return;
+      }
+      setTarget((current) => ({
+        tabId,
+        revision: current.revision + 1
+      }));
+    };
+    port.onMessage.addListener(onMessage);
+    return () => {
+      port.onMessage.removeListener(onMessage);
+      port.disconnect();
+    };
+  }, [targetMode]);
+
   return (
     <CockpitApp
       runtime={runtime}
-      targetTabId={readNumberSearchParam('tabId')}
+      targetTabId={target.tabId}
+      targetRevision={target.revision}
       initialRunId={readStringSearchParam('runId')}
     />
   );
+}
+
+function readCurrentSearch(): string {
+  return typeof window === 'undefined' ? '' : window.location.search;
 }
 
 function readNumberSearchParam(name: string): number | undefined {

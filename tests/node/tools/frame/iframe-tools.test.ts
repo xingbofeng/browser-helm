@@ -10,7 +10,7 @@ import { CONTENT_RPC_MESSAGES } from '../../../../src/shared/constants/event-nam
 import { TOOL_NAMES } from '../../../../src/shared/constants/tool-names';
 
 describe('iframe tools', () => {
-  it('reads iframe target refs in debug and act modes', async () => {
+  it('reads iframe target refs and exposes iframe reading in ask/debug/act modes', async () => {
     const rpc = rpcClient(async (message) => {
       expect(message).toMatchObject({
         type: CONTENT_RPC_MESSAGES.IFRAME_READ,
@@ -39,7 +39,7 @@ describe('iframe tools', () => {
     expect(router.listToolContracts('act').map((tool) => tool.name)).toContain(
       TOOL_NAMES.IFRAME_READ
     );
-    expect(router.listToolContracts('ask').map((tool) => tool.name)).not.toContain(
+    expect(router.listToolContracts('ask').map((tool) => tool.name)).toContain(
       TOOL_NAMES.IFRAME_READ
     );
 

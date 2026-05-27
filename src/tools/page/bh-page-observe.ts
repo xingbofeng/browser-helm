@@ -14,12 +14,11 @@ import type { ToolSpec } from '../core/tool-spec';
 const argsSchema = z.object({});
 
 /**
- * Observes the current page and returns bounded structured context.
+ * 观察当前页面并返回有界的结构化上下文。
  *
- * Use this safe Ask/Debug/Form tool as the primary read-only page observation
- * entrypoint. It accepts no parameters, never mutates the page, never triggers
- * approval, and returns the raw observation plus a compact structured summary
- * for Agent context and follow-up ref-based tools.
+ * 面向 Ask/Debug/Form 模式的主要只读页面观察入口。不接受参数，不修改页面状态，
+ * 永不触发 approval，返回原始 observation 及紧凑结构化摘要，供 Agent 上下文和后续
+ * ref-based 工具使用。
  */
 export function bhPageObserve(
   rpc: ContentRpcClient

@@ -9,7 +9,7 @@ import { loadDomFixture } from '../../../helpers/dom-test-page';
 describe('interactive-filter', () => {
   it('discovers native interactive elements with stable refs', () => {
     const page = loadDomFixture(
-      'v0-31-interactive-complete.html',
+      'interactive-complete.html',
       'https://demo.example.com/interactive'
     );
     const elements = findInteractiveElements(page.document, createRefMap());
@@ -29,7 +29,7 @@ describe('interactive-filter', () => {
 
   it('discovers common ARIA interactive roles with accessible names and state', () => {
     const page = loadDomFixture(
-      'v0-31-interactive-complete.html',
+      'interactive-complete.html',
       'https://demo.example.com/interactive'
     );
     const elements = findInteractiveElements(page.document, createRefMap());
@@ -51,7 +51,7 @@ describe('interactive-filter', () => {
 
   it('does not include plain tabindex elements without role, name, or obvious interactive signals', () => {
     const page = loadDomFixture(
-      'v0-31-interactive-complete.html',
+      'interactive-complete.html',
       'https://demo.example.com/interactive'
     );
     const elements = findInteractiveElements(page.document, createRefMap());
@@ -81,7 +81,7 @@ describe('interactive-filter', () => {
 
   it('returns an empty list when the page has no interactive elements', () => {
     const page = loadDomFixture(
-      'v0-31-no-interactive.html',
+      'interactive-none.html',
       'https://demo.example.com/static'
     );
 

@@ -12,12 +12,11 @@ const argsSchema = z.object({
 });
 
 /**
- * Inspects current form fields and submit state.
+ * 检查当前表单字段和 submit 状态。
  *
- * Use this safe Debug/Form tool for a read-only form overview. The optional
- * `formRefId` scopes the returned payload when available; the tool never fills,
- * clicks, or submits, never triggers approval, and returns fields, submit
- * diagnostics, and warnings.
+ * 面向 Debug/Form 模式的安全只读工具，提供表单概览。可选 `formRefId` 在可用时限定
+ * 返回载荷范围；该工具不填写、不点击、不提交，永不触发 approval，返回字段、
+ * submit 诊断及警告。
  */
 export function bhFormInspect(
   rpc: ContentRpcClient

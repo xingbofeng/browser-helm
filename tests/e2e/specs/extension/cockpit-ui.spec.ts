@@ -2,10 +2,28 @@ import { test } from '@playwright/test';
 
 import { CockpitUiFlow } from '../../flows/cockpit-ui-flow';
 
-test('renders v1.0.1 agent waterfall from automatic observation', async () => {
+test('renders agent waterfall from automatic observation', async () => {
   const flow = await CockpitUiFlow.start();
   try {
     await flow.expectCockpitAutoObservation();
+  } finally {
+    await flow.close();
+  }
+});
+
+test('reads truncated long pages before streaming the answer', async () => {
+  const flow = await CockpitUiFlow.start();
+  try {
+    await flow.expectLongPageArticleReadBeforeStreamingAnswer();
+  } finally {
+    await flow.close();
+  }
+});
+
+test('highlights page elements from the merged elements and forms debug tab', async () => {
+  const flow = await CockpitUiFlow.start();
+  try {
+    await flow.expectElementInspectHighlightsPageRef();
   } finally {
     await flow.close();
   }
@@ -29,19 +47,37 @@ test('masks provider API key in settings', async () => {
   }
 });
 
-test('renders v1 Form Doctor diagnosis from real runtime snapshot', async () => {
+test('renders Form Doctor diagnosis from real runtime snapshot', async () => {
   const flow = await CockpitUiFlow.start();
   try {
-    await flow.expectV1FormDoctorDiagnosis();
+    await flow.expectFormDoctorDiagnosis();
   } finally {
     await flow.close();
   }
 });
 
-test('renders v1 Page Inspector diagnosis from real runtime snapshot', async () => {
+test('renders Page Inspector diagnosis from real runtime snapshot', async () => {
   const flow = await CockpitUiFlow.start();
   try {
-    await flow.expectV1PageInspectorDiagnosis();
+    await flow.expectPageInspectorDiagnosis();
+  } finally {
+    await flow.close();
+  }
+});
+
+test('fills, verifies, approves, submits, and debugs a local form', async () => {
+  const flow = await CockpitUiFlow.start();
+  try {
+    await flow.expectAssistedFormFillSubmitAndDebug();
+  } finally {
+    await flow.close();
+  }
+});
+
+test('keeps verify-failed submit behind high-risk approval', async () => {
+  const flow = await CockpitUiFlow.start();
+  try {
+    await flow.expectAssistedFormVerifyFailureStillSubmit();
   } finally {
     await flow.close();
   }

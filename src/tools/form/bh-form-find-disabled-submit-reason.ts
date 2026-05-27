@@ -10,12 +10,11 @@ import { disabledSubmitReason, isToolResult, loadFormToolData } from './form-too
 const argsSchema = z.object({});
 
 /**
- * Finds the best available reason a submit control is disabled.
+ * 查找 submit 控件被禁用的最佳可用原因。
  *
- * Use this safe Form-mode diagnostic after form fields are observed. It accepts
- * no parameters, never fills or submits data, never triggers approval, and
- * returns a confirmed, inferred, or unknown disabled-submit reason plus the
- * current submit summary.
+ * 面向 Form 模式的安全诊断工具，在表单字段被观测后使用。不接受参数，不填写或提交
+ * 数据，永不触发 approval，返回 confirmed/inferred/unknown 类型的禁用原因及当前
+ * submit 摘要。
  */
 export function bhFormFindDisabledSubmitReason(
   rpc: ContentRpcClient

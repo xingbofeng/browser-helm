@@ -48,7 +48,7 @@ describe('timeline and inspector components', () => {
       />
     );
 
-    expect(html).toContain('tool_result');
+    expect(html).toContain('工具结果');
     expect(html).toContain('Observed page');
     expect(html).not.toContain('Replay');
   });
@@ -65,7 +65,8 @@ describe('timeline and inspector components', () => {
       />
     );
 
-    expect(html).toContain('model_stream_delta_summary');
+    expect(html).toContain('生成中');
+    expect(html).toContain('查看原始详情');
     expect(html).toContain('chunkCount');
     expect(html).toContain('2');
     expect(html).not.toContain('model_stream_delta</strong>');

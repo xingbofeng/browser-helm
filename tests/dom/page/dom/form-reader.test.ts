@@ -11,7 +11,7 @@ import { loadDomFixture } from '../../../helpers/dom-test-page';
 describe('form-reader', () => {
   it('reads native forms into field snapshots with submit summary', () => {
     const page = loadDomFixture(
-      'v0-32-form-complete.html',
+      'form-complete.html',
       'https://demo.example.com/form'
     );
     const result = readFormFields(page.document, createRefMap());
@@ -23,8 +23,8 @@ describe('form-reader', () => {
       name: 'email',
       type: 'email',
       required: true,
-      sensitive: true,
-      valuePreview: '[MASKED]'
+      sensitive: false,
+      valuePreview: 'empty'
     });
     expect(email?.submit?.disabled).toBe(false);
     expect(email?.submit?.refId).toMatch(/^ref_/u);
@@ -83,7 +83,7 @@ describe('form-reader', () => {
 
   it('returns fields even when there is no form tag', () => {
     const page = loadDomFixture(
-      'v0-32-fields-without-form.html',
+      'fields-without-form.html',
       'https://demo.example.com/fields'
     );
     const result = readFormFields(page.document, createRefMap());
@@ -94,7 +94,7 @@ describe('form-reader', () => {
 
   it('returns empty status when no form fields exist', () => {
     const page = loadDomFixture(
-      'v0-32-no-form.html',
+      'form-none.html',
       'https://demo.example.com/no-form'
     );
 
@@ -107,7 +107,7 @@ describe('form-reader', () => {
 
   it('keeps partial snapshots for missing submit and field warnings', () => {
     const page = loadDomFixture(
-      'v0-32-invalid-disabled-sensitive.html',
+      'form-edge-cases.html',
       'https://demo.example.com/form-edge'
     );
     const result = readFormFields(page.document, createRefMap());
@@ -132,9 +132,9 @@ describe('form-reader', () => {
     });
   });
 
-  it('upgrades StructuredPageData forms tab from unsupported to v0.32 snapshots', () => {
+  it('upgrades StructuredPageData forms tab from unsupported to form snapshots', () => {
     const page = loadDomFixture(
-      'v0-32-form-complete.html',
+      'form-complete.html',
       'https://demo.example.com/form'
     );
     const observation = buildObservation(page.document);

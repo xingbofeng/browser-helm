@@ -41,12 +41,11 @@ describe('prompt-builder', () => {
     expect(prompt).toContain('bypass approvals');
   });
 
-  it('states v1.0 diagnostic and Act boundaries', () => {
+  it('states diagnostic and Act boundaries', () => {
     const builder = new PromptBuilder();
     const prompt = builder.buildSystemPrompt([]);
 
-    expect(prompt).toContain('v1.0 defaults to diagnosis before action');
     expect(prompt).toContain('Act mode only prepares actions');
-    expect(prompt).toContain('fill, verify, and submit are v1.1 capabilities');
+    expect(prompt).toContain('fill, verify, and submit capabilities must not be executed in modes where they are unavailable');
   });
 });

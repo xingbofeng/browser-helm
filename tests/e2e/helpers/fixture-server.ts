@@ -11,6 +11,22 @@ export async function startFixtureServer(): Promise<FixtureServer> {
   const root = join(process.cwd(), 'tests/e2e/fixtures');
   const server = createServer((request, response) => {
     const rawPath = request.url?.split('?')[0] ?? '/basic-form.html';
+    if (rawPath === '/v1/chat/completions') {
+      const chunks = [
+        'BrowserHelm streaming ',
+        '已合并到回复。',
+        ' 长页面正文已读取。'
+      ];
+      response.writeHead(200, {
+        'content-type': 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-cache'
+      });
+      for (const chunk of chunks) {
+        response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`);
+      }
+      response.end('data: [DONE]\n\n');
+      return;
+    }
     const filePath = normalize(join(root, rawPath));
     if (!filePath.startsWith(root)) {
       response.writeHead(403);

@@ -35,9 +35,9 @@ describe('AgentLoop integration - invalid model output', () => {
       throw new Error('expected decision_parse_failed event');
     }
     expect(parseFailed.payload.parseError.code).toBe('MODEL_OUTPUT_INVALID_JSON');
-    expect(parseFailed.payload.promptVersion).toBe('v0.1.0');
-    expect(parseFailed.payload.toolSchemaVersion).toBe('v0.1.0');
-    expect(parseFailed.payload.contextPolicyVersion).toBe('v0.1.0');
+    expect(parseFailed.payload.promptVersion).toBe('0.1.0');
+    expect(parseFailed.payload.toolSchemaVersion).toBe('0.1.0');
+    expect(parseFailed.payload.contextPolicyVersion).toBe('0.1.0');
     expect(parseFailed.payload.schemaVersion).toBe('1.0.0');
   });
 });

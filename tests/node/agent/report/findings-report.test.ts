@@ -118,7 +118,7 @@ describe('findings-report', () => {
       ],
       hasForm: false,
       pageStateSummary: '检测到 1 类 console error 和 1 个 network failure',
-      limitations: ['CDP deep inspection is not used in v1.0']
+      limitations: ['CDP deep inspection is not used']
     });
 
     expect(findings.map((finding) => finding.title)).toEqual([

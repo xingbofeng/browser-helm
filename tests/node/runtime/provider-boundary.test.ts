@@ -14,6 +14,16 @@ describe('runtime provider boundary', () => {
     expect(client).toBeTruthy();
   });
 
+  it('allows loopback provider baseUrl for local extension E2E fixtures', () => {
+    const client = createProviderClient({
+      baseUrl: 'http://127.0.0.1:8787/v1',
+      apiKey: 'sk-test',
+      model: 'mock-local'
+    });
+
+    expect(client).toBeTruthy();
+  });
+
   it('rejects provider baseUrl from untrusted page text', () => {
     expect(() =>
       createProviderClient({

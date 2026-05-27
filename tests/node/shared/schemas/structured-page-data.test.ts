@@ -67,7 +67,7 @@ describe('structured page data schemas', () => {
     });
     const unsupportedTab = tabDataSchema.parse({
       status: 'unsupported',
-      summary: '当前观察未包含表单字段数据；请使用 v0.32 表单读取能力获取字段快照',
+      summary: '当前观察未包含表单字段数据；请使用表单读取能力获取字段快照',
       count: 0,
       items: [],
       updatedAt: '2026-05-24T05:00:00.000Z',
@@ -130,7 +130,7 @@ describe('structured page data schemas', () => {
       },
       forms: {
         status: 'unsupported',
-        summary: '当前观察未包含表单字段数据；请使用 v0.32 表单读取能力获取字段快照',
+        summary: '当前观察未包含表单字段数据；请使用表单读取能力获取字段快照',
         count: 0,
         items: [],
         updatedAt: '2026-05-24T05:00:00.000Z',
@@ -162,7 +162,7 @@ describe('structured page data schemas', () => {
     expect(JSON.stringify(parsed)).not.toContain('items');
   });
 
-  it('accepts v0.31 interactive element tab items and read-only element tool payloads', () => {
+  it('accepts interactive element tab items and read-only element tool payloads', () => {
     const interactiveElement = interactiveElementSchema.parse({
       refId: 'ref_button',
       role: 'button',
@@ -203,7 +203,7 @@ describe('structured page data schemas', () => {
     expect(statePayload.refId).toBe('ref_button');
   });
 
-  it('accepts v0.32 form field snapshots, submit summary, and read-only form tool payloads', () => {
+  it('accepts form field snapshots, submit summary, and read-only form tool payloads', () => {
     const disabledReason = disabledSubmitReasonSchema.parse({
       kind: 'inferred',
       message: '必填字段为空，提交按钮处于禁用状态',

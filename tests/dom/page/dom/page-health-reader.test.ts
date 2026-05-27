@@ -38,7 +38,7 @@ describe('page-health-reader', () => {
     ]);
     expect(result.networkFailures).toHaveLength(1);
     expect(result.hasForm).toBe(true);
-    expect(result.limitations).toContain('CDP deep inspection is not used in v1.0');
+    expect(result.limitations).toContain('CDP deep inspection is not available in this mode');
   });
 
   it('returns healthy empty state when no shallow signals exist', () => {
