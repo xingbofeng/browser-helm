@@ -46,6 +46,8 @@ export function CockpitApp({
   const [debugTab, setDebugTab] = useState<'trace' | 'tools' | 'elements' | 'streaming' | 'form'>('trace');
   const [conversationMessages, setConversationMessages] = useState<AgentMessage[]>([]);
   const unsubscribeRunRef = useRef<(() => void) | undefined>(undefined);
+  const foregroundUserRunIdRef = useRef<string | undefined>(initialRunId);
+  const userRunPendingRef = useRef(false);
   const agentStore = useMemo(() => createAgentStore(), []);
   const pageDataStore = useMemo(() => createPageDataStore(), []);
   const traceStore = useMemo(() => createTraceStore(), []);
@@ -120,6 +122,7 @@ export function CockpitApp({
     if (!initialRunId) {
       return;
     }
+    foregroundUserRunIdRef.current = initialRunId;
     let active = true;
     subscribeToRun(initialRunId, { persistMessages: true });
     void runtime.getRunSnapshot(initialRunId).then((nextSnapshot) => {
@@ -138,10 +141,15 @@ export function CockpitApp({
     if (!targetTabId || initialRunId) {
       return undefined;
     }
+    foregroundUserRunIdRef.current = undefined;
+    userRunPendingRef.current = false;
     let active = true;
     const timers: number[] = [];
     const retryDelays = [500, 1_500, 3_000, 6_000];
     const observe = (attempt: number) => {
+      if (foregroundUserRunIdRef.current || userRunPendingRef.current) {
+        return;
+      }
       void runtime
         .startRun({
           task: '观察当前页面',
@@ -150,11 +158,14 @@ export function CockpitApp({
           skipProviderResponse: true
         })
         .then((started) => {
+          if (foregroundUserRunIdRef.current || userRunPendingRef.current) {
+            return undefined;
+          }
           subscribeToRun(started.runId, { persistMessages: attempt === 0 });
           return runtime.getRunSnapshot(started.runId);
         })
         .then((nextSnapshot) => {
-          if (!active) {
+          if (!active || !nextSnapshot || foregroundUserRunIdRef.current || userRunPendingRef.current) {
             return;
           }
           applySnapshot(nextSnapshot, { persistMessages: attempt === 0 });
@@ -183,12 +194,14 @@ export function CockpitApp({
     }
     setBusy(true);
     setApprovalResult(undefined);
+    userRunPendingRef.current = true;
     try {
       const started = await runtime.startRun({
         task: submittedTask,
         mode,
         tabId: targetTabId
       });
+      foregroundUserRunIdRef.current = started.runId;
       setTask('');
       agentStore.getState().startRun({ runId: started.runId, mode });
       subscribeToRun(started.runId, { persistMessages: true });
@@ -204,7 +217,9 @@ export function CockpitApp({
           error instanceof Error ? error.message : 'BrowserHelm 未能启动当前任务。'
         )
       ]);
+      foregroundUserRunIdRef.current = undefined;
     } finally {
+      userRunPendingRef.current = false;
       setBusy(false);
     }
   };

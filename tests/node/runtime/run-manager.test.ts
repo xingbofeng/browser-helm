@@ -637,6 +637,89 @@ describe('RunManager', () => {
     });
   });
 
+  it('auto-fills reply text tasks in form mode', async () => {
+    const fillManyCalls: unknown[] = [];
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          fillManyCalls.push(message.targets);
+          return {
+            ok: true,
+            fillManyResult: {
+              ok: true,
+              fields: message.targets.map((target) => ({
+                fieldRefId: target.fieldRefId,
+                type: 'text',
+                status: 'filled',
+                actualValuePreview: target.value,
+                maskedActualValue: target.value
+              })),
+              filledCount: message.targets.length,
+              skippedCount: 0,
+              failedCount: 0,
+              changedPage: true,
+              requiresObserve: false,
+              summary: `填写成功 ${message.targets.length}/${message.targets.length} 个字段`
+            }
+          };
+        }
+        return observationResponse({
+          title: 'X reply composer',
+          currentDomain: 'x.com',
+          visibleTextSummary: 'Reply Post',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_reply',
+                label: '回复',
+                name: 'reply',
+                type: 'text',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: {
+                  valid: true,
+                  ariaInvalid: false
+                },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      })
+    });
+
+    const started = await manager.startRun({
+      task: '帮我回复下“你真牛逼”',
+      mode: 'form'
+    });
+    const trace = await waitForToolResult(manager, started.runId, TOOL_NAMES.FORM_FILL_MANY);
+
+    expect(trace).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: TRACE_EVENT_NAMES.TOOL_STARTED,
+          payload: expect.objectContaining({ tool: TOOL_NAMES.FORM_INFER_FILL_PLAN })
+        }),
+        expect.objectContaining({
+          type: TRACE_EVENT_NAMES.TOOL_RESULT,
+          payload: expect.objectContaining({ tool: TOOL_NAMES.FORM_FILL_MANY, ok: true })
+        })
+      ])
+    );
+    expect(fillManyCalls).toEqual([
+      [{ fieldRefId: 'ref_reply', value: '你真牛逼' }]
+    ]);
+  });
+
   it('approves pending approval by recording the decision without executing the action', async () => {
     let clicked = false;
     const manager = new RunManager({
@@ -1478,6 +1561,24 @@ async function waitForTraceEvent(
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   return manager.getSnapshot(runId);
+}
+
+async function waitForToolResult(
+  manager: RunManager,
+  runId: string,
+  tool: string
+) {
+  for (let index = 0; index < 30; index += 1) {
+    const trace = manager.getSnapshot(runId).trace ?? [];
+    if (trace.some((event) =>
+      event.type === TRACE_EVENT_NAMES.TOOL_RESULT &&
+      payloadRecord(event.payload).tool === tool
+    )) {
+      return trace;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return manager.getSnapshot(runId).trace ?? [];
 }
 
 async function waitForMessage(

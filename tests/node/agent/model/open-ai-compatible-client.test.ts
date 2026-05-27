@@ -152,6 +152,48 @@ describe('open-ai-compatible-client', () => {
     expect(result.text).toBe('Hello');
   });
 
+  it('passes reasoning_content deltas through onReasoningDelta callback', async () => {
+    const client = new OpenAICompatibleClient({
+      apiKey: 'k',
+      baseUrl: 'https://example.com/v1',
+      model: 'gpt-5-mini',
+      fetchImpl: async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              const encoder = new TextEncoder();
+              controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"reasoning_content":"分析","content":""}}]}\n\n'));
+              controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"reasoning_content":"一下表单","content":""}}]}\n\n'));
+              controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"结果如下"}}]}\n\n'));
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+              controller.close();
+            }
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'text/event-stream'
+            }
+          }
+        )
+    });
+
+    const reasoning: string[] = [];
+    const deltas: string[] = [];
+
+    const result = await client.streamComplete(
+      { runId: 'r', stepIndex: 0, messages: [{ role: 'user', content: 'hi' }] },
+      {
+        onReasoningDelta: (d) => reasoning.push(d),
+        onDelta: (d) => deltas.push(d)
+      }
+    );
+
+    expect(reasoning).toEqual(['分析', '一下表单']);
+    expect(deltas).toEqual(['结果如下']);
+    expect(result.text).toBe('结果如下');
+  });
+
   it('mentions JSON in provider test prompts for providers that require it', async () => {
     let requestBody: unknown;
     const client = new OpenAICompatibleClient({

@@ -1,5 +1,9 @@
 import { BackgroundRuntimeHost } from '../background/runtime/background-runtime-host';
 import {
+  isFloatingPanelUrlMessage,
+  parseRunSubscription
+} from '../background/runtime/background-message-guards';
+import {
   bindSidePanelToActiveTab,
   bindSidePanelToTab,
   notifySidePanelsActiveTab,
@@ -11,8 +15,13 @@ import { RUNTIME_MESSAGES, SIDE_PANEL_MESSAGES } from '../shared/constants/event
 export default defineBackground(() => {
   const host = new BackgroundRuntimeHost();
   const sidePanelPorts = new Set<chrome.runtime.Port>();
-  void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
-  void bindSidePanelToActiveTab();
+  // 先绑定 side panel path 到 active tab，再开启 click-to-open
+  // 否则用户点击扩展图标时 sidePanel.open() 可能因 path 未绑定而报错
+  bindSidePanelToActiveTab()
+    .then(() => {
+      void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    })
+    .catch(() => undefined);
 
   chrome.runtime.onConnect.addListener((port) => {
     if (port.name === RUNTIME_MESSAGES.SUBSCRIBE_RUN) {
@@ -68,11 +77,7 @@ export default defineBackground(() => {
       }
       void chrome.tabs.sendMessage(tabId, {
         type: SIDE_PANEL_MESSAGES.FLOATING_PANEL_TOGGLE
-      }).catch(() => {
-        if (chrome.sidePanel?.open) {
-          void bindSidePanelToTab(tabId).then(() => chrome.sidePanel.open({ tabId }));
-        }
-      });
+      }).catch(() => undefined);
     });
   });
 
@@ -90,18 +95,3 @@ export default defineBackground(() => {
   });
 });
 
-function parseRunSubscription(message: unknown): string | undefined {
-  if (!message || typeof message !== 'object') {
-    return undefined;
-  }
-  const runId = (message as { runId?: unknown }).runId;
-  return typeof runId === 'string' && runId.length > 0 ? runId : undefined;
-}
-
-function isFloatingPanelUrlMessage(value: unknown): value is {
-  type: typeof SIDE_PANEL_MESSAGES.FLOATING_PANEL_URL;
-} {
-  return Boolean(value) &&
-    typeof value === 'object' &&
-    (value as Record<string, unknown>).type === SIDE_PANEL_MESSAGES.FLOATING_PANEL_URL;
-}

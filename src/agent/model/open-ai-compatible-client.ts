@@ -128,6 +128,9 @@ export class OpenAICompatibleClient implements ModelClient {
           if (parsed.errors?.length) {
             throw new ModelRequestFailedError(parsed.errors.join('; '));
           }
+          for (const reasoningDelta of parsed.reasoningDeltas) {
+            callbacks.onReasoningDelta?.(reasoningDelta);
+          }
           for (const delta of parsed.deltas) {
             text += delta;
             callbacks.onDelta?.(delta);
@@ -141,6 +144,9 @@ export class OpenAICompatibleClient implements ModelClient {
       const trailing = parseOpenAICompatibleStreamChunk(buffer);
       if (trailing.errors?.length) {
         throw new ModelRequestFailedError(trailing.errors.join('; '));
+      }
+      for (const reasoningDelta of trailing.reasoningDeltas) {
+        callbacks.onReasoningDelta?.(reasoningDelta);
       }
       for (const delta of trailing.deltas) {
         text += delta;

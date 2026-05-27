@@ -247,12 +247,27 @@ export class ProviderResponseService {
     });
 
     let text = '';
+    let reasoningText = '';
     let chunkCount = 0;
     try {
       let output: ModelOutput;
       if ((settings.streamingEnabled ?? true) && client.streamComplete) {
         try {
           output = await client.streamComplete(promptInput, {
+            onReasoningDelta: (reasoningDelta) => {
+              reasoningText += maskProviderSecret(reasoningDelta);
+              this.upsertProviderMessage(runId, record, {
+                id: messageId,
+                role: 'agent',
+                kind: record.mode === 'ask' ? 'agent_status' : 'diagnosis',
+                status: 'streaming',
+                title: 'BrowserHelm',
+                content: text,
+                reasoning: reasoningText,
+                createdAt: startedAt,
+                updatedAt: Date.now()
+              });
+            },
             onDelta: (delta) => {
               if (this.deps.getSnapshot(runId).status === 'cancelled') {
                 return;
@@ -276,6 +291,7 @@ export class ProviderResponseService {
                 status: 'streaming',
                 title: 'BrowserHelm',
                 content: text,
+                reasoning: reasoningText,
                 createdAt: startedAt,
                 updatedAt: Date.now()
               });
@@ -351,6 +367,7 @@ export class ProviderResponseService {
         status: 'complete',
         title: 'BrowserHelm',
         content: text,
+        reasoning: reasoningText,
         createdAt: startedAt,
         updatedAt: finishedAt
       });

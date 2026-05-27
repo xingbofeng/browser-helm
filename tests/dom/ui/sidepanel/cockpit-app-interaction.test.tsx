@@ -37,7 +37,6 @@ describe('CockpitApp interaction', () => {
         }
       ]
     });
-
     await act(async () => {
       root.render(<CockpitApp runtime={runtime} />);
       await Promise.resolve();
@@ -174,7 +173,6 @@ describe('CockpitApp interaction', () => {
         }
       ]
     });
-
     await act(async () => {
       root.render(<CockpitApp runtime={runtime} targetTabId={123} />);
       await Promise.resolve();
@@ -228,7 +226,6 @@ describe('CockpitApp interaction', () => {
         }
       ]
     });
-
     await act(async () => {
       root.render(<CockpitApp runtime={runtime} initialRunId="run_without_page_message" />);
       await Promise.resolve();
@@ -346,6 +343,12 @@ describe('CockpitApp interaction', () => {
         }
       ]
     });
+    const startRun = runtime.startRun.bind(runtime);
+    const startInputs: unknown[] = [];
+    runtime.startRun = async (input) => {
+      startInputs.push(input);
+      return startRun(input);
+    };
 
     await act(async () => {
       root.render(<CockpitApp runtime={runtime} targetTabId={123} />);
@@ -367,6 +370,11 @@ describe('CockpitApp interaction', () => {
 
     expect(container.textContent).toContain('hello');
     expect(container.querySelectorAll('[data-message-kind="page_summary"]')).toHaveLength(1);
+    expect(startInputs).toHaveLength(2);
+    expect(startInputs).toEqual([
+      expect.objectContaining({ task: '观察当前页面', skipProviderResponse: true }),
+      expect.objectContaining({ task: 'hello' })
+    ]);
     expect(container.textContent).not.toContain('GitHub');
     expect(container.textContent).not.toContain('686 个可交互元素');
     root.unmount();

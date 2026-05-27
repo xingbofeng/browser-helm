@@ -1,4 +1,4 @@
-import { createServer, type Server } from 'node:http';
+import { createServer, type Server, type ServerResponse } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 
@@ -25,6 +25,14 @@ export async function startFixtureServer(): Promise<FixtureServer> {
         response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`);
       }
       response.end('data: [DONE]\n\n');
+      return;
+    }
+    if (rawPath === '/v1-slow/chat/completions') {
+      void writeSlowStream(response, [
+        '首轮流式 ',
+        '正在吐字 ',
+        '完成。'
+      ]);
       return;
     }
     const filePath = normalize(join(root, rawPath));
@@ -59,6 +67,21 @@ export async function startFixtureServer(): Promise<FixtureServer> {
         server.close((error) => (error ? reject(error) : resolve()));
       })
   };
+}
+
+async function writeSlowStream(
+  response: ServerResponse,
+  chunks: string[]
+): Promise<void> {
+  response.writeHead(200, {
+    'content-type': 'text/event-stream; charset=utf-8',
+    'cache-control': 'no-cache'
+  });
+  for (const chunk of chunks) {
+    response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`);
+    await new Promise((resolve) => setTimeout(resolve, 120));
+  }
+  response.end('data: [DONE]\n\n');
 }
 
 function listen(server: Server): Promise<void> {

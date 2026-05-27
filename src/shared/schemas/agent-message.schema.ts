@@ -35,6 +35,7 @@ export const agentMessageSchema = z.object({
   status: agentMessageStatusSchema,
   title: safeTextSchema.min(1).optional(),
   content: safeTextSchema,
+  reasoning: safeTextSchema.optional(),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
   debugEventIds: z.array(z.string().min(1)).optional()

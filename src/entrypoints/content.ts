@@ -87,7 +87,8 @@ function installFloatingPanel(): { toggle(): Promise<void> } | undefined {
   const host = document.createElement('div');
   host.id = FLOATING_ENTRY_HOST_ID;
   const shadow = host.attachShadow({ mode: 'open' });
-  const iconUrl = chrome.runtime.getURL('icons/icon-48.png');
+  const iconUrl = safeRuntimeGetUrl('icons/icon-16.png') ?? '';
+  const fallbackPanelUrl = safeRuntimeGetUrl('sidepanel.html?target=active');
   let open = false;
   let panelUrlPromise: Promise<string | undefined> | undefined;
 
@@ -101,11 +102,11 @@ function installFloatingPanel(): { toggle(): Promise<void> } | undefined {
       .entry {
         all: initial;
         position: fixed;
-        right: 14px;
+        right: 12px;
         top: 62%;
         z-index: 2147483647;
-        width: 46px;
-        height: 46px;
+        width: 32px;
+        height: 32px;
         transform: translateY(-50%);
         transition:
           right 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
@@ -114,25 +115,25 @@ function installFloatingPanel(): { toggle(): Promise<void> } | undefined {
       }
 
       :host([data-open="true"]) .entry {
-        right: calc(var(--browserhelm-panel-width) + 14px);
+        right: calc(var(--browserhelm-panel-width) + 12px);
         transform: translateY(-50%) scale(1.03);
       }
 
       .entryButton {
         all: initial;
         position: relative;
-        width: 46px;
-        height: 46px;
+        width: 32px;
+        height: 32px;
         display: grid;
         place-items: center;
         border: 1px solid rgba(91, 124, 148, 0.28);
-        border-radius: 17px;
+        border-radius: 12px;
         background:
           radial-gradient(circle at 35% 22%, rgba(255, 255, 255, 0.98), rgba(255, 250, 240, 0.92) 42%, rgba(238, 246, 255, 0.92)),
           linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(242, 248, 252, 0.94));
         box-shadow:
-          0 18px 36px rgba(32, 44, 54, 0.16),
-          0 3px 10px rgba(32, 44, 54, 0.08),
+          0 12px 26px rgba(32, 44, 54, 0.14),
+          0 2px 8px rgba(32, 44, 54, 0.07),
           inset 0 1px 0 rgba(255, 255, 255, 0.94);
         cursor: pointer;
         pointer-events: auto;
@@ -146,31 +147,31 @@ function installFloatingPanel(): { toggle(): Promise<void> } | undefined {
       .entryButton:focus-visible {
         border-color: rgba(58, 131, 181, 0.48);
         box-shadow:
-          0 22px 42px rgba(32, 44, 54, 0.2),
-          0 0 0 5px rgba(70, 145, 196, 0.12),
+          0 16px 32px rgba(32, 44, 54, 0.18),
+          0 0 0 4px rgba(70, 145, 196, 0.10),
           inset 0 1px 0 rgba(255, 255, 255, 0.96);
         outline: none;
-        transform: translateX(-2px) scale(1.04);
+        transform: translateX(-2px) scale(1.06);
       }
 
       img {
-        width: 31px;
-        height: 31px;
+        width: 20px;
+        height: 20px;
         display: block;
         object-fit: contain;
-        filter: drop-shadow(0 2px 3px rgba(38, 50, 56, 0.16));
+        filter: drop-shadow(0 2px 2px rgba(38, 50, 56, 0.14));
       }
 
       .badge {
         position: absolute;
         right: -3px;
         bottom: -2px;
-        width: 18px;
-        height: 18px;
+        width: 14px;
+        height: 14px;
         border: 2px solid rgba(255, 255, 255, 0.95);
         border-radius: 999px;
         background: #7fd37b;
-        box-shadow: 0 4px 8px rgba(40, 80, 52, 0.18);
+        box-shadow: 0 3px 6px rgba(40, 80, 52, 0.16);
         opacity: 0;
         transform: scale(0.6);
         transition:
@@ -241,7 +242,7 @@ function installFloatingPanel(): { toggle(): Promise<void> } | undefined {
   const button = shadow.querySelector<HTMLButtonElement>('.entryButton');
   const panel = shadow.querySelector<HTMLElement>('.panel');
   button?.addEventListener('click', () => {
-    void toggle();
+    void toggle().catch(handleFloatingPanelToggleError);
   });
   window.addEventListener('keydown', (event) => {
     if (!isFloatingPanelShortcut(event)) {
@@ -249,7 +250,7 @@ function installFloatingPanel(): { toggle(): Promise<void> } | undefined {
     }
     event.preventDefault();
     event.stopPropagation();
-    void toggle();
+    void toggle().catch(handleFloatingPanelToggleError);
   }, true);
 
   return { toggle };
@@ -274,9 +275,18 @@ function installFloatingPanel(): { toggle(): Promise<void> } | undefined {
   }
 
   async function getFloatingPanelUrl(): Promise<string | undefined> {
-    panelUrlPromise ??= chrome.runtime
-      .sendMessage({ type: SIDE_PANEL_MESSAGES.FLOATING_PANEL_URL })
-      .then((response: unknown) => {
+    panelUrlPromise ??= requestFloatingPanelUrl().catch(() => fallbackPanelUrl);
+    return panelUrlPromise;
+  }
+
+  async function requestFloatingPanelUrl(): Promise<string | undefined> {
+    if (!isRuntimeMessagingAvailable()) {
+      return fallbackPanelUrl;
+    }
+    try {
+      const response: unknown = await chrome.runtime.sendMessage({
+        type: SIDE_PANEL_MESSAGES.FLOATING_PANEL_URL
+      });
         if (
           response &&
           typeof response === 'object' &&
@@ -284,10 +294,31 @@ function installFloatingPanel(): { toggle(): Promise<void> } | undefined {
         ) {
           return (response as { url: string }).url;
         }
-        return undefined;
-      })
-      .catch(() => undefined);
-    return panelUrlPromise;
+      return fallbackPanelUrl;
+    } catch {
+      return fallbackPanelUrl;
+    }
+  }
+
+  function handleFloatingPanelToggleError(): void {
+    // Chrome invalidates old content-script extension contexts during extension reloads.
+    // Keep the page quiet: the next toggle/navigation will get a fresh content script.
+  }
+}
+
+function safeRuntimeGetUrl(path: string): string | undefined {
+  try {
+    return chrome.runtime.getURL(path);
+  } catch {
+    return undefined;
+  }
+}
+
+function isRuntimeMessagingAvailable(): boolean {
+  try {
+    return Boolean(chrome.runtime.id && chrome.runtime.sendMessage);
+  } catch {
+    return false;
   }
 }
 

@@ -14,6 +14,7 @@ export type ModelOutput = {
 export type ModelStreamCallbacks = {
   onStart?: (() => void) | undefined;
   onDelta?: ((delta: string) => void) | undefined;
+  onReasoningDelta?: ((delta: string) => void) | undefined;
   onFinish?: ((output: ModelOutput) => void) | undefined;
   onError?: ((error: Error) => void) | undefined;
 };

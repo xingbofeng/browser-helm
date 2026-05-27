@@ -1,5 +1,6 @@
 import { AlertTriangle, CheckCircle2, ClipboardList, FilePenLine, Shield, XCircle } from 'lucide-react';
 import type { RunSnapshot, RuntimeToolResultSnapshot } from '../../runtime/runtime-messages';
+import { StreamingMarkdown } from './streaming-markdown';
 
 type FormActionCardProps = {
   toolResult: RuntimeToolResultSnapshot;
@@ -22,7 +23,7 @@ function FillPlanCard({ result }: { result: RuntimeToolResultSnapshot }) {
   return (
     <div className="bh-formCard" role="status">
       <div className="bh-formCardIcon"><ClipboardList size={18} /></div>
-      <div className="bh-formCardBody"><strong>推断填写方案</strong><p>{result.summary}</p></div>
+      <div className="bh-formCardBody"><strong>推断填写方案</strong><StreamingMarkdown content={result.summary} /></div>
     </div>
   );
 }
@@ -31,7 +32,7 @@ function FillProgressCard({ result }: { result: RuntimeToolResultSnapshot }) {
   return (
     <div className="bh-formCard" role="status">
       <div className="bh-formCardIcon"><FilePenLine size={18} /></div>
-      <div className="bh-formCardBody"><strong>字段填写</strong><p>{result.summary}</p></div>
+      <div className="bh-formCardBody"><strong>字段填写</strong><StreamingMarkdown content={result.summary} /></div>
     </div>
   );
 }
@@ -41,7 +42,7 @@ function VerifyCard({ result }: { result: RuntimeToolResultSnapshot }) {
   return (
     <div className="bh-formCard" role="status">
       <div className="bh-formCardIcon"><Icon size={18} /></div>
-      <div className="bh-formCardBody"><strong>表单验证</strong><p>{result.summary}</p></div>
+      <div className="bh-formCardBody"><strong>表单验证</strong><StreamingMarkdown content={result.summary} /></div>
     </div>
   );
 }
@@ -66,7 +67,7 @@ function ApprovalCard({ toolResult, snapshot }: { toolResult: RuntimeToolResultS
   return (
     <div className="bh-formCard bh-formCard--approval" role="status">
       <div className="bh-formCardIcon"><Shield size={18} /></div>
-      <div className="bh-formCardBody"><strong>提交请求</strong><p>{toolResult.summary}</p></div>
+      <div className="bh-formCardBody"><strong>提交请求</strong><StreamingMarkdown content={toolResult.summary} /></div>
     </div>
   );
 }

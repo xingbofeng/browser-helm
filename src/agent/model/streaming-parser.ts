@@ -2,6 +2,7 @@ import { maskProviderSecret } from '../../shared/redaction';
 
 type StreamParseResult = {
   deltas: string[];
+  reasoningDeltas: string[];
   done: boolean;
   errors?: string[] | undefined;
 };
@@ -10,6 +11,7 @@ type OpenAICompatibleStreamPayload = {
   choices?: Array<{
     delta?: {
       content?: string | null;
+      reasoning_content?: string | null;
     };
   }>;
   error?: {
@@ -19,6 +21,7 @@ type OpenAICompatibleStreamPayload = {
 
 export function parseOpenAICompatibleStreamChunk(chunk: string): StreamParseResult {
   const deltas: string[] = [];
+  const reasoningDeltas: string[] = [];
   const errors: string[] = [];
   let done = false;
 
@@ -58,11 +61,16 @@ export function parseOpenAICompatibleStreamChunk(chunk: string): StreamParseResu
       if (typeof content === 'string' && content.length > 0) {
         deltas.push(content);
       }
+      const reasoning = choice.delta?.reasoning_content;
+      if (typeof reasoning === 'string' && reasoning.length > 0) {
+        reasoningDeltas.push(reasoning);
+      }
     }
   }
 
   return {
     deltas,
+    reasoningDeltas,
     done,
     ...(errors.length > 0 ? { errors } : {})
   };

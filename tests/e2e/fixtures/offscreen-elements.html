@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <head>
+    <title>离屏元素 - 示例网站</title>
+    <style>
+      body {
+        min-height: 2600px;
+        margin: 0;
+        font-family: sans-serif;
+      }
+      header {
+        padding: 32px;
+        background: #f8fafc;
+      }
+      .spacer {
+        height: 1850px;
+      }
+      .target-zone {
+        padding: 48px;
+        background: #ecfdf5;
+      }
+      #offscreen-action {
+        padding: 16px 24px;
+        font-size: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>离屏元素定位测试</h1>
+      <p>目标按钮位于首屏下方，用于验证 BrowserHelm 点击元素行后会滚动并高亮。</p>
+    </header>
+    <div class="spacer" aria-hidden="true"></div>
+    <section class="target-zone">
+      <button id="offscreen-action" type="button">远处按钮</button>
+    </section>
+  </body>
+</html>

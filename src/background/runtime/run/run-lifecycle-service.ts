@@ -484,7 +484,7 @@ export class RunLifecycleService {
 }
 
 function shouldAutoFillForm(task: string): boolean {
-  return /填写|填入|输入|勾选|选择|设置|fill|type|check|select|set/i.test(task);
+  return /填写|填入|输入|勾选|选择|设置|回复|回覆|评论|留言|发送|发布|发表|回帖|fill|type|check|select|set|reply|respond|comment|send|post/i.test(task);
 }
 
 function fillTargetsFromPlan(data: unknown): Array<{ fieldRefId: string; value: string }> {

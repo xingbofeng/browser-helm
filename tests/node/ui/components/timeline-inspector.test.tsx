@@ -53,6 +53,33 @@ describe('timeline and inspector components', () => {
     expect(html).not.toContain('Replay');
   });
 
+  it('renders tool descriptions for tool trace items', () => {
+    const html = renderToString(
+      <TraceLog
+        events={[
+          {
+            runId: 'run_1',
+            type: 'tool_started',
+            payload: { tool: 'bh_page_observe', args: {} }
+          },
+          {
+            runId: 'run_1',
+            type: 'tool_result',
+            payload: {
+              tool: 'bh_page_observe',
+              ok: true,
+              summary: 'Observed x.com'
+            }
+          }
+        ]}
+      />
+    );
+
+    expect(html).toContain('Observes the current page and returns a bounded summary');
+    expect(html).toContain('调用工具：bh_page_observe');
+    expect(html).toContain('工具结果：bh_page_observe');
+  });
+
   it('summarizes streaming delta trace events instead of rendering every chunk', () => {
     const html = renderToString(
       <TraceLog

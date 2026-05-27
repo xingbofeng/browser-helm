@@ -86,6 +86,7 @@ function inferPlan(args: z.infer<typeof argsSchema>): FillPlan {
   const targets: FillTarget[] = [];
   const skipped: FillPlan['skippedFields'] = [];
   const task = args.userTask.toLowerCase();
+  const rawTask = args.userTask;
 
   for (const field of args.fields) {
     if (field.disabled) {
@@ -101,7 +102,7 @@ function inferPlan(args: z.infer<typeof argsSchema>): FillPlan {
       continue;
     }
 
-    const t = inferField(field, task);
+    const t = inferField(field, task, rawTask);
     if (t.skipReason) {
       skipped.push({ fieldRefId: field.refId, label: field.label, name: field.name, type: field.type, reason: t.skipReason });
     }
@@ -115,7 +116,7 @@ function mk(field: FieldInput, value: string | undefined, source: FillTarget['so
   return { fieldRefId: field.refId, label: field.label, name: field.name, type: field.type, requestedValue: value, source, confidence, reason, maskedValuePreview: skipReason ? '(跳过)' : value ? mask(value) : '(清空)', ...(skipReason ? { skipReason } : {}) };
 }
 
-function inferField(field: FieldInput, task: string): FillTarget {
+function inferField(field: FieldInput, task: string, rawTask: string): FillTarget {
   const combined = [field.label ?? '', field.name ?? '', field.placeholder ?? '', field.ariaLabel ?? ''].join(' ').toLowerCase();
 
   if (field.type === 'checkbox') {
@@ -159,11 +160,29 @@ function inferField(field: FieldInput, task: string): FillTarget {
     return mk(field, task.slice(0, 50), 'user-task', 'medium', '从用户任务提取搜索词');
   }
 
+  const requestedFreeText = extractRequestedFreeText(rawTask);
+  const wantsFreeTextReply = /回复|回覆|评论|留言|发送|发布|发表|回帖|reply|respond|comment|send|post/i.test(rawTask);
+  const isFreeTextField = /text|textarea|search/.test(field.type) ||
+    /reply|respond|comment|message|tweet|post|content|正文|内容|回复|回覆|评论|留言/.test(combined);
+  if (requestedFreeText && wantsFreeTextReply && isFreeTextField) {
+    return mk(field, requestedFreeText, 'user-task', 'high', '从用户任务中提取回复/评论内容');
+  }
+
   if (field.placeholder && field.placeholder.length > 0) {
     return mk(field, field.placeholder, 'placeholder-match', 'medium', `使用 placeholder "${field.placeholder}"`);
   }
 
   return mk(field, '', 'empty', 'low', '无法推断值', '无法推断值');
+}
+
+function extractRequestedFreeText(task: string): string | undefined {
+  const quoted = task.match(/[“"']([^“”"']{1,500})[”"']/u);
+  if (quoted?.[1]?.trim()) {
+    return quoted[1].trim();
+  }
+  const marker = task.match(/(?:回复|回覆|评论|留言|发送|发布|发表|reply|respond|comment|send|post)(?:一下|下|为|说|内容|[:：])?\\s*(.{1,500})$/iu);
+  const value = marker?.[1]?.trim();
+  return value || undefined;
 }
 
 function mask(value: string): string {

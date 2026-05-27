@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { ApprovalRequest } from '../../shared/schemas/approval.schema';
 import { jsonPreview } from '../lib/format-tool';
 import { ApprovalRiskBadge } from './approval-risk-badge';
+import { StreamingMarkdown } from '../components/streaming-markdown';
 
 type ApprovalDrawerProps = {
   request?: ApprovalRequest | undefined;
@@ -25,8 +26,8 @@ export function ApprovalDrawer(props: ApprovalDrawerProps) {
     <aside className="bh-approvalDrawer" aria-label="Approval">
       <h2>Approval</h2>
       <ApprovalRiskBadge risk={props.request.risk} />
-      <p>{props.request.reason}</p>
-      {props.request.actionPreview ? <p>{props.request.actionPreview}</p> : null}
+      <StreamingMarkdown content={props.request.reason} />
+      {props.request.actionPreview ? <StreamingMarkdown content={props.request.actionPreview} /> : null}
       <p>{props.request.tool}</p>
       {submitPreview ? (
         <SubmitApprovalPreview

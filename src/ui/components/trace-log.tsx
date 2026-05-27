@@ -1,4 +1,5 @@
 import type { RuntimeEvent } from '../../runtime/runtime-messages';
+import { toolDescription } from '../../shared/tool-descriptions';
 import { StructuredPayload } from './structured-payload';
 
 type TraceLogProps = {
@@ -22,6 +23,9 @@ export function TraceLog({ events }: TraceLogProps) {
                 {item.timestamp ? <time>{formatTime(item.timestamp)}</time> : null}
               </div>
               <p className="bh-traceSummary">{traceSummary(item)}</p>
+              {traceToolDescription(item) ? (
+                <p className="bh-traceToolDescription">{traceToolDescription(item)}</p>
+              ) : null}
               <details className="bh-traceDetails">
                 <summary>查看原始详情</summary>
                 <StructuredPayload value={item.payload ?? {}} maxDepth={3} />
@@ -34,6 +38,13 @@ export function TraceLog({ events }: TraceLogProps) {
       )}
     </section>
   );
+}
+
+function traceToolDescription(event: TraceSummaryItem): string | undefined {
+  if (event.type !== 'tool_started' && event.type !== 'tool_result') {
+    return undefined;
+  }
+  return toolDescription(stringValue(recordPayload(event.payload).tool));
 }
 
 function traceTitle(event: TraceSummaryItem): string {

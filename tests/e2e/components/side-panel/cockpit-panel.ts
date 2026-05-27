@@ -32,6 +32,14 @@ export class CockpitPanel {
     ).toHaveCount(0);
   }
 
+  async expectNoObserveStatusCards(): Promise<void> {
+    await expect(
+      this.page
+        .getByLabel('BrowserHelm Agent 消息')
+        .getByText('正在观察当前页面', { exact: true })
+    ).toHaveCount(0);
+  }
+
   async expectLongPageArticleRead(): Promise<void> {
     await expect(this.page.getByText('正文读取完成')).toBeVisible();
     await this.openDebugTab('Trace');

@@ -27,6 +27,7 @@ export class CockpitUiFlow {
       url: `${this.flowContext.origin}/basic-form.html`
     });
     await cockpit.expectNoLegacyObserveStatusCard();
+    await cockpit.expectNoObserveStatusCards();
   }
 
   async expectLongPageArticleReadBeforeStreamingAnswer(): Promise<void> {
@@ -53,6 +54,7 @@ export class CockpitUiFlow {
     await cockpit.expectLongPageArticleRead();
     await cockpit.expectStreamingMergedResponse('BrowserHelm streaming 已合并到回复。 长页面正文已读取。');
     await cockpit.expectNoLegacyObserveStatusCard();
+    await cockpit.expectNoObserveStatusCards();
     expect((finalSnapshot.trace ?? []).some((event) =>
       event.type === 'tool_started' &&
       payloadRecord(event.payload).tool === TOOL_NAMES.PAGE_READ_ARTICLE
@@ -64,7 +66,8 @@ export class CockpitUiFlow {
 
   async expectElementInspectHighlightsPageRef(): Promise<void> {
     const fixture = await this.flowContext.fixturePage();
-    await fixture.goto('basic-form.html');
+    await fixture.goto('offscreen-elements.html');
+    await fixture.page.evaluate(() => window.scrollTo(0, 0));
 
     const tabId = await this.flowContext.shell().activeTabId();
     const sidePanel = this.flowContext.sidePanel();
@@ -77,11 +80,15 @@ export class CockpitUiFlow {
     const cockpit = new CockpitPanel(sidePanelPage);
 
     await cockpit.expectObservedPage({
-      title: '欢迎注册 - 示例网站',
-      url: `${this.flowContext.origin}/basic-form.html`
+      title: '离屏元素 - 示例网站',
+      url: `${this.flowContext.origin}/offscreen-elements.html`
     });
-    await cockpit.inspectElement('提交');
-    await expect(fixture.page.getByRole('button', { name: '提交' })).toHaveClass(
+    await expect.poll(async () => fixture.page.evaluate(() => window.scrollY)).toBeLessThan(10);
+
+    await cockpit.inspectElement('远处按钮');
+
+    await expect.poll(async () => fixture.page.evaluate(() => window.scrollY)).toBeGreaterThan(1000);
+    await expect(fixture.page.getByRole('button', { name: '远处按钮' })).toHaveClass(
       /bh-page-ref-highlight/u
     );
   }

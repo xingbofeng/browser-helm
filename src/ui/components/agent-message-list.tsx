@@ -8,7 +8,7 @@ import {
   LoaderCircle,
   UserRound
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 
 import type { RunSnapshot } from '../../runtime/runtime-messages';
 import { buildUserFacingPageSummary } from '../../shared/page-summary';
@@ -37,11 +37,32 @@ export function AgentMessageList({ snapshot }: AgentMessageListProps) {
     )
     .join('|') + (progress ? `|progress:${progress.label}:${nowTick}` : '');
 
-  useEffect(() => {
+  const scrollToBottom = useCallback(() => {
     if (waterfallRef.current) {
       waterfallRef.current.scrollTop = waterfallRef.current.scrollHeight;
     }
-  }, [scrollAnchor]);
+  }, []);
+
+  // 消息 / 进度变化时滚动到底部
+  useEffect(() => {
+    scrollToBottom();
+  }, [scrollAnchor, scrollToBottom]);
+
+  // streaming 高频更新时用 ResizeObserver 兜底，确保内容高度增长时自动跟随
+  useEffect(() => {
+    const container = waterfallRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver(() => {
+      // 用户在手动上翻时不强制滚动
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      if (distanceFromBottom <= 32) {
+        scrollToBottom();
+      }
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [scrollToBottom]);
 
   return (
     <section ref={waterfallRef} className="bh-agentWaterfall" aria-label="BrowserHelm Agent 消息">
@@ -56,6 +77,12 @@ export function AgentMessageList({ snapshot }: AgentMessageListProps) {
             {iconForMessage(message)}
           </div>
           <div className="bh-agentMessageBody">
+            {message.reasoning ? (
+              <details className="bh-reasoningSection">
+                <summary>思考过程</summary>
+                <StreamingMarkdown content={message.reasoning} className="bh-markdownContent" />
+              </details>
+            ) : null}
             {message.kind === 'page_summary' ? (
               <PageObservationCard message={message} snapshot={snapshot} />
             ) : message.role === 'agent' && message.content ? (
@@ -91,16 +118,28 @@ function prepareDisplayMessages(messages: AgentMessage[]): AgentMessage[] {
     (lastIndex, message, index) => message.kind === 'page_summary' ? index : lastIndex,
     -1
   );
-  if (lastPageSummaryIndex < 0) {
-    return messages;
-  }
+  const lastObserveStatusIndex = messages.reduce(
+    (lastIndex, message, index) => message.id.endsWith(':observe-status') ? index : lastIndex,
+    -1
+  );
   return messages.filter((message, index) => {
     if (message.kind === 'page_summary') {
       return index === lastPageSummaryIndex;
     }
-    const isCompletedObserveStatus =
-      message.id.endsWith(':observe-status') && message.status === 'complete';
-    return !isCompletedObserveStatus;
+    if (!message.id.endsWith(':observe-status')) {
+      if (
+        message.id.endsWith(':provider-response') &&
+        message.status === 'streaming' &&
+        message.content.trim().length === 0
+      ) {
+        return false;
+      }
+      return true;
+    }
+    if (lastPageSummaryIndex >= 0) {
+      return false;
+    }
+    return index === lastObserveStatusIndex;
   });
 }
 
@@ -172,6 +211,37 @@ function withDerivedPageSummary(messages: AgentMessage[], snapshot: RunSnapshot)
         createdAt: 0,
         updatedAt: 0
       });
+    }
+  }
+  const streaming = snapshot.streaming;
+  const finalProviderText = streaming?.active === false
+    ? streaming.finalText?.trim()
+    : undefined;
+  const finalProviderFinishedAt = streaming?.finishedAt;
+  if (finalProviderText) {
+    const providerMessageId = `${snapshot.runId}:provider-response`;
+    const providerMessageIndex = nextMessages.findIndex((message) =>
+      message.id === providerMessageId
+    );
+    const providerMessage = providerMessageIndex >= 0
+      ? nextMessages[providerMessageIndex]
+      : undefined;
+    if (!providerMessage?.content.trim() || providerMessage.status !== 'complete') {
+      const completedProviderMessage: AgentMessage = {
+        id: providerMessageId,
+        role: 'agent',
+        kind: providerMessage?.kind ?? 'agent_status',
+        status: 'complete',
+        title: providerMessage?.title ?? 'BrowserHelm',
+        content: finalProviderText,
+        createdAt: providerMessage?.createdAt ?? finalProviderFinishedAt ?? 0,
+        updatedAt: finalProviderFinishedAt ?? providerMessage?.updatedAt ?? 0
+      };
+      if (providerMessageIndex >= 0) {
+        nextMessages[providerMessageIndex] = completedProviderMessage;
+      } else {
+        nextMessages.push(completedProviderMessage);
+      }
     }
   }
   if (snapshot.debugReport && !nextMessages.some((message) => message.kind === 'diagnosis')) {
