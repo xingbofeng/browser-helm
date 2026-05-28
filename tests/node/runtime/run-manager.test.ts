@@ -408,7 +408,7 @@ describe('RunManager', () => {
         if (message.type === CONTENT_RPC_MESSAGES.PAGE_OBSERVE) {
           return observationResponse();
         }
-        if (message.type === 'BH_IFRAME_CLICK') {
+        if ((message as { type: string }).type === 'BH_IFRAME_CLICK') {
           clicked = true;
         }
         return {
@@ -421,7 +421,7 @@ describe('RunManager', () => {
             visible: true,
             disabled: false
           },
-          changedPage: message.type === 'BH_IFRAME_CLICK'
+          changedPage: (message as { type: string }).type === 'BH_IFRAME_CLICK'
         };
       }),
       settingsStore: providerSettings(),
@@ -3450,7 +3450,7 @@ describe('RunManager', () => {
         if (message.type === CONTENT_RPC_MESSAGES.PAGE_OBSERVE) {
           return observationResponse();
         }
-        if (message.type === 'BH_IFRAME_CLICK') {
+        if ((message as { type: string }).type === 'BH_IFRAME_CLICK') {
           clicked = true;
         }
         return {
@@ -3908,10 +3908,11 @@ describe('RunManager', () => {
   it('reads article text before provider response when initial observation is truncated', async () => {
     const calls: string[] = [];
     let providerInput: Parameters<NonNullable<ModelClient['complete']>>[0] | undefined;
+    const importantArticleText = '完整正文片段：agent evaluations use tasks, trials, graders, transcripts, outcomes, evaluation harnesses, and suites.';
     const providerClient: ModelClient = {
       async complete(input) {
         providerInput = input;
-        if (!JSON.stringify(input).includes('完整正文片段')) {
+        if (!JSON.stringify(input).includes(importantArticleText)) {
           return {
             text: decisionText({
               type: 'tool_call',
@@ -3940,10 +3941,10 @@ describe('RunManager', () => {
           return {
             ok: true,
             pageRead: {
-              text: '完整正文片段：agent evaluations use tasks, trials, graders, transcripts, outcomes, evaluation harnesses, and suites.',
+              text: `${'导航噪声 '.repeat(40)}${importantArticleText}`,
               cursor: 0,
               hasMore: false,
-              totalTextLength: 92,
+              totalTextLength: 420,
               warnings: [],
               contentSource: 'article',
               headings: [
@@ -3993,8 +3994,7 @@ describe('RunManager', () => {
       tool: TOOL_NAMES.PAGE_READ_ARTICLE,
       ok: true
     });
-    expect(JSON.stringify(providerInput)).toContain('完整正文片段');
-      expect(JSON.stringify(providerInput)).toContain('tasks, trials, graders');
+    expect(JSON.stringify(providerInput)).toContain(importantArticleText);
   });
 
   it('keeps non-sensitive text fields in tool result detail while masking real secrets', async () => {

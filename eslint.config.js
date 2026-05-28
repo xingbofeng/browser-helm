@@ -82,6 +82,7 @@ export default tseslint.config(
       '.output/**',
       '.wxt/**',
       'dist/**',
+      'coverage/**',
       'node_modules/**',
       'eslint.config.js',
       'public/page-health-hook.js'

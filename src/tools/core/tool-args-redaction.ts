@@ -1,10 +1,12 @@
 import type { AgentDecision } from '../../shared/schemas/agent-decision.schema';
+import { INTERNAL_TOOL_NAMES } from '../../shared/constants/internal-tool-names';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 
 const SENSITIVE_TEXT_TOOLS = new Set<string>([
   TOOL_NAMES.FORM_FILL_FIELD,
   TOOL_NAMES.FORM_FILL_MANY,
   TOOL_NAMES.FORM_SUBMIT_WITH_APPROVAL,
+  INTERNAL_TOOL_NAMES.IFRAME_TYPE,
 ]);
 
 export function redactToolArgs(tool: string, args: unknown): unknown {

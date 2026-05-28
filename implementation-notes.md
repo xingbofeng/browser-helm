@@ -1,3 +1,26 @@
+## CI 构建前置与元素高亮稳定性修复 - 2026-05-29
+
+**目标**：修复远端最新提交在 GitHub Actions 中的两处失败：`manifest-contract` 单测在未构建产物时直接失败，以及离屏元素高亮 E2E 在 CI 环境下偶发拿不到高亮 class。
+
+**设计决策**：保留 `manifest-contract` 作为“基于真实编译产物”的契约测试，不把它改写成读取静态配置的伪契约；CI 与 release gate 在 unit tests 前显式执行 `npm run build`，让测试前置条件与流水线一致。元素高亮链路继续在 content RPC handler 内完成，但把 `scrollIntoView` 从 `smooth` 调整为 `auto`，并把高亮保留时间从 1.8 秒延长到 3 秒，降低 CI 上“滚动刚完成，高亮已被移除”的时序脆弱性。
+
+**偏差说明**：本次没有重写 `manifest-contract` 测试结构，也没有把离屏元素高亮断言改成更宽松的非视觉断言；优先修复真实流水线与运行时时序问题。
+
+**权衡分析**：
+- 方案一：删除或跳过 `manifest-contract`。优点是 CI 立刻绿；缺点是失去对真实 manifest 产物的回归保护。
+- 方案二：保留产物契约测试，并让 workflow 先 build。优点是语义一致、风险小；缺点是 unit gate 会多一次构建耗时。
+- 选择方案二，因为失败根因是流水线前置条件缺失，不是测试目标不合理。
+
+**验证结果**：
+- `npm run typecheck` 通过。
+- `npm run lint` 通过。
+- `npm run build` 通过。
+- `npm test -- tests/node/config/manifest-contract.test.ts` 通过。
+- `npm run test:e2e:no-build -- tests/e2e/specs/extension/cockpit-ui.spec.ts -g "highlights page elements from the merged elements and forms debug tab"` 通过。
+
+**待确认**：
+- [ ] 后续是否把 `manifest-contract` 从默认 `npm test` 中拆到单独的“构建产物契约”命令，减少本地开发阶段对 `.output` 的隐式依赖。
+
 ## 瀑布流协议消息与执行切换去重 - 2026-05-28
 
 **目标**：修复 provider 内部协议 JSON 短暂闪现成 AI 回复、Ask 切 Act 后重复显示同一条用户消息，以及主界面“当前 run 可修改目标”入口干扰聊天流的问题。
@@ -1289,3 +1312,52 @@ Manifest 默认 host 权限也同步收口：`host_permissions` 为空，`http:/
 **待确认**：
 - [ ] 是否要在下一步统一迁移旧 iframe action 测试为 removed-tool 回归测试？
 - [ ] 是否要在 v1.3 前把 page-health hook 改成真正 Debug mode opt-in？
+
+## v1.1.3 CI 与 landing 发布修复 - 2026-05-29
+
+**目标**：修复 v1.1.3 发布前 CI、release artifact、coverage 依赖、iframe hidden mutation approval 回归和 landing 静态部署产物漂移问题，确保本地完整验证链路通过。
+
+**设计决策**：保留 `bh_iframe_click` / `bh_iframe_type` 不进入公开 ToolRegistry，但恢复内部 iframe Content RPC 和 runtime approval 边界。landing 构建改为按 `package.json` 版本精确读取 `browser-helm-1.1.3-chrome.zip`，避免 stale zip 被误复制。release workflow 改为对 exact artifact 复制并写入 SHA256，coverage 输出加入 git/eslint ignore。
+
+**偏差说明**：没有执行真实远端部署或创建 GitHub Release；本次验证范围是本地 CI 等价命令、Chrome for Testing E2E、release hygiene 和 `dist/landing` 静态服务访问。
+
+**权衡分析**：
+- 方案一：彻底删除 iframe mutating RPC。优点是边界更窄；缺点是现有 approval 回归测试和内部隐藏执行语义失效。
+- 方案二：重新公开 iframe mutating ToolSpec。优点是实现路径简单；缺点是会把高风险能力重新暴露给 Agent 工具清单。
+- 选择方案三：仅恢复内部 RPC 与 approval token 路径，不恢复公开工具清单，因为它同时满足回归测试和发布安全边界。
+
+**待确认**：
+- [ ] 是否需要继续把 `implementation-notes.md` 历史条目归档到 `implementation-notes-archive.md`，把主文件压回 300 行左右？
+- [ ] 是否由维护者执行真实 GitHub Release / Pages 或 Vercel 远端部署验收？
+
+## Ask 模式页面读取循环防护 - 2026-05-29
+
+**目标**：根据 `browserhelm-trace-run_6-20260528 (1).jsonl` 复盘重构后 Ask 模式反复调用页面读取工具、不进入最终回答的问题，并补回类似 Claude Code 的循环提醒逻辑。
+
+**设计决策**：在 runtime prompt 构建层检测最近连续 3 次以上页面内容读取工具成功、且没有页面变化的情况，向模型上下文注入 `loopGuard`。提醒模型不要继续调用相同读取工具，而是基于已有信息 `finish`、必要时 `ask_user`，或无法回答时 `fail`。
+
+**偏差说明**：本次没有直接强制终止 run，因为问题表现是模型没有收到足够明确的循环反馈；先用 prompt guard 保持模型仍可在页面变化后继续读取。若后续模型仍无视 guard，可再加 runtime hard stop。
+
+**权衡分析**：
+- 方案一：达到阈值后直接失败。优点是省 token；缺点是用户会拿不到本来可以基于已有内容生成的答案。
+- 方案二：只保留 recentActions。优点是改动少；缺点是 trace 已证明模型会忽略弱信号。
+- 选择方案三：显式 `loopGuard` 提醒模型收敛，因为它最贴近“循环检测并提醒模型”的目标，同时保留回答机会。
+
+**待确认**：
+- [ ] 是否需要把同类 loop guard 扩展到 iframe read、a11y snapshot、observe 等其它只读工具循环？
+
+## Ask 模式页面读取循环根因修复 - 2026-05-29
+
+**目标**：根据 `browserhelm-trace-run_6-20260528 (2).jsonl` 修正上一轮只加 loopGuard 的不完整方案，先解决模型拿不到正文的问题，再保留循环提醒防护。
+
+**设计决策**：`buildMessages()` 在最新工具结果为 `bh_page_read_article` / `bh_page_read_visible_text` 时，将 `detail.data.text`、`hasMore`、`nextCursor`、`totalTextLength` 等压缩为 `lastToolResult.pageRead` 注入模型上下文。同时降低旧 observation 和 structured refs 的预算，只保留摘要，确保最新读取正文优先于页面结构噪声。再通过 `decisionGuidance` 提醒模型：已有正文时优先完成回答；只有缺失尾部确实必要时才用 `nextCursor` 续读，不要只改 `maxChars` 或重复 cursor 0。
+
+**偏差说明**：上一轮判断为“模型无视 recentActions”，但新 trace 证明更根本的问题是模型只看到 `Read article (truncated)` 的 summary，没有稳定拿到正文和分页状态。因此本轮把正文传递作为主修复，loopGuard 作为兜底防护。
+
+**权衡分析**：
+- 方案一：只加 loopGuard。优点是简单；缺点是模型仍然缺少正文，无法可靠总结。
+- 方案二：把完整 structuredPageData、observation 和正文都塞进 prompt。优点是信息全；缺点是 x.com 这类页面会挤掉最新工具结果。
+- 选择方案三：页面读取后优先保留最新正文，压缩旧页面结构，因为回答/总结任务最依赖工具刚读出的正文。
+
+**待确认**：
+- [ ] 是否要把 iframe read 也纳入同样的“最新读取内容优先”策略？

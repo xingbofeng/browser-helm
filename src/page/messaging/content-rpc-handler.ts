@@ -13,6 +13,12 @@ import {
   type ContentRpcResponse
 } from './content-rpc.schema';
 
+type IframeActionKind = 'click' | 'type';
+type IframeActionGrant = {
+  action: IframeActionKind;
+  refId: string;
+  expiresAt: number;
+};
 type FormActionKind = 'fill' | 'submit';
 type FormActionGrant = {
   action: FormActionKind;
@@ -23,10 +29,12 @@ type FormActionGrant = {
   stepId: string;
 };
 
+const IFRAME_ACTION_TOKEN_TTL_MS = 30_000;
 const FORM_ACTION_TOKEN_TTL_MS = 30_000;
 
 export class ContentRpcHandler {
   private refMap: RefMap | undefined;
+  private readonly iframeActionGrants = new Map<string, IframeActionGrant>();
   private readonly formActionGrants = new Map<string, FormActionGrant>();
   private locale: Locale;
 
@@ -177,6 +185,24 @@ export class ContentRpcHandler {
       case CONTENT_RPC_MESSAGES.IFRAME_READ: {
         return this.readIframeTarget(message.refId);
       }
+      case CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE: {
+        return {
+          ok: true,
+          actionToken: this.createIframeActionToken(message.action, message.refId)
+        };
+      }
+      case CONTENT_RPC_MESSAGES.IFRAME_CLICK: {
+        if (!this.consumeIframeActionToken(message.actionToken, 'click', message.refId)) {
+          return iframeActionUnauthorized();
+        }
+        return this.clickIframeTarget(message.refId);
+      }
+      case CONTENT_RPC_MESSAGES.IFRAME_TYPE: {
+        if (!this.consumeIframeActionToken(message.actionToken, 'type', message.refId)) {
+          return iframeActionUnauthorized();
+        }
+        return this.typeIframeTarget(message.refId, message.text);
+      }
       // form fill actions
       case CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE: {
         return {
@@ -248,6 +274,116 @@ export class ContentRpcHandler {
       ref: result.element,
       changedPage: false
     };
+  }
+
+  private createIframeActionToken(action: IframeActionKind, refId: string): string {
+    this.pruneExpiredIframeActionTokens();
+    const token = createOpaqueToken('bh_iframe');
+    this.iframeActionGrants.set(token, {
+      action,
+      refId,
+      expiresAt: Date.now() + IFRAME_ACTION_TOKEN_TTL_MS
+    });
+    return token;
+  }
+
+  private consumeIframeActionToken(
+    token: string | undefined,
+    action: IframeActionKind,
+    refId: string
+  ): boolean {
+    this.pruneExpiredIframeActionTokens();
+    if (!token) {
+      return false;
+    }
+    const grant = this.iframeActionGrants.get(token);
+    if (!grant || grant.action !== action || grant.refId !== refId || grant.expiresAt <= Date.now()) {
+      return false;
+    }
+    this.iframeActionGrants.delete(token);
+    return true;
+  }
+
+  private pruneExpiredIframeActionTokens(): void {
+    const now = Date.now();
+    for (const [token, grant] of this.iframeActionGrants.entries()) {
+      if (grant.expiresAt <= now) {
+        this.iframeActionGrants.delete(token);
+      }
+    }
+  }
+
+  private clickIframeTarget(refId: string): ContentRpcResponse {
+    const result = this.resolveActionableElement(refId);
+    if (!result.ok) {
+      return result;
+    }
+    if (isDisabled(result.element)) {
+      return {
+        ok: false,
+        code: ERROR_CODES.ELEMENT_DISABLED,
+        message: `Element is disabled: ${refId}`
+      };
+    }
+    if (typeof (result.element as HTMLElement).click !== 'function') {
+      return {
+        ok: false,
+        code: ERROR_CODES.ELEMENT_NOT_ACTIONABLE,
+        message: `Element is not clickable: ${refId}`
+      };
+    }
+    (result.element as HTMLElement).click();
+    return {
+      ok: true,
+      ref: describeResolvedElement(result.element, refId),
+      changedPage: true
+    };
+  }
+
+  private typeIframeTarget(refId: string, text: string): ContentRpcResponse {
+    const result = this.resolveActionableElement(refId);
+    if (!result.ok) {
+      return result;
+    }
+    if (isDisabled(result.element)) {
+      return {
+        ok: false,
+        code: ERROR_CODES.ELEMENT_DISABLED,
+        message: `Element is disabled: ${refId}`
+      };
+    }
+    if (isSensitiveInput(result.element)) {
+      return {
+        ok: false,
+        code: ERROR_CODES.APPROVAL_REQUIRED,
+        message: `Sensitive iframe input still requires approval: ${refId}`
+      };
+    }
+    if (!writeTextValue(result.element, text)) {
+      return {
+        ok: false,
+        code: ERROR_CODES.ELEMENT_NOT_ACTIONABLE,
+        message: `Element is not text-editable: ${refId}`
+      };
+    }
+    return {
+      ok: true,
+      ref: describeResolvedElement(result.element, refId),
+      changedPage: true
+    };
+  }
+
+  private resolveActionableElement(refId: string):
+    | {
+        ok: true;
+        element: Element;
+      }
+    | {
+        ok: false;
+        code: string;
+        message: string;
+      } {
+    return this.resolveAnyElement(refId);
   }
 
   private createFormActionToken(
@@ -364,14 +500,14 @@ function highlightElement(element: Element): void {
     element.scrollIntoView({
       block: 'center',
       inline: 'center',
-      behavior: 'smooth'
+      behavior: 'auto'
     });
   }
   element.classList.add('bh-page-ref-highlight');
   const ownerWindow = element.ownerDocument.defaultView ?? window;
   ownerWindow.setTimeout(() => {
     element.classList.remove('bh-page-ref-highlight');
-  }, 1800);
+  }, 3_000);
 }
 
 function ensureHighlightStyle(document: Document): void {
@@ -467,6 +603,62 @@ function isElementHidden(element: Element): boolean {
   }
   const style = element.getAttribute('style')?.toLowerCase() ?? '';
   return style.includes('display: none') || style.includes('visibility: hidden');
+}
+
+function isDisabled(element: Element): boolean {
+  return element.hasAttribute('disabled') ||
+    element.getAttribute('aria-disabled') === 'true';
+}
+
+function isSensitiveInput(element: Element): boolean {
+  if (!(element instanceof HTMLInputElement)) {
+    return false;
+  }
+  const type = element.type.toLowerCase();
+  const autocomplete = element.autocomplete.toLowerCase();
+  return type === 'password' ||
+    autocomplete.includes('password') ||
+    /password|token|secret|otp|api.?key/i.test(
+      `${element.id} ${element.name} ${element.getAttribute('aria-label') ?? ''}`
+    );
+}
+
+function writeTextValue(element: Element, text: string): boolean {
+  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+    element.value = text;
+    element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }
+  if (element instanceof HTMLSelectElement) {
+    element.value = text;
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }
+  if (element instanceof HTMLElement && element.isContentEditable) {
+    element.textContent = text;
+    element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+    return true;
+  }
+  return false;
+}
+
+function describeResolvedElement(element: Element, refId: string): Record<string, unknown> {
+  return {
+    refId,
+    role: element.getAttribute('role') ?? inferElementRole(element),
+    name: (element.getAttribute('aria-label') ?? element.textContent ?? '').trim(),
+    tagName: element.tagName.toLowerCase(),
+    visible: !isElementHidden(element),
+    disabled: isDisabled(element)
+  };
+}
+
+function inferElementRole(element: Element): string {
+  if (element instanceof HTMLButtonElement) return 'button';
+  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) return 'textbox';
+  if (element instanceof HTMLSelectElement) return 'combobox';
+  return element.tagName.toLowerCase();
 }
 
 function readViewportInfo(document: Document) {
@@ -610,6 +802,14 @@ function formActionUnauthorized(): ContentRpcResponse {
     ok: false,
     code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED,
     message: 'Form mutations must be routed through the runtime tool boundary'
+  };
+}
+
+function iframeActionUnauthorized(): ContentRpcResponse {
+  return {
+    ok: false,
+    code: ERROR_CODES.IFRAME_ACTION_UNAUTHORIZED,
+    message: 'Iframe mutations must be routed through the runtime tool boundary'
   };
 }
 

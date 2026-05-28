@@ -131,6 +131,10 @@ export class FloatingPanelFlow {
   async expectIconHasShortcutTooltip(): Promise<void> {
     const fixture = await this.flowContext.fixturePage();
     await fixture.goto('basic-form.html');
+    await fixture.page.locator('#browserhelm-floating-entry-host').waitFor({
+      state: 'attached',
+      timeout: 15000
+    });
 
     const title = await fixture.page.evaluate(() => {
       const hostEl = document.getElementById('browserhelm-floating-entry-host');

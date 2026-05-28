@@ -243,7 +243,7 @@ describe('content-rpc-handler iframe actions', () => {
     expect(scrollIntoView).toHaveBeenCalledWith({
       block: 'center',
       inline: 'center',
-      behavior: 'smooth'
+      behavior: 'auto'
     });
     expect(target?.classList.contains('bh-page-ref-highlight')).toBe(true);
     expect(document.getElementById('browserhelm-ref-highlight-style')).toBeTruthy();

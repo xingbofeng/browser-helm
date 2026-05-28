@@ -13,8 +13,12 @@ import type { Locale } from '../../../i18n/types';
 
 // ── Context budget limits ──
 const MAX_OBSERVATION_CHARS = 8000;
+const MAX_OBSERVATION_CHARS_WITH_PAGE_READ = 1200;
 const MAX_STRUCTURED_DATA_ITEMS = 50;
 const MAX_TOOL_RESULT_CHARS = 4000;
+const MAX_PAGE_READ_TEXT_CHARS = 12_000;
+const MAX_PAGE_READ_HEADINGS = 20;
+const MAX_PAGE_READ_LINKS = 20;
 const MAX_TOTAL_PROMPT_CHARS = 32000;
 const MIN_USER_PROMPT_CHARS = 8000;
 const MAX_CONVERSATION_HISTORY_CHARS = 6000;
@@ -79,11 +83,18 @@ export function buildMessages(input: BuildMessagesInput): ModelMessage[] {
   };
 
   // ── Dynamic suffix: user task, page context, history, trace ──
-  const observation = compactObservation(snapshot.observation);
-  const structuredPageData = compactStructuredPageData(snapshot.structuredPageData);
   const lastToolResult = snapshot.toolResult ? compactToolResult(snapshot.toolResult) : undefined;
+  const hasPageReadText = Boolean(snapshot.toolResult && pageReadTextFromToolResult(snapshot.toolResult));
+  const observation = compactObservation(
+    snapshot.observation,
+    hasPageReadText ? MAX_OBSERVATION_CHARS_WITH_PAGE_READ : MAX_OBSERVATION_CHARS
+  );
+  const structuredPageData = hasPageReadText
+    ? compactStructuredPageDataSummary(snapshot.structuredPageData)
+    : compactStructuredPageData(snapshot.structuredPageData);
   const decisionGuidance = buildDecisionGuidance(snapshot.toolResult);
   const recentActions = buildRecentToolActions(record.trace);
+  const loopGuard = buildLoopGuard(recentActions);
   const taskState = compactTaskState(record.taskState ?? createInitialTaskState(redactedTask));
 
   // Dynamic user content: all untrusted / page-derived data
@@ -91,11 +102,12 @@ export function buildMessages(input: BuildMessagesInput): ModelMessage[] {
     task: redactedTask,
     locale,
     taskState,
-    observation,
-    structuredPageData,
     ...(lastToolResult ? { lastToolResult } : {}),
     ...(decisionGuidance ? { decisionGuidance } : {}),
-    ...(recentActions.length ? { recentActions } : {})
+    ...(loopGuard ? { loopGuard } : {}),
+    ...(recentActions.length ? { recentActions } : {}),
+    observation,
+    structuredPageData
   };
 
   const historyMessages = buildConversationHistoryMessages(record, MAX_CONVERSATION_HISTORY_CHARS);
@@ -230,7 +242,7 @@ export function getPromptToolContracts(
 
 // ── Compaction helpers ──
 
-function compactObservation(obs: RunSnapshot['observation']): unknown {
+function compactObservation(obs: RunSnapshot['observation'], maxChars: number): unknown {
   if (!obs) return undefined;
   const { url, title, currentDomain, origin, visibleTextSummary, pageStateSummary, interactiveCount, warnings } = obs;
   return truncateStrings({
@@ -238,7 +250,7 @@ function compactObservation(obs: RunSnapshot['observation']): unknown {
     title,
     currentDomain,
     origin,
-    visibleTextSummary: truncateStr(visibleTextSummary, MAX_OBSERVATION_CHARS),
+    visibleTextSummary: truncateStr(visibleTextSummary, maxChars),
     pageStateSummary,
     interactiveCount,
     warnings
@@ -254,6 +266,22 @@ function compactStructuredPageData(data: RunSnapshot['structuredPageData']): unk
       ...data.forms,
       items: Array.isArray(data.forms.items) ? data.forms.items.slice(0, MAX_STRUCTURED_DATA_ITEMS) : data.forms.items
     } : data.forms
+  }));
+}
+
+function compactStructuredPageDataSummary(data: RunSnapshot['structuredPageData']): unknown {
+  if (!data) return undefined;
+  return redactEmbeddedUrls(truncateItems({
+    observation: {
+      summary: data.observation.summary,
+      count: data.observation.count
+    },
+    refs: {
+      summary: data.refs.summary,
+      count: data.refs.count
+    },
+    interactive: data.interactive ? { summary: data.interactive.summary } : undefined,
+    forms: data.forms ? { summary: data.forms.summary } : undefined
   }));
 }
 
@@ -273,6 +301,9 @@ function compactToolResult(result: NonNullable<RunSnapshot['toolResult']>): unkn
 }
 
 function compactToolResultDetails(result: NonNullable<RunSnapshot['toolResult']>): Record<string, unknown> {
+  if (isPageContentReadTool(result.tool)) {
+    return compactPageReadToolResultDetails(result);
+  }
   if (!isFormFillTool(result.tool) && result.tool !== TOOL_NAMES.FORM_VERIFY) {
     return {};
   }
@@ -302,6 +333,41 @@ function compactToolResultDetails(result: NonNullable<RunSnapshot['toolResult']>
   return compactFields.length ? { fields: compactFields } : {};
 }
 
+function compactPageReadToolResultDetails(result: NonNullable<RunSnapshot['toolResult']>): Record<string, unknown> {
+  const data = toolResultData(result);
+  const text = pageReadTextFromToolResult(result);
+  if (!data || !text) {
+    return {};
+  }
+  const headings = Array.isArray(data.headings)
+    ? data.headings
+        .map(compactHeading)
+        .filter((heading): heading is { level: number; text: string } => Boolean(heading))
+        .slice(0, MAX_PAGE_READ_HEADINGS)
+    : undefined;
+  const links = Array.isArray(data.links)
+    ? data.links
+        .map(compactLink)
+        .filter((link): link is { text?: string; href?: string } => Boolean(link))
+        .slice(0, MAX_PAGE_READ_LINKS)
+    : undefined;
+  return {
+    pageRead: {
+      text: truncateStr(redactTextForModelContext(text), MAX_PAGE_READ_TEXT_CHARS),
+      cursor: numberField(data, 'cursor'),
+      nextCursor: numberField(data, 'nextCursor'),
+      hasMore: data.hasMore === true,
+      totalTextLength: numberField(data, 'totalTextLength'),
+      warnings: Array.isArray(data.warnings)
+        ? data.warnings.filter((value): value is string => typeof value === 'string')
+        : [],
+      contentSource: stringField(data, 'contentSource'),
+      ...(headings?.length ? { headings } : {}),
+      ...(links?.length ? { links } : {})
+    }
+  };
+}
+
 function buildDecisionGuidance(
   result: RunSnapshot['toolResult']
 ): string | undefined {
@@ -325,7 +391,121 @@ function buildDecisionGuidance(
       'Do not call bh_form_verify again unless page state changed.'
     ].join(' ');
   }
+  if (isPageContentReadTool(result.tool)) {
+    const data = toolResultData(result);
+    const hasText = Boolean(data && stringField(data, 'text'));
+    if (!hasText) {
+      return undefined;
+    }
+    const hasMore = data?.hasMore === true;
+    const nextCursor = data ? numberField(data, 'nextCursor') : undefined;
+    return [
+      'The latest page read returned pageRead.text in lastToolResult.',
+      hasMore && typeof nextCursor === 'number'
+        ? `If the current text is sufficient for the user task, finish now. Only continue reading if the missing tail is essential, and then use cursor ${nextCursor}; do not repeat cursor 0 or only change maxChars.`
+        : 'The latest page read is complete enough for this turn; finish now unless the user asked for another source.'
+    ].join(' ');
+  }
   return undefined;
+}
+
+function buildLoopGuard(actions: ReturnType<typeof buildRecentToolActions>): {
+  warning: string;
+  repeatedTools: string[];
+  repeatCount: number;
+  instruction: string;
+} | undefined {
+  const repeated = repeatedReadLoop(actions);
+  if (!repeated) {
+    return undefined;
+  }
+  return {
+    warning: 'Potential repeated tool loop detected.',
+    repeatedTools: repeated.tools,
+    repeatCount: repeated.count,
+    instruction: [
+      'You already read the current page content repeatedly and the page did not change.',
+      'Do not call these read tools again unless the page changes or the user asks for another source.',
+      'Use the available information now: return finish with the answer, ask_user only for missing user input, or fail if the task cannot be answered.'
+    ].join(' ')
+  };
+}
+
+function repeatedReadLoop(actions: ReturnType<typeof buildRecentToolActions>):
+  { tools: string[]; count: number } | undefined {
+  const tail = actions.slice(-4);
+  const readsSinceChange: typeof tail = [];
+  for (let index = tail.length - 1; index >= 0; index -= 1) {
+    const action = tail[index];
+    if (!action) {
+      continue;
+    }
+    if (action.changedPage) {
+      break;
+    }
+    if (isPageContentReadTool(action.tool) && action.ok) {
+      readsSinceChange.unshift(action);
+      continue;
+    }
+    if (readsSinceChange.length > 0) {
+      break;
+    }
+  }
+  if (readsSinceChange.length < 3) {
+    return undefined;
+  }
+  return {
+    tools: uniqueStrings(readsSinceChange.map((action) => action.tool)),
+    count: readsSinceChange.length
+  };
+}
+
+function isPageContentReadTool(tool: string): boolean {
+  return tool === TOOL_NAMES.PAGE_READ_ARTICLE || tool === TOOL_NAMES.PAGE_READ_VISIBLE_TEXT;
+}
+
+function pageReadTextFromToolResult(result: NonNullable<RunSnapshot['toolResult']>): string | undefined {
+  if (!isPageContentReadTool(result.tool)) {
+    return undefined;
+  }
+  const data = toolResultData(result);
+  return data ? stringField(data, 'text') : undefined;
+}
+
+function toolResultData(result: NonNullable<RunSnapshot['toolResult']>): Record<string, unknown> | undefined {
+  return isRecord(result.detail) && isRecord(result.detail.data)
+    ? result.detail.data
+    : undefined;
+}
+
+function compactHeading(value: unknown): { level: number; text: string } | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const text = stringField(value, 'text');
+  const level = numberField(value, 'level');
+  if (!text || typeof level !== 'number') {
+    return undefined;
+  }
+  return {
+    level,
+    text: redactTextForModelContext(text)
+  };
+}
+
+function compactLink(value: unknown): { text?: string; href?: string } | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const text = stringField(value, 'text');
+  const href = stringField(value, 'href');
+  if (!text && !href) {
+    return undefined;
+  }
+  return {
+    ...(text ? { text: redactTextForModelContext(text) } : {}),
+    ...(href ? { href: redactTextForModelContext(href) } : {})
+  };
 }
 
 // ── Task state helpers ──
@@ -381,6 +561,11 @@ function stringField(record: Record<string, unknown>, key: string): string | und
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
+function numberField(record: Record<string, unknown>, key: string): number | undefined {
+  const value = record[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -432,5 +617,3 @@ function redactEmbeddedUrls(obj: unknown): unknown {
   }
   return obj;
 }
-
-

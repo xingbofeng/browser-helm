@@ -11,6 +11,7 @@ export type RecentToolAction = {
   ok: boolean;
   code?: string | undefined;
   summary?: string | undefined;
+  changedPage?: boolean | undefined;
   args?: unknown;
   fieldRefIds?: string[] | undefined;
 };
@@ -40,6 +41,7 @@ export function buildRecentToolActions(trace: RuntimeEvent[] | undefined): Recen
       ok: payload.ok === true,
       code: stringField(payload, 'code'),
       summary: truncateStr(stringField(payload, 'summary'), MAX_TRACE_HISTORY_SUMMARY_CHARS),
+      changedPage: payload.changedPage === true,
       fieldRefIds: fieldRefIdsFromToolArgs(tool, args)
     });
     pending = undefined;
@@ -49,6 +51,7 @@ export function buildRecentToolActions(trace: RuntimeEvent[] | undefined): Recen
     ok: action.ok,
     code: action.code,
     summary: action.summary,
+    ...(action.changedPage ? { changedPage: true } : {}),
     ...(action.fieldRefIds?.length ? { fieldRefIds: action.fieldRefIds } : {})
   }));
 }

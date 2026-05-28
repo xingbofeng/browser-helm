@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 const cwd = process.cwd();
@@ -7,9 +7,15 @@ const root = cwd;
 const outputDir = join(root, '.output');
 const builtExtensionDir = join(outputDir, 'chrome-mv3');
 const landingDir = join(root, 'dist', 'landing');
+const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
+  version?: string;
+};
+const packageVersion = packageJson.version;
 
-const extensionZip = readdirSync(outputDir).find((name) => /^browser-helm-.*-chrome\.zip$/.test(name));
-if (!extensionZip) {
+const extensionZip = packageVersion
+  ? `browser-helm-${packageVersion}-chrome.zip`
+  : readdirSync(outputDir).find((name) => /^browser-helm-.*-chrome\.zip$/.test(name));
+if (!extensionZip || !existsSync(join(outputDir, extensionZip))) {
   throw new Error('未在 .output 目录找到浏览器扩展 zip 包，请先执行 npm run zip。');
 }
 

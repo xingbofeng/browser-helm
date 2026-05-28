@@ -1,0 +1,185 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Release Gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Coverage
+        run: npm run test:coverage
+
+      - name: Check tool docs consistency
+        run: npm run check:tool-docs
+
+      - name: Check manifest permissions
+        run: npm run check:manifest-permissions
+
+      - name: Check release hygiene
+        run: npm run check:release-hygiene
+
+      - name: Security audit
+        run: npm audit --audit-level=high
+
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Run E2E tests
+        run: npm run test:e2e:no-build
+
+  release:
+    name: Create Release
+    needs: [gate, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build extension zip
+        run: npm run zip
+
+      - name: Generate artifact name
+        id: artifact
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          SHA=$(git rev-parse --short HEAD)
+          echo "name=browser-helm-v${VERSION}-${SHA}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Copy and rename zip
+        run: |
+          cp .output/browser-helm-${{ steps.artifact.outputs.version }}-chrome.zip ./${{ steps.artifact.outputs.name }}.zip
+
+      - name: Generate SHA256
+        run: |
+          shasum -a 256 ${{ steps.artifact.outputs.name }}.zip > SHA256SUMS.txt
+
+      - name: Generate release notes
+        run: |
+          ARTIFACT="${{ steps.artifact.outputs.name }}.zip"
+          VERSION="${{ steps.artifact.outputs.version }}"
+          COMMIT="${{ github.sha }}"
+          BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          NODE_VER="$(node -v)"
+          SHA256="$(shasum -a 256 "${ARTIFACT}" | awk '{print $1}')"
+          cat > release-notes.md << NOTES
+          ## BrowserHelm v${VERSION}
+
+          **Commit:** ${COMMIT}
+          **Artifact:** ${ARTIFACT}
+          **SHA256:** ${SHA256}
+          **Built at:** ${BUILT_AT}
+          **Node:** ${NODE_VER}
+
+          ### 📦 Install
+
+          1. Download \`${ARTIFACT}\`
+          2. Verify: \`shasum -a 256 -c SHA256SUMS.txt\`
+          3. Unzip and load in Chrome: \`chrome://extensions\` → Developer mode → Load unpacked
+          4. Open side panel, configure your AI provider
+
+          ### 🔒 Privacy & Data
+
+          - No BrowserHelm backend. Settings and traces stored in \`chrome.storage.local\`.
+          - When using a cloud AI provider, trimmed/redacted page context is sent to your configured endpoint.
+          - API keys stored locally (unencrypted; WebCrypto encryption planned).
+          - Page-health hook injects by default to monitor console errors / network failures; does not read form inputs, cookies, or passwords. Will become Debug opt-in in a future release.
+          - Permissions: \`activeTab\`, \`storage\`, \`tabs\`, \`scripting\`, \`sidePanel\`, \`webNavigation\`, optional \`<all_urls>\`.
+
+          ### ⚠️ Known Limitations
+
+          - Memory, workflow replay, CDP deep tools not yet implemented (roadmap v1.2–v1.5).
+          - \`bh_iframe_click\` / \`bh_iframe_type\` hidden; iframe mutating actions not exposed.
+          - No WebCrypto API key encryption.
+          - No Chrome Web Store listing yet.
+
+          ### ↩️ Rollback
+
+          Remove the extension from \`chrome://extensions\`, download and install a previous release, or \`git checkout <tag> && npm run build\`.
+
+          ### Changes since v1.1.2
+
+          See [CHANGELOG.md](CHANGELOG.md).
+          NOTES
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ steps.artifact.outputs.version }}
+          tag_name: ${{ github.ref_name }}
+          body_path: release-notes.md
+          files: |
+            ${{ steps.artifact.outputs.name }}.zip
+            SHA256SUMS.txt
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

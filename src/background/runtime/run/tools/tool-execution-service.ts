@@ -8,6 +8,7 @@ import type { ToolRuntimeAdapter } from './adapters/tool-runtime-adapter';
 import { ERROR_CODES } from '../../../../shared/constants/error-codes';
 import { TRACE_EVENT_NAMES } from '../../../../shared/constants/event-names';
 import { TOOL_NAMES } from '../../../../shared/constants/tool-names';
+import { INTERNAL_TOOL_NAMES } from '../../../../shared/constants/internal-tool-names';
 import { redactToolArgs } from '../../../../tools/core/tool-args-redaction';
 import type { approvalRequiredResult } from '../../../../tools/core/tool-result-factory';
 import { userDeniedApprovalResult } from '../../../../tools/core/tool-result-factory'; 
@@ -66,6 +67,40 @@ export class ToolExecutionService {
     const contract = router.getToolContract(input.tool, record.mode);
     const adapter = this.getAdapter(input.tool);
     const approvalArgsPreview = adapter.approvalArgsPreview?.(input, redactedArgs) ?? redactedArgs;
+
+    if (!contract && isHiddenIframeMutationTool(input.tool)) {
+      const result = this.deps.approvalRequiredResultFn({
+        reason: 'Iframe mutating actions require explicit approval and are not exposed as model-visible public tools.',
+        risk: 'high',
+        actionPreview: `${input.tool} requires user approval`
+      });
+      const request = this.deps.approvalManager.create({
+        runId: input.runId,
+        stepId: `${input.runId}:${input.tool}`,
+        tool: input.tool,
+        argsPreview: approvalArgsPreview,
+        risk: 'high',
+        reason: result.approval?.reason ?? result.summary,
+        actionPreview: result.approval?.actionPreview
+      });
+      this.deps.appendTrace(record, {
+        runId: input.runId,
+        type: TRACE_EVENT_NAMES.APPROVAL_REQUIRED,
+        payload: {
+          request: this.deps.approvalRequestForTrace(request),
+          summary: `${request.reason}; action was not executed`
+        }
+      });
+      this.deps.setSnapshot(input.runId, {
+        ...this.deps.getSnapshot(input.runId),
+        status: 'waiting_for_approval',
+        toolResult: this.deps.snapshotToolResult(input.tool, result),
+        pendingApproval: request,
+        trace: record.trace
+      });
+      this.deps.setPendingAction(request.id, input);
+      return result;
+    }
 
     if (contract && adapter.shouldBypassPolicyApproval?.(input.tool) !== true) {
       const policy = this.deps.toolPolicy.evaluate(contract.risk);
@@ -284,6 +319,10 @@ export class ToolExecutionService {
 
 function recoveryState(type: 're_observe' | 'repair_tool_args' | 'find_alternative_ref', reason: string) {
   return { action: { type, reason }, attempts: 1, budgetRemaining: 0 };
+}
+
+function isHiddenIframeMutationTool(tool: string): boolean {
+  return tool === INTERNAL_TOOL_NAMES.IFRAME_CLICK || tool === INTERNAL_TOOL_NAMES.IFRAME_TYPE;
 }
 
 function repairArgs(args: unknown, argsSchema: unknown): Record<string, unknown> | undefined {

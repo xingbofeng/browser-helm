@@ -133,7 +133,7 @@ function truncateArrayItems(arr: unknown[], maxChars: number): string {
 
   const result = arr.slice(0, best);
   if (best < arr.length) {
-    result.push(`[+${arr.length - best} omitted]` as unknown);
+    result.push(`[+${arr.length - best} omitted]`);
   }
   return JSON.stringify(result);
 }

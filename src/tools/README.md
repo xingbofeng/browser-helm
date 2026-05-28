@@ -13,7 +13,13 @@
 | `bh_agent_ask_user` | Agent Ask User | `agent/` | `internal` | `safe` | `question` | Agent 缺少必要用户输入时暂停 run，并把问题交还给用户。 |
 | `bh_action_check_readiness` | Check Action Readiness | `action/` | `debug`, `act` | `low` | `kind`, `refId`, `source`, `valuePreview?` | 只读检查拟执行动作的目标、风险、approval 预判和重新观察需求，不修改页面。 |
 | `bh_page_observe` | Page Observe | `page/` | `ask`, `debug`, `form` | `safe` | 无 | 读取当前页面 bounded observation，并生成裁剪后的 structured context summary。 |
+| `bh_page_read_visible_text` | Read Visible Text | `page/` | `ask`, `debug`, `form` | `safe` | `cursor?`, `maxChars?` | 分页读取当前页面可见文本。 |
+| `bh_page_read_article` | Read Article | `page/` | `ask`, `debug`, `form` | `safe` | `cursor?`, `maxChars?`, `includeHeadings?`, `includeLinks?` | 读取页面正文/文章内容。 |
+| `bh_page_wait_until_stable` | Wait Until Stable | `page/` | `ask`, `debug`, `form` | `safe` | `quietMs?` | 等待页面 DOM 和布局稳定后返回。 |
+| `bh_viewport_get_info` | Get Viewport Info | `viewport/` | `ask`, `debug` | `safe` | 无 | 读取当前视口位置、可滚动区域和边界。 |
+| `bh_viewport_scroll` | Scroll Viewport | `viewport/` | `ask`, `debug` | `low` | `direction`, `amount` | 只读滚动视口用于观察，不改变页面业务状态。 |
 | `bh_frame_list` | Frame List | `frame/` | `debug`, `form`, `act` | `safe` | 无 | 列出当前页面 frame id、URL 和顶层/子 frame 关系，用于 iframe 表单与动态 widget 排障。 |
+| `bh_iframe_list` | List Iframes | `frame/` | `debug`, `act` | `safe` | 无 | 列出 iframe 及稳定 iframeId 元数据。 |
 | `bh_iframe_read` | Read Iframe Target | `frame/` | `debug`, `act` | `low` | `refId`, `frameId?` | 只读读取 iframe 内 stable ref 摘要，不触发 approval，不修改页面。 |
 | `bh_a11y_snapshot` | A11y Snapshot | `a11y/` | `ask`, `debug`, `form` | `safe` | 无 | 捕获当前页面 a11y-like 快照，返回带 stable refs 的候选元素。 |
  | `bh_a11y_find_interactive` | Find Interactive Elements | `a11y/` | `debug`, `form` | `safe` | 无 | 读取当前页面交互元素列表，包含 ref、role、name 和只读状态。 |

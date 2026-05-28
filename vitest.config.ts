@@ -8,6 +8,22 @@ export default defineConfig({
       deps: {
         inline: ['animal-island-ui']
       }
+    },
+    coverage: {
+      provider: 'v8',
+      include: [
+        'src/background/runtime/run/**',
+        'src/tools/core/**',
+        'src/shared/**',
+        'src/page/dom/**',
+        'src/agent/**'
+      ],
+      thresholds: {
+        statements: 30,
+        branches: 20,
+        functions: 25,
+        lines: 30
+      }
     }
   }
 });

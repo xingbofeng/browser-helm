@@ -1,16 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ChevronDown, Download, Languages } from 'lucide-react';
+import { ChevronDown, Languages } from 'lucide-react';
 import './style.css';
 
 import { LOCALE_LABELS, type Locale } from '../../i18n/types';
 import { readLocale, writeLocale } from '../../i18n/locale';
 import { t } from '../../i18n/t';
 
-const browserHelmTransparentLogoUrl = new URL(
-  './browserhelm-logo-transparent.png',
-  import.meta.url
-).href;
 const browserHelmDownloadUrl = '/browser-helm-latest.zip';
 const GITHUB_URL = 'https://github.com/xingbofeng/browser-helm';
 

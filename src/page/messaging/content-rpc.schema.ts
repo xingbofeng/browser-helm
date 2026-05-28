@@ -69,6 +69,30 @@ export const contentRpcRequestSchema = z.discriminatedUnion('type', [
     frameId: z.number().int().nonnegative(),
     refId: z.string().min(1)
   }),
+  z.object({
+    type: z.literal(CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE),
+    frameId: z.number().int().nonnegative(),
+    refId: z.string().min(1),
+    action: z.enum(['click', 'type'])
+  }),
+  z.object({
+    type: z.literal(CONTENT_RPC_MESSAGES.IFRAME_CLICK),
+    frameId: z.number().int().nonnegative(),
+    refId: z.string().min(1),
+    actionToken: z.string().optional()
+  }),
+  z.object({
+    type: z.literal(CONTENT_RPC_MESSAGES.IFRAME_TYPE),
+    frameId: z.number().int().nonnegative(),
+    refId: z.string().min(1),
+    text: z.string(),
+    actionToken: z.string().optional(),
+    valuePreview: z.object({
+      masked: z.boolean(),
+      preview: z.string(),
+      reason: z.string().optional()
+    }).optional()
+  }),
   // 表单填写动作
   z.object({
     type: z.literal(CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE),

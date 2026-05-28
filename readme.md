@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/status-v1.0-blue?style=flat-square" alt="Status" />
+  <img src="https://img.shields.io/badge/status-v1.1.3-blue?style=flat-square" alt="Status" />
   <img src="https://img.shields.io/badge/runtime-Chrome_Extension-2ea44f?style=flat-square" alt="Runtime" />
   <img src="https://img.shields.io/badge/架构-本地优先-black?style=flat-square" alt="Architecture" />
   <img src="https://img.shields.io/badge/Agent-a11y--first-6f42c1?style=flat-square" alt="Agent" />
@@ -79,6 +79,7 @@
 - **ContextCompactor** 将完整页面数据裁剪为模型上下文友好的摘要
 - **RecoveryPolicy** 处理工具失败和异常恢复
 - 支持 Ask（只读提问）和 Act（安全执行）双模式
+> 📝 关于 Agent 核心层设计理念，见 [《Agent 工程化的代价：我们怎么把 prompt 规则全挪进了 runtime》](docs/agentic-experience.md)
 
 ### 📊 可追溯 & 可调试
 

@@ -4,6 +4,7 @@ node_modules/
 dist/
 test-results/
 artifacts/
+coverage/
 data/
 .env
 .env.*
@@ -15,3 +16,4 @@ data/
 .codex/
 .vercel
 .reasonix/
+*.jsonl

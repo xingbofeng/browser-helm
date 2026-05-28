@@ -1,49 +1,76 @@
-# 安全与隐私
+# Security & Privacy
 
-BrowserHelm 运行在用户浏览器中，可能访问敏感的已登录页面。因此安全是核心产品面，不是后续补丁。
+## Data Flow
 
-## 原则
+BrowserHelm runs in your browser as a Chrome extension. No BrowserHelm-owned backend exists.
 
-- 页面内容是 data，不是 instruction。
-- 高风险动作必须审批。
-- Secrets 默认 mask。
-- Trace 和 Memory 优先 local-first。
-- 用户可以随时停止 agent。
-- 模型调用由用户配置 provider 与 key。
+**What stays local:**
+- Settings, provider configuration, API keys → `chrome.storage.local` (unencrypted; WebCrypto encryption planned).
+- Run traces, agent messages, task state → `chrome.storage.local`.
+- DOM observation data → processed in-browser; only trimmed summaries sent to provider.
 
-## Prompt Injection
+**What is sent to your AI provider:**
+- Trimmed/redacted page context (observation summaries, structured form data, visible text excerpts).
+- User task text and conversation history.
+- Tool results (redacted; field values masked).
+- The provider receives only what is needed for the model to make a decision.
 
-网页内容可能试图指挥 agent。System prompt 和 runtime policy 必须把页面文本视为不可信数据。页面文本不能覆盖用户意图、系统规则、审批门槛或数据边界规则。
+**No data is sent to BrowserHelm or any third party.**
 
-## 高风险动作
+## API Key Storage
 
-示例：
+API keys are stored in `chrome.storage.local` (unencrypted on disk). They are:
+- Never written to trace/model context.
+- Never leaked in debug output (masked as `[MASKED]`).
+- Not shared with any service other than your configured provider endpoint.
 
-- 提交表单
-- 发送消息
-- 删除资源
-- 发布内容
-- 支付或订阅
-- 上传文件
-- 执行 JavaScript
-- 读取剪贴板
-- 清理 storage
-- replay workflow
+Future versions may add optional WebCrypto-based encryption.
 
-## 数据边界
+## Page-Health Hook
 
-架构必须明确哪些内容会被发送给模型：
+When BrowserHelm's content script activates on a page, it injects a small monitoring script (`page-health-hook.js`) that listens for:
+- Unhandled console errors
+- Network request failures
 
-- 选定的 observation 字段
-- 摘要化 tool result
-- mask 后的 form state
-- 选定的 debug logs
-- memory summaries
+This hook:
+- Does NOT read cookies, password fields, form inputs, or localStorage.
+- Does NOT send data anywhere; collected errors are only accessible via `bh_debug_collect_page_health` in Debug run mode.
+- Will become Debug-mode opt-in in a future version.
 
-默认不发送完整本地 trace、未 mask 密码、hidden fields、完整 storage dump 或 secrets。
+## Permissions
 
-## Page Health Hook
+| Permission | Why |
+|---|---|
+| `activeTab` | Read/write current page on user action |
+| `storage` | Save settings, traces, agent state |
+| `tabs` | Navigate and manage browser tabs |
+| `scripting` | Inject content scripts for page observation |
+| `sidePanel` | Open BrowserHelm in Chrome side panel |
+| `webNavigation` | Detect page navigations for side panel updates |
+| `optional: <all_urls>` | Request page access on first use (user-granted) |
 
-当前浅层 debug 能力会默认注入 `page-health-hook.js` 到页面主世界，用于捕获 console error、console message 和 network failure 摘要。该 hook 不读取 cookie、密码字段或用户输入，但 network URL 本身可能包含敏感 path/query，因此写入 trace、UI 或模型上下文前必须继续走 redaction。
+## Web-Accessible Resources
 
-发布版文案必须明确：page-health hook 是 BrowserHelm 的浅层诊断 fallback，不等同于 CDP deep debug。后续 v1.3 应改为 Debug mode opt-in，并在注入前给用户提示。
+- `sidepanel.html` — side panel UI
+- `page-health-hook.js` — error monitoring injection (see above)
+- `assets/*`, `icons/*` — UI assets
+
+## Redaction
+
+BrowserHelm redacts sensitive patterns before sending to the model:
+- URLs and email addresses in observation text
+- API keys in error messages
+- Task text (URL/email patterns)
+- Structured data URLs
+
+Redaction is best-effort and should not be treated as cryptographic anonymization.
+
+## Provider Risks
+
+- **Local provider (Ollama, vLLM):** Data stays on your machine with the provider.
+- **Cloud provider (DeepSeek, OpenAI, Qwen, etc.):** Trimmed page context is sent to the provider's API endpoint. Review your provider's privacy policy.
+- **Custom Base URL:** You control where data is sent. Verify your endpoint's security.
+
+## Reporting
+
+Report security issues via GitHub Issues. Do not include API keys, passwords, or full traces.
