@@ -81,6 +81,7 @@ export default tseslint.config(
     ignores: [
       '.output/**',
       '.wxt/**',
+      '.vercel/**',
       'dist/**',
       'coverage/**',
       'node_modules/**',

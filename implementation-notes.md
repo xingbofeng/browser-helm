@@ -1,3 +1,21 @@
+## 官网自动部署接入 CI - 2026-05-29
+
+**目标**：让 `main` 分支通过 CI 后自动把最新落地页发布到正式官网，避免“GitHub 构建成功但官网仍停留旧版本”的人工同步问题。
+
+**设计决策**：在现有 `ci.yml` 中新增独立的 `deploy-landing` job，只在 `push main` 且前置 `typecheck-lint-unit`、`e2e-and-package` 全部成功后触发。部署路径使用 Vercel CLI 的 `pull -> build -> deploy --prebuilt --prod`，而不是只上传 `dist/landing` artifact。这样可以直接复用仓库里的 `vercel.json`、`build:landing` 和 `.vercel/output` 产物链路，并避免本地实测中“整仓源码上传时偶发 EPIPE、中途断流”的问题。
+
+**偏差说明**：本次没有引入第三方 GitHub Action 封装，也没有把 deployment 绑定到 tag release；官网更新先挂在主干 CI 上，release workflow 仍保持独立。
+另外补充把 `.vercel/**` 加入 ESLint ignore，避免本地执行 `vercel build` 后生成的 `.vercel/output` 被 preflight 当作源码扫描，导致提交前 lint 假失败。
+
+**权衡分析**：
+- 方案一：继续只构建 artifact，手工在 Vercel 点 deploy。优点是改动小；缺点是容易忘，官网和代码长期漂移。
+- 方案二：在 CI 成功后直接用 Vercel CLI 部署 prebuilt 输出。优点是链路闭环、与正式项目保持一致；缺点是需要维护 `VERCEL_TOKEN` secret 和项目 ID。
+- 选择方案二，因为当前主要问题不是构建失败，而是“没有最后一步正式发布”。
+
+**待确认**：
+- [ ] GitHub 仓库 Secrets 中是否已配置 `VERCEL_TOKEN`；若没有，`deploy-landing` 会在认证阶段失败。
+- [ ] 后续是否要把 `actions/checkout` / `actions/setup-node` 升级到支持 Node 24 的版本，顺手消除 GitHub 的弃用提醒。
+
 ## CI 构建前置与元素高亮稳定性修复 - 2026-05-29
 
 **目标**：修复远端最新提交在 GitHub Actions 中的两处失败：`manifest-contract` 单测在未构建产物时直接失败，以及离屏元素高亮 E2E 在 CI 环境下偶发拿不到高亮 class。
