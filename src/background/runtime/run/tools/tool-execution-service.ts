@@ -16,6 +16,7 @@ import type { approvalRequestForTrace } from '../runtime-event-utils';
 import { toolStartedEvent, toolResultEvent, approvalRequiredEvent } from './tool-runtime-events';
 import type { ApprovalManager } from '../../../../runtime/approval/approval-manager';
 import type { Locale } from '../../../../i18n/types';
+import { t } from '../../../../i18n/t';
 
 export type ToolExecutionDeps = {
   getSnapshot: (runId: string) => RunSnapshot;
@@ -44,9 +45,9 @@ export class ToolExecutionService {
     if (this.deps.getSnapshot(input.runId).status === 'cancelled') {
       return {
         ok: false, code: ERROR_CODES.RUN_CANCELLED,
-        summary: 'Run was cancelled by the user',
+        summary: t('runtime.error.userCancelReason', record?.locale ?? 'zh'),
         changedPage: false, requiresObserve: false,
-        error: { message: 'Run was cancelled by the user' }
+        error: { message: t('runtime.error.userCancelReason', record?.locale ?? 'zh') }
       };
     }
 

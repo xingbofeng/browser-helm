@@ -1,5 +1,6 @@
 import type { ToolRisk } from '../../shared/schemas/tool-result.schema';
 import { RiskClassifier } from './risk-classifier';
+import { tZh } from '../../i18n/t';
 
 export type PolicyEvaluationInput = {
   risk: ToolRisk;
@@ -23,13 +24,13 @@ export class PolicyEngine {
       return {
         allow: false,
         requiresApproval: true,
-        reason: 'Approval required by policy before execution; action was not executed'
+        reason: tZh('policy.approvalRequired')
       };
     }
     return {
       allow: true,
       requiresApproval: false,
-      reason: 'Policy allows action'
+      reason: tZh('policy.allowed')
     };
   }
 }

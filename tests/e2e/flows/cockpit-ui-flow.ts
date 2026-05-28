@@ -110,7 +110,7 @@ export class CockpitUiFlow {
     });
     await sidePanel.executeTool({
       runId: snapshot.runId,
-      tool: TOOL_NAMES.IFRAME_CLICK,
+      tool: 'bh_iframe_click',
       args: {
         refId: `frame_${deleteRef.frameId}:${deleteRef.innerRefId}`
       }

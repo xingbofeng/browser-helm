@@ -36,25 +36,25 @@ describe('content RPC schema', () => {
   it('accepts iframe click requests', () => {
     expect(
       contentRpcRequestSchema.parse({
-        type: CONTENT_RPC_MESSAGES.IFRAME_CLICK,
+        type: 'BH_IFRAME_CLICK',
         frameId: 7,
         refId: 'ref_200'
       })
     ).toMatchObject({
-      type: CONTENT_RPC_MESSAGES.IFRAME_CLICK
+      type: 'BH_IFRAME_CLICK'
     });
   });
 
   it('accepts iframe action authorization requests and responses', () => {
     expect(
       contentRpcRequestSchema.parse({
-        type: CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE,
+        type: 'BH_IFRAME_ACTION_AUTHORIZE',
         frameId: 7,
         refId: 'ref_200',
         action: 'click'
       })
     ).toMatchObject({
-      type: CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE,
+      type: 'BH_IFRAME_ACTION_AUTHORIZE',
       action: 'click'
     });
     expect(
@@ -71,7 +71,7 @@ describe('content RPC schema', () => {
   it('accepts iframe type requests with masked value preview', () => {
     expect(
       contentRpcRequestSchema.parse({
-        type: CONTENT_RPC_MESSAGES.IFRAME_TYPE,
+        type: 'BH_IFRAME_TYPE',
         frameId: 7,
         refId: 'ref_103',
         text: 'secret',
@@ -82,7 +82,7 @@ describe('content RPC schema', () => {
         }
       })
     ).toMatchObject({
-      type: CONTENT_RPC_MESSAGES.IFRAME_TYPE,
+      type: 'BH_IFRAME_TYPE',
       valuePreview: {
         masked: true
       }

@@ -9,12 +9,12 @@ describe('policy-engine', () => {
     expect(policy.evaluate({ risk: 'low', wouldRequireApproval: false })).toEqual({
       allow: true,
       requiresApproval: false,
-      reason: 'Policy allows action'
+      reason: '策略允许此动作'
     });
     expect(policy.evaluate({ risk: 'medium', wouldRequireApproval: false })).toEqual({
       allow: true,
       requiresApproval: false,
-      reason: 'Policy allows action'
+      reason: '策略允许此动作'
     });
   });
 
@@ -25,7 +25,7 @@ describe('policy-engine', () => {
       .toMatchObject({
         allow: false,
         requiresApproval: true,
-        reason: 'Approval required by policy before execution; action was not executed'
+        reason: '根据策略需要审批方可执行；动作未执行'
       });
   });
 

@@ -20,7 +20,7 @@ export function listToolSpecs(rpc: ContentRpcClient): ToolSpec<unknown, unknown>
     .sort(([left], [right]) => left.localeCompare(right))
     .flatMap(([, module]) => Object.values(module))
     .map((candidate) => resolveToolSpec(candidate, rpc))
-    .filter((tool): tool is ToolSpec<unknown, unknown> => Boolean(tool));
+    .filter((tool): tool is ToolSpec<unknown, unknown> => tool != null);
 }
 
 function resolveToolSpec(

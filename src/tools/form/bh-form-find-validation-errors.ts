@@ -5,6 +5,7 @@ import { formFindValidationErrorsPayloadSchema } from '../../shared/schemas/stru
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import type { ToolSpec } from '../core/tool-spec';
+import { toolMeta } from '../core/tool-meta';
 import { isToolResult, loadFormToolData, validationErrorFields } from './form-tool-data';
 
 const argsSchema = z.object({});
@@ -22,12 +23,7 @@ export function bhFormFindValidationErrors(
   return {
     name: 'bh_form_find_validation_errors',
     // 找出浏览器校验失败或 aria-invalid 的字段，只用于 Form 模式诊断。
-    title: 'Find Validation Errors',
-    description: 'Finds fields with validation errors',
-    ui: {
-      titleKey: 'tool.title.bh_form_find_validation_errors',
-      descriptionKey: 'tool.description.bh_form_find_validation_errors',
-    },
+    ...toolMeta('Find Validation Errors', 'Finds fields with validation errors', 'tool.title.bh_form_find_validation_errors', 'tool.description.bh_form_find_validation_errors'),
     modes: ['form'],
     risk: 'safe',
     argsSchema,

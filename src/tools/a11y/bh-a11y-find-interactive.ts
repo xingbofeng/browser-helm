@@ -11,6 +11,7 @@ import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-res
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import { t } from '../../i18n/t';
 import type { Locale } from '../../i18n/types';
+import { toolMeta } from '../core/tool-meta';
 import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({});
@@ -26,16 +27,11 @@ export function bhA11yFindInteractive(
   return {
     name: 'bh_a11y_find_interactive',
     // 查找当前页面可交互元素。
-    title: 'Find Interactive Elements',
-    description: 'Returns read-only interactive elements with refs and state',
+    ...toolMeta('Find Interactive Elements', 'Returns read-only interactive elements with refs and state', 'tool.title.bh_a11y_find_interactive', 'tool.description.bh_a11y_find_interactive'),
     modes: ['debug', 'form'],
     risk: 'safe',
     argsSchema,
     resultSchema: toolResultSchema,
-    ui: {
-      titleKey: 'tool.title.bh_a11y_find_interactive',
-      descriptionKey: 'tool.description.bh_a11y_find_interactive',
-    },
     async execute(_args, ctx) {
       const locale: Locale = ctx.locale ?? 'zh';
       const response = await rpc.request({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });

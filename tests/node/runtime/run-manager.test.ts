@@ -193,7 +193,7 @@ describe('RunManager', () => {
     await waitForSnapshot(manager, started.runId, 'observed');
     const result = await manager.executeTool({
       runId: started.runId,
-      tool: TOOL_NAMES.IFRAME_CLICK,
+      tool: 'bh_iframe_click',
       args: {
         refId: 'frame_7:ref_200'
       }
@@ -208,13 +208,13 @@ describe('RunManager', () => {
     expect(manager.getSnapshot(started.runId)).toMatchObject({
       status: 'waiting_for_approval',
       toolResult: {
-        tool: TOOL_NAMES.IFRAME_CLICK,
+        tool: 'bh_iframe_click',
         ok: false,
         code: ERROR_CODES.APPROVAL_REQUIRED,
         requiresApproval: true
       },
       pendingApproval: {
-        tool: TOOL_NAMES.IFRAME_CLICK,
+        tool: 'bh_iframe_click',
         risk: 'high'
       }
     });
@@ -228,7 +228,7 @@ describe('RunManager', () => {
       trace.some(
         (event) =>
           event.type === TRACE_EVENT_NAMES.TOOL_STARTED &&
-          payloadRecord(event.payload).tool === TOOL_NAMES.IFRAME_CLICK
+          payloadRecord(event.payload).tool === 'bh_iframe_click'
       )
     ).toBe(false);
   });
@@ -408,7 +408,7 @@ describe('RunManager', () => {
         if (message.type === CONTENT_RPC_MESSAGES.PAGE_OBSERVE) {
           return observationResponse();
         }
-        if (message.type === CONTENT_RPC_MESSAGES.IFRAME_CLICK) {
+        if (message.type === 'BH_IFRAME_CLICK') {
           clicked = true;
         }
         return {
@@ -421,7 +421,7 @@ describe('RunManager', () => {
             visible: true,
             disabled: false
           },
-          changedPage: message.type === CONTENT_RPC_MESSAGES.IFRAME_CLICK
+          changedPage: message.type === 'BH_IFRAME_CLICK'
         };
       }),
       settingsStore: providerSettings(),
@@ -432,7 +432,7 @@ describe('RunManager', () => {
     await waitForSnapshot(manager, started.runId, 'observed');
     const approvalRequired = await manager.executeTool({
       runId: started.runId,
-      tool: TOOL_NAMES.IFRAME_CLICK,
+      tool: 'bh_iframe_click',
       args: {
         refId: 'frame_7:ref_201'
       }
@@ -453,7 +453,7 @@ describe('RunManager', () => {
     expect(manager.getSnapshot(started.runId)).toMatchObject({
       status: 'failed',
       toolResult: {
-        tool: TOOL_NAMES.IFRAME_CLICK,
+        tool: 'bh_iframe_click',
         ok: false,
         code: ERROR_CODES.USER_DENIED_APPROVAL,
         changedPage: false,
@@ -498,7 +498,7 @@ describe('RunManager', () => {
     await waitForSnapshot(manager, started.runId, 'observed');
     await manager.executeTool({
       runId: started.runId,
-      tool: TOOL_NAMES.IFRAME_TYPE,
+      tool: 'bh_iframe_type',
       args: {
         refId: 'frame_7:ref_202',
         text: 'super-secret',
@@ -3450,7 +3450,7 @@ describe('RunManager', () => {
         if (message.type === CONTENT_RPC_MESSAGES.PAGE_OBSERVE) {
           return observationResponse();
         }
-        if (message.type === CONTENT_RPC_MESSAGES.IFRAME_CLICK) {
+        if (message.type === 'BH_IFRAME_CLICK') {
           clicked = true;
         }
         return {
@@ -3471,7 +3471,7 @@ describe('RunManager', () => {
     await waitForSnapshot(manager, started.runId, 'observed');
     await manager.executeTool({
       runId: started.runId,
-      tool: TOOL_NAMES.IFRAME_CLICK,
+      tool: 'bh_iframe_click',
       args: {
         refId: 'frame_7:ref_201'
       }
@@ -3493,7 +3493,7 @@ describe('RunManager', () => {
       status: 'observed',
       pendingApproval: undefined,
       toolResult: {
-        tool: TOOL_NAMES.IFRAME_CLICK,
+        tool: 'bh_iframe_click',
         ok: true,
         code: ERROR_CODES.OK,
         changedPage: false,
@@ -3815,7 +3815,7 @@ describe('RunManager', () => {
     const cancelled = await manager.cancelRun(started.runId);
     const result = await manager.executeTool({
       runId: started.runId,
-      tool: TOOL_NAMES.IFRAME_CLICK,
+      tool: 'bh_iframe_click',
       args: {
         refId: 'frame_7:ref_200'
       }

@@ -28,6 +28,12 @@ export type ToolPromptContract = {
   modes: ToolMode[];
   risk: ToolRisk;
   argsSchema: unknown;
+  /** Whether the tool is read-only (does not mutate page state). */
+  readOnly: boolean;
+  /** Whether the tool always requires user approval before execution. */
+  requiresApproval: boolean;
+  /** How tool results should be presented in the model context. */
+  contextVisibility: 'summary' | 'hidden' | 'full';
 };
 
 const ACT_MODE_SHARED_TOOL_NAMES = new Set<string>([TOOL_NAMES.PAGE_OBSERVE]);
@@ -48,7 +54,10 @@ export class ToolRouter {
       description: tool.description,
       modes: tool.modes,
       risk: tool.risk,
-      argsSchema: z.toJSONSchema(tool.argsSchema)
+      argsSchema: z.toJSONSchema(tool.argsSchema),
+      readOnly: tool.readOnly ?? false,
+      requiresApproval: tool.requiresApproval ?? (tool.risk === 'high'),
+      contextVisibility: tool.contextVisibility ?? 'summary'
     }));
   }
 

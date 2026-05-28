@@ -7,6 +7,8 @@ import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-res
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import { t } from '../../i18n/t';
 import type { Locale } from '../../i18n/types';
+
+import { toolMeta } from '../core/tool-meta';
 import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({});
@@ -22,16 +24,11 @@ export function bhA11ySnapshot(
   return {
     name: 'bh_a11y_snapshot',
     // 读取当前页面 a11y 快照。
-    title: 'A11y Snapshot',
-    description: 'Returns an accessibility-like snapshot with stable refs',
+    ...toolMeta('A11y Snapshot', 'Returns an accessibility-like snapshot with stable refs', 'tool.title.bh_a11y_snapshot', 'tool.description.bh_a11y_snapshot'),
     modes: ['ask', 'debug', 'form'],
     risk: 'safe',
     argsSchema,
     resultSchema: toolResultSchema,
-    ui: {
-      titleKey: 'tool.title.bh_a11y_snapshot',
-      descriptionKey: 'tool.description.bh_a11y_snapshot',
-    },
     async execute(_args, ctx) {
       const locale: Locale = ctx.locale ?? 'zh';
       const response = await rpc.request({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });

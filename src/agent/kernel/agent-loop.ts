@@ -13,6 +13,7 @@ import type { ApprovalRequest } from '../../shared/schemas/approval.schema';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { TRACE_EVENT_NAMES } from '../../shared/constants/event-names';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
+import { tZh } from '../../i18n/t';
 import { resolveRunMode } from '../modes/mode-system';
 import { selectToolsForRun } from '../modes/tool-selector';
 import { PolicyEngine } from '../policy/policy-engine';
@@ -941,7 +942,7 @@ export class AgentLoop {
       startedAt: Date.now(),
       controller,
       code: ERROR_CODES.MAX_STEPS_EXCEEDED,
-      message: 'Run exceeded maxSteps limit'
+      message: tZh('agent.error.maxStepsExceeded')
     });
   }
 

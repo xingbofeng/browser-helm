@@ -75,14 +75,22 @@
 | Viewport scroll context | v1.0.2 | `src/tools/viewport`, `src/page/observe` | 统一滚动 top page / iframe，不单独新增 iframe scroll |
 | AgentLoop user task path | v1.0.2 | `src/background/runtime`, `src/agent/kernel` | 用户任务进入真实 tool-calling loop，而不是只基于 snapshot provider answer |
 | Assisted form fill | v1.1 | `src/tools/form`, `src/page/dom` | fill/verify/submit approval |
+| AgentLoop security hardening | v1.1.2 | `src/agent/prompts`, `src/agent/context`, `src/runtime/approval`, `src/i18n` | Tools Contract、KV-cache stable prompt、ContextPolicy、stale approval、parse repair、locale bootstrap、非表单 high-risk action 收口 |
+| Public release readiness | v1.1.3 | `.github/workflows`, `scripts`, `docs`, `package.json` | release、tag、checksum、coverage/security gates、README 隐私声明、工具文档一致性 |
 | Memory | v1.2 | `src/memory`, `src/storage/dexie` | scratch/domain/workflow/preference |
 | 旧会话压缩 | v1.2 | `src/agent/context`, `src/memory/session-summary` | trace -> summary |
 | Step/Run summary | v1.2 | `src/agent/context`, `src/storage/trace` | step/run/session summary |
 | Workflow replay | v1.2 | `src/tools/workflow`, `src/memory/workflow` | replay preview + approval |
 | Plan to workflow memory | v1.2 | `src/memory/workflow` | 成功 plan 沉淀成 reusable workflow |
+| Per-domain permission seed | v1.2 | `src/runtime/capabilities`, `src/agent/policy`, `src/memory/workflow` | memory/workflow/replay 按 domain/origin 约束 |
+| MV3 session persistence | v1.2 | `src/storage`, `src/runtime/approval`, `src/background/runtime` | pending approval/action、run generation、session audit 可恢复或安全失效 |
+| Goal / SuccessCriteria completion | v1.2 | `src/agent/goal`, `src/agent/context`, `src/memory/session-summary` | 与 StepSummary/RunSummary/Workflow draft 打通 |
+| DevTools/CDP deep debug | v1.3 | `src/background/debugger`, `src/tools/cdp`, `src/ui/components` | 完整 request/response/performance/event inspector，page-health hook opt-in fallback |
 | Trace replay | v1.2+ | `src/eval`, `src/storage/trace` | replay model output/tool result |
-| Eval | v1.3+ | `src/eval` | browser-agent 系统评测 |
-| Prompt injection eval | v1.3+ | `src/eval/security` | malicious page content cases |
+| RuntimeStrategy / full Mode System hardening | v1.7 | `src/agent/strategy`, `src/tools/core` | 完整 ToolSelector、mode policy、completion hints |
+| Full i18n hardening | v1.7 | `src/i18n`, `src/ui`, `src/tools/core` | tool summary/error/debug 用户文案本地化 |
+| Eval | v2.0 | `src/eval` | browser-agent 系统评测 |
+| Prompt injection eval | v2.0 | `src/eval/security` | malicious page content cases |
 | Skill | v1.3+ | `src/skills` | 本地 skill registry |
 | MCP | v1.3+ | `src/mcp` | 先 BrowserHelm as MCP server |
 | Tool sandboxing | v1.3+ | `src/runtime/sandbox` | skill/MCP/execute_js before enablement |

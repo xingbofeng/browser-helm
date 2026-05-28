@@ -5,6 +5,7 @@ import { formInspectPayloadSchema } from '../../shared/schemas/structured-page-d
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import type { ToolSpec } from '../core/tool-spec';
+import { toolMeta } from '../core/tool-meta';
 import { isToolResult, loadFormToolData } from './form-tool-data';
 
 const argsSchema = z.object({
@@ -24,12 +25,7 @@ export function bhFormInspect(
   return {
     name: 'bh_form_inspect',
     // 检查当前表单字段和 submit 摘要，不执行填写或提交。
-    title: 'Inspect Form',
-    description: 'Inspects form fields and submit state',
-    ui: {
-      titleKey: 'tool.title.bh_form_inspect',
-      descriptionKey: 'tool.description.bh_form_inspect',
-    },
+    ...toolMeta('Inspect Form', 'Inspects form fields and submit state', 'tool.title.bh_form_inspect', 'tool.description.bh_form_inspect'),
     modes: ['debug', 'form'],
     risk: 'safe',
     argsSchema,

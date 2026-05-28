@@ -5,6 +5,7 @@ import { formFindMissingRequiredPayloadSchema } from '../../shared/schemas/struc
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import type { ToolSpec } from '../core/tool-spec';
+import { toolMeta } from '../core/tool-meta';
 import { isToolResult, loadFormToolData, missingRequiredFields } from './form-tool-data';
 
 const argsSchema = z.object({});
@@ -21,12 +22,7 @@ export function bhFormFindMissingRequired(
   return {
     name: 'bh_form_find_missing_required',
     // 找出 required 但当前值为空的字段，只用于 Form 模式诊断。
-    title: 'Find Missing Required Fields',
-    description: 'Finds required fields with empty previews',
-    ui: {
-      titleKey: 'tool.title.bh_form_find_missing_required',
-      descriptionKey: 'tool.description.bh_form_find_missing_required',
-    },
+    ...toolMeta('Find Missing Required Fields', 'Finds required fields with empty previews', 'tool.title.bh_form_find_missing_required', 'tool.description.bh_form_find_missing_required'),
     modes: ['form'],
     risk: 'safe',
     argsSchema,

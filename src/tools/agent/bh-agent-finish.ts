@@ -4,6 +4,8 @@ import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { toolResultSchema } from '../../shared/schemas/tool-result.schema';
 import type { ToolSpec } from '../core/tool-spec';
 
+import { toolMeta } from '../core/tool-meta';
+
 const argsSchema = z.object({
   message: z.string().min(1)
 });
@@ -19,16 +21,11 @@ export const bhAgentFinish: ToolSpec<
 > = {
   name: 'bh_agent_finish',
   // 以最终摘要完成当前运行。
-  title: 'Agent Finish',
-  description: 'Completes current run with final summary',
+  ...toolMeta('Agent Finish', 'Completes current run with final summary', 'tool.title.bh_agent_finish', 'tool.description.bh_agent_finish'),
   modes: ['internal'],
   risk: 'safe',
   argsSchema,
   resultSchema: toolResultSchema,
-  ui: {
-    titleKey: 'tool.title.bh_agent_finish',
-    descriptionKey: 'tool.description.bh_agent_finish',
-  },
   execute(args) {
     return Promise.resolve({
       ok: true,

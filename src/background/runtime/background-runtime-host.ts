@@ -5,7 +5,23 @@ import {
 } from '../../runtime/runtime-messages';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { RUNTIME_MESSAGES } from '../../shared/constants/event-names';
+import { tZh } from '../../i18n/t';
 import { RunManager } from './run-manager';
+
+export type RuntimeSenderContext = {
+  senderId?: string | undefined;
+  senderUrl?: string | undefined;
+  senderOrigin?: string | undefined;
+  isExtensionPage: boolean;
+  isContentScript: boolean;
+};
+
+/** Message types that content scripts are NOT allowed to invoke. */
+const CONTENT_SCRIPT_BLOCKED_MESSAGES = new Set([
+  RUNTIME_MESSAGES.DECIDE_APPROVAL,
+  RUNTIME_MESSAGES.TEST_PROVIDER_CONNECTION,
+  RUNTIME_MESSAGES.EXECUTE_TOOL
+]);
 
 type RuntimeRunManager = Pick<
   RunManager,
@@ -23,13 +39,22 @@ type RuntimeRunManager = Pick<
 export class BackgroundRuntimeHost {
   constructor(private readonly runManager: RuntimeRunManager = new RunManager()) {}
 
-  async handleMessage(message: unknown): Promise<RuntimeResponse> {
+  async handleMessage(message: unknown, sender?: RuntimeSenderContext): Promise<RuntimeResponse> {
     const parsed = runtimeRequestSchema.safeParse(message);
     if (!parsed.success) {
       return {
         ok: false,
         code: ERROR_CODES.RUNTIME_MESSAGE_INVALID,
-        message: 'Runtime message invalid'
+        message: tZh('runtime.error.messageInvalid')
+      };
+    }
+
+    // Content scripts cannot invoke sensitive runtime operations.
+    if (sender?.isContentScript && (CONTENT_SCRIPT_BLOCKED_MESSAGES as Set<string>).has(parsed.data.type)) {
+      return {
+        ok: false,
+        code: ERROR_CODES.RUNTIME_MESSAGE_INVALID,
+        message: tZh('runtime.error.messageInvalid')
       };
     }
 

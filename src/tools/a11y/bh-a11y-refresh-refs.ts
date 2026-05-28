@@ -7,6 +7,8 @@ import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-res
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import { t } from '../../i18n/t';
 import type { Locale } from '../../i18n/types';
+
+import { toolMeta } from '../core/tool-meta';
 import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({});
@@ -22,16 +24,11 @@ export function bhA11yRefreshRefs(
   return {
     name: 'bh_a11y_refresh_refs',
     // 刷新当前页面 stable ref 映射。
-    title: 'Refresh Refs',
-    description: 'Refreshes the current page ref map',
+    ...toolMeta('Refresh Refs', 'Refreshes the current page ref map', 'tool.title.bh_a11y_refresh_refs', 'tool.description.bh_a11y_refresh_refs'),
     modes: ['ask', 'debug', 'form'],
     risk: 'safe',
     argsSchema,
     resultSchema: toolResultSchema,
-    ui: {
-      titleKey: 'tool.title.bh_a11y_refresh_refs',
-      descriptionKey: 'tool.description.bh_a11y_refresh_refs',
-    },
     async execute(_args, ctx) {
       const locale: Locale = ctx.locale ?? 'zh';
       const response = await rpc.request({ type: CONTENT_RPC_MESSAGES.A11Y_REFRESH_REFS });

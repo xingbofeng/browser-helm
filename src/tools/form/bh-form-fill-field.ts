@@ -5,6 +5,7 @@ import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
+import { toolMeta } from '../core/tool-meta';
 import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({
@@ -31,12 +32,7 @@ export function bhFormFillField(
   return {
     name: TOOL_NAMES.FORM_FILL_FIELD,
     // 填写单个表单字段。
-    title: 'Fill Single Field',
-    description: 'Fills a single form field with guard checks and event dispatch.',
-    ui: {
-      titleKey: 'tool.title.bh_form_fill_field',
-      descriptionKey: 'tool.description.bh_form_fill_field',
-    },
+    ...toolMeta('Fill Single Field', 'Fills a single form field with guard checks and event dispatch.', 'tool.title.bh_form_fill_field', 'tool.description.bh_form_fill_field'),
     modes: ['form'],
     risk: 'medium',
     argsSchema,

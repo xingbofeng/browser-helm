@@ -5,6 +5,7 @@ import { formListPayloadSchema } from '../../shared/schemas/structured-page-data
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import type { ToolSpec } from '../core/tool-spec';
+import { toolMeta } from '../core/tool-meta';
 import { isToolResult, loadFormToolData } from './form-tool-data';
 
 const argsSchema = z.object({});
@@ -22,12 +23,7 @@ export function bhFormList(
   return {
     name: 'bh_form_list',
     // 列出当前页面表单概览，供 Debug/Form 模式快速判断字段数量和 submit 状态。
-    title: 'List Forms',
-    description: 'Lists detected forms and field counts',
-    ui: {
-      titleKey: 'tool.title.bh_form_list',
-      descriptionKey: 'tool.description.bh_form_list',
-    },
+    ...toolMeta('List Forms', 'Lists detected forms and field counts', 'tool.title.bh_form_list', 'tool.description.bh_form_list'),
     modes: ['debug', 'form'],
     risk: 'safe',
     argsSchema,

@@ -141,7 +141,7 @@ export function fillSingleField(
       fieldRefId: target.fieldRefId,
       type: 'unknown',
       status: 'failed',
-      error: 'Ref 已失效',
+      error: t('page.formFill.error.refStale', locale),
     };
   }
 
@@ -151,7 +151,7 @@ export function fillSingleField(
       fieldRefId: target.fieldRefId,
       type: 'unknown',
       status: 'failed',
-      error: 'Ref 对应的元素不是 HTMLElement',
+      error: t('page.formFill.error.notHTMLElement', locale),
     };
   }
 
@@ -340,6 +340,7 @@ export function verifyForm(
   const fieldResults: FieldVerifyResult[] = [];
   const missingRequired: FieldVerifyResult[] = [];
   const invalidFields: FieldVerifyResult[] = [];
+  const formIdentity = readVerifyFormIdentity(document, fieldMap, submitRefId);
 
   for (const [refId, el] of fieldMap) {
     const label = resolveFieldLabel(el, locale);
@@ -393,7 +394,7 @@ export function verifyForm(
       const btn = resolved as HTMLButtonElement | HTMLInputElement;
       submitAvailable = 'disabled' in btn ? !btn.disabled : true;
       if (!submitAvailable) {
-        disabledReason = { kind: 'confirmed', message: '提交按钮已禁用' };
+        disabledReason = { kind: 'confirmed', message: t('page.formFill.submitDisabled', locale) };
       }
     }
   } else {
@@ -403,7 +404,7 @@ export function verifyForm(
     if (btn && isVisibleElement(btn)) {
       submitAvailable = !(btn instanceof HTMLButtonElement && btn.disabled);
       if (!submitAvailable) {
-        disabledReason = { kind: 'confirmed', message: '提交按钮已禁用' };
+        disabledReason = { kind: 'confirmed', message: t('page.formFill.submitDisabled', locale) };
       }
     }
   }
@@ -413,6 +414,8 @@ export function verifyForm(
 
   return {
     status,
+    formAction: formIdentity?.action,
+    formMethod: formIdentity?.method,
     allValid,
     missingRequired,
     invalidFields,
@@ -421,6 +424,36 @@ export function verifyForm(
     visibleErrorText: visibleErrors,
     submitAvailable,
     warnings: [],
+  };
+}
+
+function readVerifyFormIdentity(
+  document: Document,
+  fieldMap: Map<string, HTMLElement>,
+  submitRefId?: string
+): { action?: string | undefined; method?: string | undefined } | undefined {
+  const candidates: HTMLElement[] = [];
+  const submit = submitRefId ? fieldMap.get(submitRefId) : undefined;
+  if (submit) {
+    candidates.push(submit);
+  }
+  for (const el of fieldMap.values()) {
+    candidates.push(el);
+  }
+
+  const form = candidates
+    .map((el) => el.closest('form'))
+    .find((el): el is HTMLFormElement => el instanceof HTMLFormElement)
+    ?? document.querySelector<HTMLFormElement>('form');
+  if (!form) {
+    return undefined;
+  }
+
+  const action = form.getAttribute('action')?.trim() || form.action || undefined;
+  const method = (form.getAttribute('method')?.trim() || form.method || 'get').toLowerCase();
+  return {
+    action,
+    method
   };
 }
 
@@ -504,7 +537,8 @@ const SUCCESS_PATTERNS =
 
 export function observeSubmitResult(
   document: Document,
-  previousUrl: string
+  previousUrl: string,
+  locale: Locale = 'zh'
 ): SubmitResult {
   const currentUrl = document.location.href;
   const urlChanged = currentUrl !== previousUrl;
@@ -587,20 +621,20 @@ export function observeSubmitResult(
 
   if (urlChanged && visibleErrors.length === 0) {
     outcome = 'success';
-    summary = '提交成功，页面已跳转';
+    summary = t('page.formFill.submitResult.redirected', locale);
   } else if (urlChanged && visibleErrors.length > 0) {
     outcome = 'unknown';
-    summary = '提交后跳转但目标页疑似有错误';
+    summary = t('page.formFill.submitResult.redirectedWithErrors', locale);
   } else if (!urlChanged && visibleErrors.length > 0) {
     outcome = 'failure';
     summary = `提交失败: ${visibleErrors[0]}`;
   } else if (!urlChanged && evidence.formReset) {
     outcome = 'success';
-    summary = '提交成功，表单已重置';
+    summary = t('page.formFill.submitResult.formReset', locale);
   } else {
     outcome = 'unknown';
-    summary = '提交后页面无变化，无法判定结果';
-    evidence.currentFormErrors = ['无法确定提交结果'];
+    summary = t('page.formFill.submitResult.noChange', locale);
+    evidence.currentFormErrors = [t('page.formFill.submitResult.unknown', locale)];
   }
 
   return { outcome, evidence, summary };

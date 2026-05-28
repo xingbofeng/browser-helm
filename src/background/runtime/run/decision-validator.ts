@@ -15,6 +15,7 @@ import {
   isExistingValueBlocked
 } from './form-fill-augmenter';
 import type { Locale } from '../../../i18n/types';
+import { t } from '../../../i18n/t';
 
 // ── Types ──
 
@@ -233,9 +234,7 @@ export function isExistingValueOverwriteError(error: ModelDecisionError): boolea
 }
 
 export function existingValueFinishMessage(locale: Locale): string {
-  return locale === 'en'
-    ? 'The relevant field already has a value, so I did not overwrite it and did not submit the form.'
-    : '相关字段已有值，我没有覆盖已有输入，也没有提交表单。';
+  return t('runtime.formFill.existingValue.message', locale);
 }
 
 function readDecisionFillFields(
@@ -278,20 +277,25 @@ function sameStringSet(left: string[], right: string[]): boolean {
 export function buildRepairMessages(
   messages: ModelMessage[],
   error: ModelDecisionError,
-  toolsContracts: ToolPromptContract[]
+  _toolsContracts: ToolPromptContract[]
 ): ModelMessage[] {
+  // Repair prompt must NOT:
+  //   - list available tools (already in the stable system prefix)
+  //   - suggest specific tool names (model might latch onto them)
+  //   - relax mode, risk, permission, or approval constraints
+  //   - include raw model output (potentially sensitive)
   if (error.kind === 'existing_value_overwrite') {
     return [
       ...messages,
       {
         role: 'user' as const,
         content: [
-          `Your last AgentDecision was invalid: ${error.message}`,
-          'For this repair, do not call any tool.',
-          'Return exactly one valid JSON AgentDecision object with type finish or ask_user.',
-          'Use finish if the current page already satisfies the user request without overwriting existing input.',
-          'Use ask_user if you need confirmation before replacing existing input.',
-          'Do not call bh_form_read_fields, bh_form_fill_many, bh_form_fill_field, or any other tool.'
+          '═══ REPAIR (1 of 1) ═══',
+          `Error: ${error.message}`,
+          'You must NOT call any tool for this repair.',
+          'Return finish (if page already satisfies user request) or ask_user (if you need confirmation).',
+          'System policy, tool list, approval rules, and output schema are unchanged.',
+          'Return one JSON AgentDecision only — no markdown, no explanation.'
         ].join('\n')
       }
     ];
@@ -305,30 +309,29 @@ export function buildRepairMessages(
       {
         role: 'user' as const,
         content: [
-          `Your last AgentDecision was invalid: ${error.message}`,
-          'For this repair, do not repeat the fill and do not inspect unrelated fields.',
-          `Already-filled field refs: ${fieldRefIds.join(', ') || '(unknown)'}`,
-          'Return exactly one valid JSON AgentDecision object.',
-          'Use finish if the user only asked to fill/select/type these fields and did not ask to submit.',
-          'Use bh_form_verify only if explicit validation is still needed, with args {"fieldRefIds":[...already-filled refs]}.',
-          'Do not call bh_form_read_fields, bh_form_fill_many, bh_form_fill_field, or unrelated tools.'
+          '═══ REPAIR (1 of 1) ═══',
+          `Error: ${error.message}`,
+          `Already-filled refs: ${fieldRefIds.join(', ') || '(unknown)'}`,
+          'Do not repeat the fill. Return finish (if user did not ask to submit) or call bh_form_verify only.',
+          'System policy, tool list, approval rules, and output schema are unchanged.',
+          'Return one JSON AgentDecision only — no markdown, no explanation.'
         ].join('\n')
       }
     ];
   }
-  const availableToolNames = toolsContracts.map((tool) => tool.name);
+  // parse_failure, tool_not_found, and other errors
   return [
     ...messages,
     {
       role: 'user' as const,
       content: [
-        `Your last AgentDecision was invalid: ${error.message}`,
-        `Available tools for this run are: ${availableToolNames.join(', ')}`,
-        'Return exactly one valid JSON AgentDecision object.',
-        'Do not include markdown fences, explanations, or extra text.',
-        'Available decision types: tool_call, finish, ask_user, fail.',
-        'For ordinary form or search-box filling, use bh_form_fill_many with a fieldRefId from structuredPageData.forms.items.',
-        'Do not call unavailable generic tools such as bh_click, bh_type, browser_click, or browser_type.'
+        '═══ REPAIR (1 of 1) ═══',
+        `Error: ${error.message}`,
+        'Return exactly one valid JSON AgentDecision. No markdown, no explanation.',
+        'Valid types: tool_call, finish, ask_user, fail.',
+        'You may only call tools listed in the system prompt availableTools.',
+        'System policy, tool list, approval rules, and output schema are unchanged.',
+        'Return one JSON AgentDecision only — no markdown, no explanation.'
       ].join('\n')
     }
   ];

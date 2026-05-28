@@ -153,7 +153,7 @@ export class PageObservationFlow {
 
     const click = await sidePanel.executeTool({
       runId: snapshot.runId,
-      tool: TOOL_NAMES.IFRAME_CLICK,
+      tool: 'bh_iframe_click',
       args: {
         refId: `frame_${detailsRef.frameId}:${detailsRef.innerRefId}`
       }
@@ -170,7 +170,7 @@ export class PageObservationFlow {
 
     const type = await sidePanel.executeTool({
       runId: snapshot.runId,
-      tool: TOOL_NAMES.IFRAME_TYPE,
+      tool: 'bh_iframe_type',
       args: {
         refId: `frame_${emailRef.frameId}:${emailRef.innerRefId}`,
         text: 'hello@example.com',
@@ -210,7 +210,7 @@ export class PageObservationFlow {
 
     const approvalRequired = await sidePanel.executeTool({
       runId: snapshot.runId,
-      tool: TOOL_NAMES.IFRAME_CLICK,
+      tool: 'bh_iframe_click',
       args: {
         refId: `frame_${deleteRef.frameId}:${deleteRef.innerRefId}`
       }
@@ -231,7 +231,7 @@ export class PageObservationFlow {
     expect(waiting).toMatchObject({
       status: 'waiting_for_approval',
       pendingApproval: {
-        tool: TOOL_NAMES.IFRAME_CLICK,
+        tool: 'bh_iframe_click',
         risk: 'high'
       }
     });

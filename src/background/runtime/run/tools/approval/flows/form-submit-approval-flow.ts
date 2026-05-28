@@ -9,6 +9,8 @@ import type { ToolApprovalFlow } from './tool-approval-flow';
 import type { ToolRouter } from '../../../../../../tools/core/tool-router';
 import type { RunMode } from '../../../../../../shared/schemas/tool.schema';
 import type { Locale } from '../../../../../../i18n/types';
+import { buildSnapshotDigestHash } from '../../../../../../shared/schemas/approval-snapshot-digest.schema';
+import type { FieldPresenceDigest, SubmitApprovalSnapshotDigest } from '../../../../../../shared/schemas/approval-snapshot-digest.schema';
 
 export class FormSubmitApprovalFlow implements ToolApprovalFlow {
   readonly handlesApprovedSideEffects = true;
@@ -91,6 +93,47 @@ export class FormSubmitApprovalFlow implements ToolApprovalFlow {
       return result;
     }
     const verifyResult = 'verifyResult' in verifyResponse ? verifyResponse.verifyResult : undefined;
+
+    // ── Stale digest check ──
+    // Compare the original approval snapshot digest with the current re-verify state.
+    // If fields have changed (presence, label, type), block the submit.
+    const originalDigest = readSnapshotDigest(pendingAction?.args);
+    if (originalDigest) {
+      const currentDigest = buildCurrentDigest(verifyResult, originalDigest);
+      if (currentDigest && currentDigest !== originalDigest.hash) {
+        const staleResult: ToolResult = {
+          ok: false,
+          code: ERROR_CODES.APPROVAL_CONTEXT_STALE,
+          summary: 'Page context has changed since approval was created. Please re-run the verification and submit again.',
+          changedPage: false,
+          requiresObserve: false,
+          error: {
+            message: 'Approval context stale: field state has changed',
+            detail: { originalHash: originalDigest.hash, currentHash: currentDigest }
+          }
+        };
+        this.deps.appendTrace(record, {
+          runId: input.runId,
+          type: TRACE_EVENT_NAMES.FORM_SUBMIT_RESULT,
+          payload: {
+            outcome: 'stale',
+            summary: staleResult.summary,
+            originalHash: originalDigest.hash,
+            currentHash: currentDigest
+          }
+        });
+        this.deps.setSnapshot(input.runId, {
+          ...this.deps.getSnapshot(input.runId),
+          status: 'error',
+          pendingApproval: undefined,
+          toolResult: snapshotToolResult(input.tool, staleResult),
+          trace: record.trace,
+          error: { code: staleResult.code, message: staleResult.summary }
+        });
+        return staleResult;
+      }
+    }
+
     if (
       verifyResult &&
       typeof verifyResult === 'object' &&
@@ -233,6 +276,73 @@ export class FormSubmitApprovalFlow implements ToolApprovalFlow {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// ── Stale digest helpers ──
+
+function readSnapshotDigest(args: unknown): SubmitApprovalSnapshotDigest | undefined {
+  if (!isRecord(args)) return undefined;
+  const data = args.snapshotDigest ?? (isRecord(args.data) ? args.data.snapshotDigest : undefined);
+  if (!isRecord(data)) return undefined;
+  const hash = data.hash;
+  const fieldRefIds = Array.isArray(data.fieldRefIds) ? data.fieldRefIds.filter((v): v is string => typeof v === 'string') : [];
+  const fieldDigests = Array.isArray(data.fieldDigests) ? data.fieldDigests.filter(isRecord) : [];
+  if (typeof hash !== 'string' || !fieldRefIds.length || !fieldDigests.length) return undefined;
+  return {
+    hash,
+    fieldRefIds,
+    fieldDigests: fieldDigests as FieldPresenceDigest[],
+    formRefId: typeof data.formRefId === 'string' ? data.formRefId : undefined,
+    submitTargetRefId: typeof data.submitTargetRefId === 'string' ? data.submitTargetRefId : undefined,
+    frameKey: typeof data.frameKey === 'string' ? data.frameKey : undefined,
+    formAction: typeof data.formAction === 'string' ? data.formAction : undefined,
+    formMethod: typeof data.formMethod === 'string' ? data.formMethod : undefined
+  };
+}
+
+function buildCurrentDigest(
+  verifyResult: unknown,
+  originalDigest: SubmitApprovalSnapshotDigest | undefined
+): string | undefined {
+  if (!isRecord(verifyResult)) return undefined;
+  const fields = Array.isArray(verifyResult.fields) ? verifyResult.fields.filter(isRecord) : [];
+  if (!fields.length) return undefined;
+  const digests: FieldPresenceDigest[] = fields.map((f) => ({
+    // eslint-disable-next-line @typescript-eslint/no-base-to-string -- guarded by typeof checks
+    refId: typeof f.fieldRefId === 'string' ? f.fieldRefId : String(f.fieldRefId ?? ''),
+    label: typeof f.label === 'string' ? f.label : undefined,
+    type: typeof f.type === 'string' ? f.type : undefined,
+    presence: f.status === 'filled' || f.filled === true || (typeof f.valuePreview === 'string' && f.valuePreview !== 'empty' && f.valuePreview !== '')
+      ? 'non-empty'
+      : f.status === 'checked' || f.valuePreview === 'checked'
+        ? 'checked'
+        : 'empty',
+    disabled: f.disabled === true,
+    readonly: f.readonly === true
+  }));
+  return buildSnapshotDigestHash({
+    fieldDigests: digests,
+    formRefId: originalDigest?.formRefId,
+    submitTargetRefId: originalDigest?.submitTargetRefId,
+    frameKey: originalDigest?.frameKey ? readCurrentFrameKey(digests) : undefined,
+    formAction: originalDigest?.formAction ? readOptionalString(verifyResult.formAction) : undefined,
+    formMethod: originalDigest?.formMethod ? readOptionalString(verifyResult.formMethod) : undefined
+  });
+}
+
+function readOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function readCurrentFrameKey(fields: FieldPresenceDigest[]): string | undefined {
+  const frameKeys = new Set<string>();
+  for (const field of fields) {
+    const match = /^frame_(\d+):/.exec(field.refId);
+    if (match?.[1]) {
+      frameKeys.add(`frame_${match[1]}`);
+    }
+  }
+  return frameKeys.size === 1 ? [...frameKeys][0] : undefined;
 }
 
 function readFieldRefIds(args: Record<string, unknown>): string[] {

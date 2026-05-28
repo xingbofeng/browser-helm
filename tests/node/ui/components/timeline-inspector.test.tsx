@@ -120,7 +120,7 @@ describe('timeline and inspector components', () => {
       </I18nProvider>
     );
 
-    expect(html).toContain('生成中');
+    expect(html).toContain('正在读取模型决策');
     expect(html).toContain('查看原始详情');
     expect(html).toContain('chunkCount');
     expect(html).toContain('2');

@@ -11,11 +11,11 @@ export const actionKindSchema = z.enum([
 ]);
 
 export const actionKindLabels = {
-  click: '点击 / Click',
-  type: '输入 / Type',
-  select: '选择 / Select',
-  submit: '提交 / Submit',
-  focus: '聚焦 / Focus'
+  click: 'click' as const,
+  type: 'type' as const,
+  select: 'select' as const,
+  submit: 'submit' as const,
+  focus: 'focus' as const,
 } as const satisfies Record<z.infer<typeof actionKindSchema>, string>;
 
 export const actionSourceSchema = z.enum(['agent', 'tool', 'runtime']);

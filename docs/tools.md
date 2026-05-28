@@ -1,6 +1,6 @@
 # BrowserHelm Tools
 
-BrowserHelm 的工具命名统一使用 `bh_` 前缀，避免和 Sarathi、WebBrain、BrowserBee、BrowserKing、onUI 等项目撞名。
+BrowserHelm 的工具协议统一使用 `bh_` 前缀。本文档只描述当前公开工具面和后续规划边界；已经移除或尚未实现的工具不进入当前工具清单，也不会写入 Agent prompt。
 
 ## 1. 命名规则
 
@@ -13,12 +13,12 @@ bh_<domain>_<verb>_<object>
 ```txt
 bh_page_observe
 bh_a11y_snapshot
-bh_element_click
+bh_element_inspect
 bh_form_verify
-bh_memory_lookup
+bh_form_submit_with_approval
 ```
 
-禁止早期使用这些容易撞名的通用名：
+禁止使用容易和其他浏览器 Agent 项目撞名的通用名：
 
 ```txt
 click
@@ -38,7 +38,9 @@ save_memory
 scratchpad_write
 ```
 
-## 2. v1.0 必须工具
+## 2. 当前公开工具面
+
+当前工具通过 `src/tools/index.ts` 自动发现并注册。只有注册表中的工具会进入 ToolRouter 和模型可见 tool contract。
 
 ### Agent control
 
@@ -48,7 +50,7 @@ bh_agent_fail
 bh_agent_ask_user
 ```
 
-### Page observation
+### Page observation / reading
 
 ```txt
 bh_page_observe
@@ -56,6 +58,16 @@ bh_page_read_visible_text
 bh_page_read_article
 bh_page_wait_until_stable
 ```
+
+### Frame / iframe read-only tools
+
+```txt
+bh_frame_list
+bh_iframe_list
+bh_iframe_read
+```
+
+说明：当前只暴露 iframe 只读读取能力。iframe 内点击、输入等 mutating action 不作为公开工具暴露给模型。
 
 ### A11y discovery
 
@@ -66,539 +78,96 @@ bh_a11y_resolve_ref
 bh_a11y_refresh_refs
 ```
 
-### Element inspection / low-risk actions
-
-```txt
-bh_element_inspect
-bh_element_get_computed_style
-bh_element_focus
-```
-
-### Navigation / viewport
-
-```txt
-bh_nav_open_url
-bh_nav_reload
-bh_nav_back
-bh_nav_forward
-```
-
-### Form tools
-
-```txt
-bh_form_list
-bh_form_inspect
-bh_form_read_fields
-bh_form_find_missing_required
-bh_form_find_validation_errors
-bh_form_find_disabled_submit_reason
-```
-
-### Debug tools
-
-```txt
-bh_debug_collect_page_health
-bh_debug_get_console_errors
-bh_debug_get_network_failures
-bh_debug_explain_error
-```
-
-### Policy tools / internal capabilities
-
-```txt
-bh_policy_mask_secrets
-```
-
-## 3. v1.1 扩展工具
-
-```txt
-bh_element_click
-bh_element_clear
-bh_element_type_text
-bh_element_set_value
-bh_element_press_key
-bh_viewport_scroll
-bh_viewport_scroll_to_element
-bh_form_fill_field
-bh_form_fill_many
-bh_form_verify
-bh_form_submit_with_approval
-bh_debug_get_console_logs
-bh_debug_get_network_summary
-bh_debug_inspect_selected_element
-bh_policy_classify_risk
-bh_policy_request_approval
-```
-
-## 4. v1.0.2 补齐边界
-
-v1.0.2 一次性补齐 v1.0 必须工具缺口，并提前纳入长页面 / iframe 读取闭环所需的 viewport 工具。用户任务必须进入真实 AgentLoop tool-calling 路径，不能只基于一次 snapshot provider answer。
-
-### v1.0.2 最终工具面
-
-#### Agent control
-
-```txt
-bh_agent_finish
-bh_agent_fail
-bh_agent_ask_user
-```
-
-#### Page observation / reading
-
-```txt
-bh_page_observe
-bh_page_read_visible_text
-bh_page_read_article
-bh_page_wait_until_stable
-```
-
-#### Iframe
-
-```txt
-bh_iframe_list
-bh_iframe_read
-```
-
-#### A11y discovery
-
-```txt
-bh_a11y_snapshot
-bh_a11y_find_interactive
-bh_a11y_resolve_ref
-bh_a11y_refresh_refs
-```
-
-#### Element inspection
-
-```txt
-bh_element_inspect
-bh_element_read_state
-bh_element_get_computed_style
-bh_element_focus
-```
-
-#### Element actions
-
-```txt
-bh_element_click
-bh_element_type_text
-```
-
-`bh_iframe_click` 和 `bh_iframe_type` 已删除，不保留兼容工具；iframe 内元素动作统一迁移到 `bh_element_click` 和 `bh_element_type_text`，由 stable ref / resolver 处理元素所在 iframe 上下文。
-
-#### Navigation
-
-```txt
-bh_nav_open_url
-bh_nav_reload
-bh_nav_back
-bh_nav_forward
-```
-
-#### Viewport
-
-```txt
-bh_viewport_get_info
-bh_viewport_scroll
-```
-
-`bh_viewport_scroll` 支持 `target: page | iframe`。滚动 iframe 不新增 `bh_iframe_scroll`；iframe 和顶层页面都属于 viewport scroll context。
-
-#### Form tools
-
-```txt
-bh_form_list
-bh_form_inspect
-bh_form_read_fields
-bh_form_find_missing_required
-bh_form_find_validation_errors
-bh_form_find_disabled_submit_reason
-```
-
-#### Debug tools
-
-```txt
-bh_debug_collect_page_health
-bh_debug_get_console_errors
-bh_debug_get_network_failures
-bh_debug_explain_error
-```
-
-#### Policy tools
-
-```txt
-bh_policy_mask_secrets
-```
-
-#### Action readiness
-
-```txt
-bh_action_check_readiness
-```
-
-### v1.0.2 风险标注
-
-| 工具 | 风险 | 是否改变页面 | 是否要求重新 observe/read |
-| --- | --- | --- | --- |
-| `bh_page_read_visible_text` | `safe` | 否 | 否 |
-| `bh_page_read_article` | `safe` | 否 | 否 |
-| `bh_page_wait_until_stable` | `safe` | 否 | 是 |
-| `bh_iframe_list` | `safe` | 否 | 否 |
-| `bh_iframe_read` | `safe` | 否 | 否 |
-| `bh_viewport_get_info` | `safe` | 否 | 否 |
-| `bh_viewport_scroll` | `low` | 是，改变视口位置 | 是 |
-| `bh_element_focus` | `low` | 是，改变焦点 | 是 |
-| `bh_element_click` | `high` | 是 | 是 |
-| `bh_element_type_text` | `high` | 是 | 是 |
-| `bh_nav_open_url` | `medium` | 是，改变页面位置 | 是 |
-| `bh_nav_reload` / `bh_nav_back` / `bh_nav_forward` | `low` | 是，改变页面位置 | 是 |
-| 其余 v1.0.2 只读诊断工具 | `safe` | 否 | 否 |
-
-## 5. 完整版工具清单
-
-### Agent control
-
-```txt
-bh_agent_finish
-bh_agent_fail
-bh_agent_ask_user
-bh_agent_pause
-bh_agent_resume
-bh_agent_cancel
-bh_agent_report_progress
-```
-
-### Page observation
-
-```txt
-bh_page_observe
-bh_page_summarize
-bh_page_read_visible_text
-bh_page_read_article
-bh_page_read_selection
-bh_page_read_metadata
-bh_page_detect_state
-bh_page_wait_until_stable
-bh_page_watch_mutations
-```
-
-### A11y / element discovery
-
-```txt
-bh_a11y_snapshot
-bh_a11y_focus_tree
-bh_a11y_find_by_role
-bh_a11y_find_by_name
-bh_a11y_find_interactive
-bh_a11y_resolve_ref
-bh_a11y_refresh_refs
-```
-
 ### Element inspection
 
 ```txt
 bh_element_inspect
-bh_element_describe
-bh_element_get_bounds
-bh_element_get_attributes
-bh_element_get_computed_style
-bh_element_get_accessible_name
-bh_element_get_label
-bh_element_get_value
-bh_element_get_state
-bh_element_find_by_text
-bh_element_find_by_selector
-bh_element_find_by_label
-bh_element_find_by_placeholder
+bh_element_read_state
 ```
 
-### Element actions
-
-```txt
-bh_element_click
-bh_element_double_click
-bh_element_right_click
-bh_element_hover
-bh_element_focus
-bh_element_blur
-bh_element_scroll_into_view
-bh_element_clear
-bh_element_type_text
-bh_element_set_value
-bh_element_press_key
-bh_element_select_option
-bh_element_toggle_checked
-bh_element_drag_to
-```
-
-### Navigation
-
-```txt
-bh_nav_open_url
-bh_nav_reload
-bh_nav_back
-bh_nav_forward
-bh_nav_wait_for_url
-bh_nav_wait_for_title
-bh_nav_wait_for_route_change
-bh_nav_detect_redirect
-```
+说明：当前 element 工具只做检查和状态读取，不执行点击、输入、清空、键盘等 mutating action。
 
 ### Viewport
 
 ```txt
 bh_viewport_get_info
 bh_viewport_scroll
-bh_viewport_scroll_to_top
-bh_viewport_scroll_to_bottom
-bh_viewport_scroll_to_element
-bh_viewport_resize
-bh_viewport_get_visible_region
 ```
 
-### Forms
+`bh_viewport_scroll` 会改变视口位置，但不改变页面业务数据。Ask 模式中它只作为观察辅助动作使用，执行后必须重新 observe/read。
+
+### Form diagnosis / assisted fill
 
 ```txt
 bh_form_list
 bh_form_inspect
 bh_form_read_fields
-bh_form_fill_field
-bh_form_fill_many
-bh_form_verify
 bh_form_find_missing_required
 bh_form_find_validation_errors
 bh_form_find_disabled_submit_reason
-bh_form_prepare_submit
+bh_form_infer_fill_plan
+bh_form_fill_field
+bh_form_fill_many
+bh_form_verify
 bh_form_submit_with_approval
-bh_form_reset
 ```
+
+表单填写工具必须满足显式值来源、字段状态、敏感字段和审批策略约束。表单提交永远通过 `bh_form_submit_with_approval` 创建审批请求，用户批准前不会真实提交。
 
 ### Debug
 
 ```txt
 bh_debug_collect_page_health
-bh_debug_get_console_errors
-bh_debug_get_console_logs
-bh_debug_get_runtime_exceptions
-bh_debug_get_network_failures
-bh_debug_get_network_summary
-bh_debug_explain_error
-bh_debug_inspect_selected_element
-bh_debug_detect_hydration_issue
-bh_debug_detect_broken_interaction
 ```
 
-### DevTools / CDP
+该工具读取浅层页面健康摘要。当前 page-health hook 默认注入页面主世界以捕获 console/network failure 摘要；它不采集 cookie、密码字段或用户输入。后续 v1.3 会收敛为 Debug mode opt-in，并优先使用 CDP deep debug 替代可替代场景。
+
+### Action readiness
 
 ```txt
-bh_cdp_attach
-bh_cdp_detach
-bh_cdp_get_targets
-bh_cdp_get_console_events
-bh_cdp_get_network_events
-bh_cdp_get_request_detail
-bh_cdp_get_response_body
-bh_cdp_get_performance_metrics
-bh_cdp_get_coverage
-bh_cdp_evaluate_runtime
-bh_cdp_get_event_listeners
-bh_cdp_capture_dom_snapshot
+bh_action_check_readiness
 ```
 
-### Storage / cookies
+该工具只读检查拟执行动作的目标、风险和 approval 预判，不修改页面。
 
-```txt
-bh_storage_read_local
-bh_storage_read_session
-bh_storage_read_indexeddb_summary
-bh_storage_read_cookies_summary
-bh_storage_clear_site_data_with_approval
-bh_storage_mask_sensitive_values
-```
+## 3. 风险标注
 
-### Network / fetch
+| 工具 | 风险 | 是否改变页面 | 是否要求重新 observe/read |
+| --- | --- | --- | --- |
+| `bh_page_observe` | `safe` | 否 | 否 |
+| `bh_page_read_visible_text` | `safe` | 否 | 否 |
+| `bh_page_read_article` | `safe` | 否 | 否 |
+| `bh_page_wait_until_stable` | `safe` | 否 | 是 |
+| `bh_frame_list` / `bh_iframe_list` / `bh_iframe_read` | `safe` 或 `low` | 否 | 否 |
+| `bh_a11y_*` | `safe` | 否 | 否 |
+| `bh_element_inspect` / `bh_element_read_state` | `safe` | 否 | 否 |
+| `bh_viewport_get_info` | `safe` | 否 | 否 |
+| `bh_viewport_scroll` | `low` | 是，仅改变视口位置 | 是 |
+| `bh_form_*` 诊断工具 | `safe` | 否 | 否 |
+| `bh_form_infer_fill_plan` | `low` | 否 | 否 |
+| `bh_form_fill_field` / `bh_form_fill_many` | `medium` | 是，修改表单字段 | 是 |
+| `bh_form_verify` | `low` | 否 | 否 |
+| `bh_form_submit_with_approval` | `high` | 否，创建审批请求 | 用户批准后真实提交并重新 observe |
+| `bh_debug_collect_page_health` | `safe` | 否 | 否 |
+| `bh_action_check_readiness` | `low` | 否 | 否 |
 
-```txt
-bh_net_fetch_url
-bh_net_fetch_text
-bh_net_fetch_json
-bh_net_check_link
-bh_net_probe_resource
-bh_net_blocked_reason
-bh_net_replay_request_with_approval
-```
+## 4. 后续规划边界
 
-### Vision
+### v1.2
 
-```txt
-bh_vision_capture_viewport
-bh_vision_capture_full_page
-bh_vision_capture_element
-bh_vision_describe_viewport
-bh_vision_detect_overlay
-bh_vision_detect_layout_issue
-bh_vision_compare_viewports
-bh_vision_locate_text
-bh_vision_locate_control
-```
+v1.2 聚焦持久化记忆、工作流 replay、MV3 生命周期恢复和上下文预算治理，不新增通用页面 mutating action 作为主目标。
 
-### Pointer
+### v1.3
 
-```txt
-bh_pointer_move
-bh_pointer_click_xy
-bh_pointer_double_click_xy
-bh_pointer_drag_xy
-bh_pointer_scroll_xy
-```
+v1.3 聚焦 DevTools/CDP deep debug。page-health hook 会变成 Debug mode opt-in fallback，并增加 URL/path/query/fragment 脱敏。
 
-### Tabs
+### v1.5 之后
 
-```txt
-bh_tab_list
-bh_tab_get_active
-bh_tab_open
-bh_tab_activate
-bh_tab_close
-bh_tab_duplicate
-bh_tab_reload
-bh_tab_group_summary
-```
+通用元素点击、输入、导航、键盘、选择、剪贴板、下载、文件上传等 action 只能在完整 ToolSelector、domain policy、approval resume flow、stale ref 校验和 E2E 覆盖齐备后引入。未实现前不得写入当前工具表或 prompt-visible contract。
 
-### Frames
+## 5. 维护要求
 
-```txt
-bh_iframe_list
-bh_iframe_read
-```
-
-iframe 只表达嵌入页面发现与文档读取边界。具体元素检查和动作使用 element 工具；页面或 iframe 滚动使用 viewport 工具。
-
-### Shadow DOM
-
-```txt
-bh_shadow_scan
-bh_shadow_read
-bh_shadow_find
-bh_shadow_click
-bh_shadow_type
-```
-
-### Files
-
-```txt
-bh_file_list_downloads
-bh_file_read_download
-bh_file_download_url
-bh_file_download_resource
-bh_file_download_batch
-bh_file_upload_with_approval
-bh_file_open_picker_with_approval
-bh_file_save_blob
-```
-
-### Documents / PDF
-
-```txt
-bh_doc_read_pdf
-bh_doc_extract_pdf_pages
-bh_doc_detect_scanned_pdf
-bh_doc_read_html_document
-bh_doc_extract_tables
-bh_doc_extract_links
-bh_doc_extract_headings
-```
-
-### Clipboard
-
-```txt
-bh_clipboard_read_with_approval
-bh_clipboard_write_with_approval
-bh_clipboard_copy_text
-bh_clipboard_paste_into_ref
-```
-
-### Memory
-
-```txt
-bh_memory_lookup
-bh_memory_save
-bh_memory_update
-bh_memory_delete
-bh_memory_list
-bh_memory_clear_domain
-bh_memory_clear_all
-bh_memory_explain_hit
-```
-
-### Scratchpad
-
-```txt
-bh_pad_read
-bh_pad_append
-bh_pad_replace
-bh_pad_clear
-bh_pad_compact
-```
-
-### Workflow replay
-
-```txt
-bh_flow_lookup
-bh_flow_preview
-bh_flow_run_with_approval
-bh_flow_step
-bh_flow_stop
-bh_flow_save
-bh_flow_update
-bh_flow_delete
-bh_flow_score
-```
-
-### Policy
-
-```txt
-bh_policy_check_action
-bh_policy_request_approval
-bh_policy_classify_risk
-bh_policy_mask_secrets
-bh_policy_explain_block
-```
-
-### Adapters
-
-```txt
-bh_adapter_detect_site
-bh_adapter_get_guidance
-bh_adapter_list_workflows
-bh_adapter_apply_locator
-bh_adapter_report_failure
-```
-
-### Trace / eval
-
-```txt
-bh_trace_start
-bh_trace_record_step
-bh_trace_mark_success
-bh_trace_mark_failure
-bh_trace_export
-bh_trace_replay
-bh_eval_run_case
-bh_eval_label_result
-```
-
-## 6. 动态裁剪规则
-
-不要把所有工具每轮都暴露给模型。按 mode 裁剪：
-
-```txt
-Ask mode：page/a11y/iframe/viewport read tools，以及低风险 scroll
-Act mode：page/a11y/element/nav/viewport/form tools
-Debug mode：debug + form + page/iframe/viewport read tools
-Form mode：form + page/iframe/element/viewport + policy tools
-Vision mode：vision + pointer tools
-Advanced mode：tabs/frame/shadow/file/doc/clipboard tools
-Memory mode：memory/pad/flow tools
-```
+- 新增工具必须同步维护 `src/tools/README.md`、README 工具表和必要测试。
+- 删除工具必须删除 ToolSpec 文件、`TOOL_NAMES` 常量、i18n 描述、公开文档和模型可见 contract。
+- 高风险或会修改页面状态的工具必须正确设置 `risk`，并走 approval policy。
+- 当前工具文档以实际 ToolRegistry 为准，不以历史 roadmap 或研究笔记为准。

@@ -8,6 +8,8 @@ import { t } from '../../i18n/t';
 import type { Locale } from '../../i18n/types';
 import type { ToolSpec } from '../core/tool-spec';
 
+import { toolMeta } from '../core/tool-meta';
+
 const argsSchema = z.object({
   refId: z.string().min(1)
 });
@@ -23,16 +25,11 @@ export function bhA11yResolveRef(
   return {
     name: 'bh_a11y_resolve_ref',
     // 解析 stable ref 对应的页面元素。
-    title: 'Resolve Ref',
-    description: 'Resolves a stable ref_id to the current page element summary',
+    ...toolMeta('Resolve Ref', 'Resolves a stable ref_id to the current page element summary', 'tool.title.bh_a11y_resolve_ref', 'tool.description.bh_a11y_resolve_ref'),
     modes: ['ask', 'debug', 'form'],
     risk: 'safe',
     argsSchema,
     resultSchema: toolResultSchema,
-    ui: {
-      titleKey: 'tool.title.bh_a11y_resolve_ref',
-      descriptionKey: 'tool.description.bh_a11y_resolve_ref',
-    },
     async execute(args, ctx) {
       const locale: Locale = ctx.locale ?? 'zh';
       const response = await rpc.request({

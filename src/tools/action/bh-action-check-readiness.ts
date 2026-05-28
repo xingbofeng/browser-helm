@@ -11,6 +11,7 @@ import {
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import { t } from '../../i18n/t';
 import type { Locale } from '../../i18n/types';
+import { toolMeta } from '../core/tool-meta';
 import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = actionIntentSchema;
@@ -26,16 +27,11 @@ export function bhActionCheckReadiness(
   return {
     name: 'bh_action_check_readiness',
     // 检查拟执行动作是否就绪。
-    title: 'Check Action Readiness',
-    description: 'Checks whether a proposed action is ready and whether it would require approval',
+    ...toolMeta('Check Action Readiness', 'Checks whether a proposed action is ready and whether it would require approval', 'tool.title.bh_action_check_readiness', 'tool.description.bh_action_check_readiness'),
     modes: ['debug', 'act'],
     risk: 'low',
     argsSchema,
     resultSchema: toolResultSchema,
-    ui: {
-      titleKey: 'tool.title.bh_action_check_readiness',
-      descriptionKey: 'tool.description.bh_action_check_readiness',
-    },
     async execute(args, ctx) {
       const locale: Locale = ctx.locale ?? 'zh';
       const response = await rpc.request({

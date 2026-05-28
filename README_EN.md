@@ -27,7 +27,7 @@
   <img src="https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square" alt="License" />
 </p>
 
-> **Understand the page first, then act safely.** BrowserHelm is an AI page assistant that runs directly in your browser. No backend, no data uploads, no vendor lock-in — just a transparent, controllable AI middle layer between you and your browser.
+> **Understand the page first, then act safely.** BrowserHelm is an AI page assistant that runs directly in your browser. No BrowserHelm backend or account required. When using a cloud AI provider, trimmed/redacted page context is sent to your configured provider endpoint — BrowserHelm itself does not collect or store your data.
 
 ---
 
@@ -62,7 +62,7 @@ Complete form diagnosis + assisted fill pipeline:
 
 ### 🖱️ Interactive Element Operations
 
-Read any element's state (visible, disabled, checked, selected), check action readiness (target validation, risk assessment, approval prediction), and perform controlled operations on page elements and iframe-contained elements.
+Read any element's state (visible, disabled, checked, selected), and check action readiness (target validation, risk assessment, approval prediction). The current public tool surface does not expose generic element click/type actions or mutating iframe actions.
 
 ### 🛡️ Safe Approval
 
@@ -75,7 +75,7 @@ Custom Agent Kernel drives the complete loop:
 > Page Observe → Context Compaction → Tool Selection → Risk Approval → Execution → Result Verification → Trace Recording
 
 - **TaskClassifier** auto-classifies user task types
-- **ToolSelector** intelligently picks from 30+ tools
+- **ToolSelector** filters tools by run mode and permissions
 - **ContextCompactor** trims full page data into model-friendly summaries
 - **RecoveryPolicy** handles tool failures and exception recovery
 - Supports Ask (read-only diagnosis) and Act (safe execution) dual modes
@@ -86,20 +86,22 @@ Custom Agent Kernel drives the complete loop:
 - Structured traces record every decision, tool call, parameter, and result
 - Advanced developer panel provides complete trace replay and diagnostic reports
 - Streaming model output visible in real time
+- Debug mode supports `bh_debug_collect_page_health` to capture Console Errors / Network Failures (requires Debug run mode)
+- Note: Page Health Hook injects by default to listen for error events; it does not collect cookies, password fields, or user input. Future versions will make this Debug-mode opt-in.
 
 ### 🔌 Model Freedom
 
-No built-in model service. Compatible with all OpenAI-compatible APIs including Ollama, vLLM, DeepSeek, Qwen, and more — local or cloud. Custom Base URL, API key stored locally encrypted.
+No built-in model service. Compatible with all OpenAI-compatible APIs including Ollama, vLLM, DeepSeek, Qwen, and more — local or cloud. Custom Base URL, API key stored locally.
 
 ### 🏠 Local-First
 
-Agent core loop, memory, trace, and settings all run locally in the browser (IndexedDB). Zero backend dependency, no account registration needed. Your data stays on your machine from start to finish.
+Agent core loop, memory, trace, and settings all run locally via chrome.storage.local. Zero BrowserHelm backend dependency, no account registration needed. Page context is sent only to your chosen AI provider endpoint.
 
 ---
 
 ## 🛠️ Built-in Tools
 
-BrowserHelm ships with **30+ `bh_`-prefixed tools** covering page observation, form diagnosis, element operations, iframe penetration, accessibility snapshots, and page health diagnostics. Tools are organized by domain:
+BrowserHelm ships with **30+ `bh_`-prefixed tools** covering page observation, form diagnosis, element reading, read-only iframe access, accessibility snapshots, and page health diagnostics. Tools are organized by domain:
 
 | Module | Tools | Description |
 |---|---|---|
@@ -108,7 +110,7 @@ BrowserHelm ships with **30+ `bh_`-prefixed tools** covering page observation, f
 | ♿ A11y | `bh_a11y_snapshot` `bh_a11y_find_interactive` `bh_a11y_refresh_refs` `bh_a11y_resolve_ref` | Accessibility snapshots, ref mapping |
 | 🖱️ Element | `bh_element_inspect` `bh_element_read_state` `bh_action_check_readiness` | Element inspection, action readiness |
 | 📝 Form | `bh_form_list` `bh_form_inspect` `bh_form_read_fields` `bh_form_find_missing_required` `bh_form_find_validation_errors` `bh_form_find_disabled_submit_reason` `bh_form_infer_fill_plan` `bh_form_fill_field` `bh_form_fill_many` `bh_form_verify` `bh_form_submit_with_approval` | Complete form diagnosis, fill, verify, approve pipeline |
-| 🖼️ iframe | `bh_iframe_read` `bh_iframe_click` `bh_iframe_type` | iframe penetration operations |
+| 🖼️ iframe | `bh_iframe_read` | iframe content reading (mutating actions not exposed in v1.1.2) |
 | 🔧 Debug | `bh_debug_collect_page_health` | Page health diagnostics |
 
 See [src/tools/README.md](src/tools/README.md) for details.
@@ -162,7 +164,7 @@ BrowserHelm does not ship with any model. Bring your own API key:
 | Frontend | React + [Animal Island UI](https://github.com/guokaigdg/animal-island-ui) |
 | Language | TypeScript (strict) |
 | Validation | Zod |
-| Local Storage | Dexie.js (IndexedDB) |
+| Local Storage | chrome.storage.local |
 | State Management | Zustand |
 | Model Layer | Custom OpenAI-compatible REST client |
 | Testing | Vitest + Playwright |

@@ -18,4 +18,10 @@ export type ToolSpec<TArgs, TResult = unknown> = {
     titleKey?: TranslationKey;
     descriptionKey?: TranslationKey;
   };
+  /** Whether the tool is read-only (does not mutate page state). Default false. */
+  readOnly?: boolean;
+  /** Whether the tool always requires user approval before execution. Default: derived from risk. */
+  requiresApproval?: boolean;
+  /** How tool results should be presented in the model context. Default 'summary'. */
+  contextVisibility?: 'summary' | 'hidden' | 'full';
 };

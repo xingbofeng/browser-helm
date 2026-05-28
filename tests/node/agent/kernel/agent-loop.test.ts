@@ -603,7 +603,7 @@ describe('agent-loop', () => {
   it('redacts sensitive iframe type text from trace and approval previews', async () => {
     const registry = new ToolRegistry();
     registry.register({
-      name: TOOL_NAMES.IFRAME_TYPE,
+      name: 'bh_iframe_type',
       title: 'Type In Iframe Target',
       description: 'Types into iframe',
       modes: ['act'],
@@ -644,7 +644,7 @@ describe('agent-loop', () => {
       modelClient: new MockModelClient([
         JSON.stringify({
           type: 'tool_call',
-          tool: TOOL_NAMES.IFRAME_TYPE,
+          tool: 'bh_iframe_type',
           args: {
             refId: 'frame_7:ref_201',
             text: 'super-secret',

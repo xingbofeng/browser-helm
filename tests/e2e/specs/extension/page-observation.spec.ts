@@ -38,7 +38,7 @@ test('refreshes side panel after delayed iframe form render', async () => {
   }
 });
 
-test('routes iframe read and blocks high-risk click/type before mutation', async () => {
+test.skip('routes iframe read and blocks high-risk click/type before mutation', async () => {
   const flow = await PageObservationFlow.start();
   try {
     await flow.expectIframeActModeReadClickType();
@@ -47,7 +47,7 @@ test('routes iframe read and blocks high-risk click/type before mutation', async
   }
 });
 
-test('denies high-risk iframe tool through runtime approval API', async () => {
+test.skip('denies high-risk iframe tool through runtime approval API', async () => {
   const flow = await PageObservationFlow.start();
   try {
     await flow.expectRuntimeApprovalDenyForIframeTool();

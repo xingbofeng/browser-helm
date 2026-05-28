@@ -6,6 +6,7 @@ import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ToolSpec } from '../core/tool-spec';
+import { toolMeta } from '../core/tool-meta';
 
 const argsSchema = z.object({ quietMs: z.number().int().positive().max(5_000).optional() });
 
@@ -15,8 +16,7 @@ export function bhPageWaitUntilStable(
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
   return {
     name: TOOL_NAMES.PAGE_WAIT_UNTIL_STABLE,
-    title: 'Page Wait Until Stable',
-    description: 'Waits until the page is stable enough for a follow-up read',
+    ...toolMeta('Page Wait Until Stable', 'Waits until the page is stable enough for a follow-up read', 'tool.title.bh_page_wait_until_stable', 'tool.description.bh_page_wait_until_stable'),
     modes: ['ask', 'debug', 'form', 'act'],
     risk: 'safe',
     argsSchema,

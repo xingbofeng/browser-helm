@@ -6,6 +6,7 @@ import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { fillManyResultSchema, type FillManyResult } from '../../shared/schemas/form-fill.schema';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
+import { toolMeta } from '../core/tool-meta';
 import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({
@@ -34,12 +35,7 @@ export function bhFormFillMany(
   return {
     name: TOOL_NAMES.FORM_FILL_MANY,
     // 批量填写一个表单的多个字段。
-    title: 'Batch Fill Many Fields',
-    description: 'Batch-fills multiple form fields with partial-success results.',
-    ui: {
-      titleKey: 'tool.title.bh_form_fill_many',
-      descriptionKey: 'tool.description.bh_form_fill_many',
-    },
+    ...toolMeta('Batch Fill Many Fields', 'Batch-fills multiple form fields with partial-success results.', 'tool.title.bh_form_fill_many', 'tool.description.bh_form_fill_many'),
     modes: ['form'],
     risk: 'medium',
     argsSchema,

@@ -3,6 +3,7 @@ import type {
   RecoveryState
 } from '../../shared/schemas/recovery.schema';
 import { recoveryStateSchema } from '../../shared/schemas/recovery.schema';
+import { tZh } from '../../i18n/t';
 
 export function chooseRecoveryAction(code: string): RecoveryAction {
   if (code === 'REF_STALE' || code === 'PAGE_CHANGED') {
@@ -21,7 +22,7 @@ export function chooseRecoveryAction(code: string): RecoveryAction {
     return { type: 're_observe', reason: code };
   }
   if (code === 'MAX_STEPS_EXCEEDED') {
-    return { type: 'ask_user', question: '已达到最大步骤数。要继续诊断还是修改目标？' };
+    return { type: 'ask_user', question: tZh('agent.recovery.maxStepsQuestion') };
   }
   return { type: 'fail', reason: code };
 }

@@ -27,7 +27,7 @@
   <img src="https://img.shields.io/badge/许可-MIT-lightgrey?style=flat-square" alt="License" />
 </p>
 
-> **先看懂页面，再安全执行。** BrowserHelm 是一个跑在你浏览器里的 AI 页面助手——不依赖后端，不上传数据，不绑定模型。它让你和浏览器之间多了一个透明、可控的 AI 中间层。
+> **先看懂页面，再安全执行。** BrowserHelm 是一个跑在你浏览器里的 AI 页面助手——无需 BrowserHelm 自有后端，不绑定模型。使用云 AI provider 时，裁剪/脱敏后的页面上下文会发送到你配置的 provider 端点；BrowserHelm 本身不收集或存储你的数据。
 
 ---
 
@@ -62,7 +62,7 @@
 
 ### 🖱️ 交互元素操作
 
-读取任意元素的状态（visible、disabled、checked、selected），检查动作就绪度（目标校验、风险预判、approval 预判），对页面元素和 iframe 内元素执行受控操作。
+读取任意元素的状态（visible、disabled、checked、selected），并检查动作就绪度（目标校验、风险预判、approval 预判）。当前公开工具面不暴露通用元素点击、输入或 iframe 内修改动作。
 
 ### 🛡️ 安全审批
 
@@ -75,7 +75,7 @@
 > 页面观察 → 上下文裁剪 → 工具选择 → 风险审批 → 执行 → 结果验证 → trace 记录
 
 - **TaskClassifier** 自动分类用户任务类型
-- **ToolSelector** 从 30+ 工具中智能选择合适的工具
+- **ToolSelector** 基于 run mode 和权限过滤可用工具
 - **ContextCompactor** 将完整页面数据裁剪为模型上下文友好的摘要
 - **RecoveryPolicy** 处理工具失败和异常恢复
 - 支持 Ask（只读提问）和 Act（安全执行）双模式
@@ -86,20 +86,22 @@
 - 结构化 trace 记录每一步的决策、工具调用、参数和结果
 - 高级开发者面板提供完整 trace 回放和诊断报告
 - 流式模型输出实时可见
+- 调试模式支持 `bh_debug_collect_page_health` 收集 Console Error / Network Failure（需开启 Debug run mode）
+- 注：Page Health Hook 默认注入页面以监听错误事件；不收集 cookie、密码字段或用户输入。未来版本将改为 Debug mode opt-in。
 
 ### 🔌 模型自由
 
-不内置任何模型服务。支持所有 OpenAI 兼容接口，包括 Ollama、vLLM、DeepSeek、通义千问等本地或云端模型。自定义 Base URL，API Key 本地加密存储。
+不内置任何模型服务。支持所有 OpenAI 兼容接口，包括 Ollama、vLLM、DeepSeek、通义千问等本地或云端模型。自定义 Base URL，API Key 本地存储。
 
 ### 🏠 本地优先
 
-Agent 核心循环、记忆、trace、配置全部在浏览器本地运行（IndexedDB）。不依赖任何后端服务器，不需要注册任何服务账号。你的数据从头到尾都在你自己的机器上。
+Agent 核心循环、trace 和配置基于 chrome.storage.local 在浏览器本地运行。不依赖 BrowserHelm 自有后端服务器，不需要注册 BrowserHelm 服务账号。使用云端模型时，裁剪/脱敏后的页面上下文会发送到你配置的 provider 端点。
 
 ---
 
 ## 🛠️ 内置工具
 
-BrowserHelm 内置 **30+ 个 `bh_` 前缀工具**，覆盖页面观察、表单诊断、元素操作、iframe 穿透、无障碍快照、页面健康诊断等场景。工具按领域分模块管理：
+BrowserHelm 内置 **30+ 个 `bh_` 前缀工具**，覆盖页面观察、表单诊断、元素读取、iframe 只读读取、无障碍快照、页面健康诊断等场景。工具按领域分模块管理：
 
 | 模块 | 工具 | 说明 |
 |---|---|---|
@@ -108,7 +110,7 @@ BrowserHelm 内置 **30+ 个 `bh_` 前缀工具**，覆盖页面观察、表单�
 | ♿ 无障碍 | `bh_a11y_snapshot` `bh_a11y_find_interactive` `bh_a11y_refresh_refs` `bh_a11y_resolve_ref` | a11y 快照、ref 映射 |
 | 🖱️ 元素 | `bh_element_inspect` `bh_element_read_state` `bh_action_check_readiness` | 元素检查、动作就绪 |
 | 📝 表单 | `bh_form_list` `bh_form_inspect` `bh_form_read_fields` `bh_form_find_missing_required` `bh_form_find_validation_errors` `bh_form_find_disabled_submit_reason` `bh_form_infer_fill_plan` `bh_form_fill_field` `bh_form_fill_many` `bh_form_verify` `bh_form_submit_with_approval` | 完整表单诊断、填写、验证、审批链路 |
-| 🖼️ iframe | `bh_iframe_read` `bh_iframe_click` `bh_iframe_type` | iframe 穿透操作 |
+| 🖼️ iframe | `bh_iframe_read` | iframe 内容读取 |
 | 🔧 调试 | `bh_debug_collect_page_health` | 页面健康诊断 |
 
 详见 [src/tools/README.md](src/tools/README.md)。
@@ -162,7 +164,7 @@ BrowserHelm 不内置模型，使用你自己的 API Key：
 | 前端 | React + [Animal Island UI](https://github.com/guokaigdg/animal-island-ui) |
 | 语言 | TypeScript (strict) |
 | 数据校验 | Zod |
-| 本地存储 | Dexie.js (IndexedDB) |
+| 本地存储 | chrome.storage.local |
 | 状态管理 | Zustand |
 | 模型层 | 自研 OpenAI 兼容 REST Client |
 | 测试 | Vitest + Playwright |

@@ -8,6 +8,7 @@ import { ERROR_CODES } from '../../shared/constants/error-codes';
 import type { ProviderTestResult } from '../../shared/schemas/agent-message.schema';
 import { maskProviderSecret } from '../../shared/redaction';
 import { parseOpenAICompatibleStreamChunk } from './streaming-parser';
+import { tZh } from '../../i18n/t';
 
 type FetchImpl = typeof fetch;
 
@@ -184,7 +185,7 @@ export class OpenAICompatibleClient implements ModelClient {
       return {
         ok: true,
         code: ERROR_CODES.OK,
-        message: '连接正常',
+        message: tZh('provider.connectionOk'),
         supportsStreaming,
         model: this.config.model
       };

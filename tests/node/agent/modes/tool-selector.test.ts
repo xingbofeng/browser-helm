@@ -10,7 +10,10 @@ const tools: ToolPromptContract[] = [
     description: 'Observe page',
     modes: ['ask', 'debug', 'form'],
     risk: 'safe',
-    argsSchema: {}
+    argsSchema: {},
+    readOnly: true,
+    requiresApproval: false,
+    contextVisibility: 'summary'
   },
   {
     name: 'bh_debug_collect_page_health',
@@ -18,7 +21,10 @@ const tools: ToolPromptContract[] = [
     description: 'Collect page health',
     modes: ['debug'],
     risk: 'safe',
-    argsSchema: {}
+    argsSchema: {},
+    readOnly: true,
+    requiresApproval: false,
+    contextVisibility: 'summary'
   },
   {
     name: 'bh_form_read_fields',
@@ -26,7 +32,10 @@ const tools: ToolPromptContract[] = [
     description: 'Read form fields',
     modes: ['form'],
     risk: 'safe',
-    argsSchema: {}
+    argsSchema: {},
+    readOnly: true,
+    requiresApproval: false,
+    contextVisibility: 'summary'
   },
   {
     name: 'bh_iframe_click',
@@ -34,7 +43,10 @@ const tools: ToolPromptContract[] = [
     description: 'Click iframe target',
     modes: ['act'],
     risk: 'high',
-    argsSchema: {}
+    argsSchema: {},
+    readOnly: false,
+    requiresApproval: true,
+    contextVisibility: 'summary'
   }
 ];
 

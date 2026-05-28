@@ -17,7 +17,7 @@ import {
   sanitizeSensitiveDetail
 } from '../../../shared/redaction';
 import type { Locale } from '../../../i18n/types';
-import { t } from '../../../i18n/t';
+import { t, tZh } from '../../../i18n/t';
 import { modeSwitchRequestMessage } from './mode-switch-message';
 import type { ToolPromptContract } from './runtime-service-types';
 import { buildMessages, getPromptToolContracts } from './prompt-builder';
@@ -40,7 +40,7 @@ import type { ModelDecisionError } from './decision-validator';
 // ── Runtime constants ──
 const MAX_REPAIR_ATTEMPTS = 1;
 const MODEL_DECISION_TIMEOUT_MS = 10 * 60 * 1000;
-const MODEL_DECISION_TIMEOUT_MESSAGE = '模型请求超时，请稍后重试。';
+const MODEL_DECISION_TIMEOUT_MESSAGE = tZh('runtime.error.modelTimeout');
 const MODEL_TIMEOUT = Symbol('model_timeout');
 const MAX_TASK_STATE_ITEMS = 12;
 const MAX_TASK_STATE_TEXT_CHARS = 160;
@@ -693,7 +693,7 @@ function askUserMessage(
     role: 'agent',
     kind: 'recommendation',
     status: 'complete',
-    title: locale === 'en' ? 'Need your input' : '需要你的补充',
+    title: t('runtime.askUser.title', locale),
     content: question,
     createdAt: now,
     updatedAt: now

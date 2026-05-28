@@ -10,7 +10,7 @@ describe('approval store', () => {
       id: 'apr_1',
       runId: 'run_1',
       stepId: 'step_1',
-      tool: 'bh_iframe_click',
+      tool: 'bh_form_submit_with_approval',
       argsPreview: { refId: 'frame_1:ref_1' },
       risk: 'high',
       reason: 'Delete account',

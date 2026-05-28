@@ -1,8 +1,7 @@
 import { buildA11ySnapshot } from '../a11y/a11y-snapshot';
 import { RefMap } from '../a11y/ref-map';
 import type { Locale } from '../../i18n/types';
-import { resolveRef, type ResolvedRefElement } from '../a11y/ref-resolver';
-import { checkResolvedActionReadiness } from '../dom/action-readiness';
+import { resolveRef } from '../a11y/ref-resolver';
 import { buildObservation } from '../observe/build-observation';
 import { fillSingleField, fillManyFields, verifyForm, executeSubmit } from '../dom/form-fill-dom';
 import { readPageMetadata } from '../observe/page-metadata';
@@ -14,13 +13,7 @@ import {
   type ContentRpcResponse
 } from './content-rpc.schema';
 
-type IframeActionKind = 'click' | 'type';
 type FormActionKind = 'fill' | 'submit';
-type IframeActionGrant = {
-  action: IframeActionKind;
-  refId: string;
-  expiresAt: number;
-};
 type FormActionGrant = {
   action: FormActionKind;
   fieldRefIds: Set<string>;
@@ -30,16 +23,19 @@ type FormActionGrant = {
   stepId: string;
 };
 
-const IFRAME_ACTION_TOKEN_TTL_MS = 30_000;
 const FORM_ACTION_TOKEN_TTL_MS = 30_000;
 
 export class ContentRpcHandler {
   private refMap: RefMap | undefined;
-  private readonly iframeActionGrants = new Map<string, IframeActionGrant>();
   private readonly formActionGrants = new Map<string, FormActionGrant>();
-  private readonly locale: Locale;
+  private locale: Locale;
 
   constructor(private readonly document: Document, locale: Locale = 'zh') {
+    this.locale = locale;
+  }
+
+  /** Updates the locale used for user-visible messages and observation. */
+  updateLocale(locale: Locale): void {
     this.locale = locale;
   }
   handle<T extends ContentRpcRequest>(
@@ -181,96 +177,6 @@ export class ContentRpcHandler {
       case CONTENT_RPC_MESSAGES.IFRAME_READ: {
         return this.readIframeTarget(message.refId);
       }
-      case CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE: {
-        const response = this.readIframeTarget(message.refId);
-        if (!response.ok || !('ref' in response)) {
-          return response;
-        }
-        return {
-          ok: true,
-          actionToken: this.createIframeActionToken(message.refId, message.action)
-        };
-      }
-      case CONTENT_RPC_MESSAGES.IFRAME_CLICK: {
-        const unauthorized = this.validateIframeActionToken(message.actionToken, {
-          action: 'click',
-          refId: message.refId
-        });
-        if (unauthorized) {
-          return unauthorized;
-        }
-        const response = this.readIframeTarget(message.refId);
-        if (!response.ok || !('ref' in response)) {
-          return response;
-        }
-        const readiness = checkResolvedActionReadiness(
-          {
-            kind: 'click',
-            refId: message.refId,
-            source: 'runtime'
-          },
-          response.ref as ResolvedRefElement
-        );
-        const blocked = this.blockedIframeReadiness(readiness);
-        if (blocked) {
-          return blocked;
-        }
-        const element = this.resolveElement(message.refId);
-        if (!element.ok) {
-          return element;
-        }
-        element.element.click();
-        return {
-          ok: true,
-          ref: response.ref,
-          changedPage: true
-        };
-      }
-      case CONTENT_RPC_MESSAGES.IFRAME_TYPE: {
-        const unauthorized = this.validateIframeActionToken(message.actionToken, {
-          action: 'type',
-          refId: message.refId
-        });
-        if (unauthorized) {
-          return unauthorized;
-        }
-        const response = this.readIframeTarget(message.refId);
-        if (!response.ok || !('ref' in response)) {
-          return response;
-        }
-        const readiness = checkResolvedActionReadiness(
-          {
-            kind: 'type',
-            refId: message.refId,
-            source: 'runtime',
-            valuePreview: message.valuePreview
-          },
-          response.ref as ResolvedRefElement
-        );
-        const blocked = this.blockedIframeReadiness(readiness);
-        if (blocked) {
-          return blocked;
-        }
-        const element = this.resolveElement(message.refId);
-        if (!element.ok) {
-          return element;
-        }
-        if (!isTextEntryElement(element.element)) {
-          return {
-            ok: false,
-            code: ERROR_CODES.ELEMENT_NOT_ACTIONABLE,
-            message: 'Target element does not accept text input'
-          };
-        }
-        element.element.value = message.text;
-        element.element.dispatchEvent(new Event('input', { bubbles: true }));
-        element.element.dispatchEvent(new Event('change', { bubbles: true }));
-        return {
-          ok: true,
-          ref: response.ref,
-          changedPage: true
-        };
-      }
       // form fill actions
       case CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE: {
         return {
@@ -344,53 +250,6 @@ export class ContentRpcHandler {
     };
   }
 
-  private createIframeActionToken(refId: string, action: IframeActionKind): string {
-    this.pruneExpiredIframeActionTokens();
-    const token = createOpaqueToken('bh_iframe');
-    this.iframeActionGrants.set(token, {
-      refId,
-      action,
-      expiresAt: Date.now() + IFRAME_ACTION_TOKEN_TTL_MS
-    });
-    return token;
-  }
-
-  private validateIframeActionToken(
-    actionToken: string | undefined,
-    expected: {
-      action: IframeActionKind;
-      refId: string;
-    }
-  ): ContentRpcResponse | undefined {
-    this.pruneExpiredIframeActionTokens();
-    if (!actionToken) {
-      return iframeActionUnauthorized();
-    }
-    const grant = this.iframeActionGrants.get(actionToken);
-    if (
-      grant &&
-      grant.refId === expected.refId &&
-      grant.action === expected.action &&
-      grant.expiresAt >= Date.now()
-    ) {
-      this.iframeActionGrants.delete(actionToken);
-      return undefined;
-    }
-    if (grant && grant.expiresAt < Date.now()) {
-      this.iframeActionGrants.delete(actionToken);
-    }
-    return iframeActionUnauthorized();
-  }
-
-  private pruneExpiredIframeActionTokens(): void {
-    const now = Date.now();
-    for (const [token, grant] of this.iframeActionGrants) {
-      if (grant.expiresAt < now) {
-        this.iframeActionGrants.delete(token);
-      }
-    }
-  }
-
   private createFormActionToken(
     action: FormActionKind,
     fieldRefIds: string[],
@@ -449,61 +308,6 @@ export class ContentRpcHandler {
     }
   }
 
-  private blockedIframeReadiness(
-    readiness: ReturnType<typeof checkResolvedActionReadiness>
-  ): ContentRpcResponse | undefined {
-    if (!readiness.canAct) {
-      return {
-        ok: false,
-        code: readiness.code,
-        message: readiness.reason,
-        detail: readiness
-      };
-    }
-    if (readiness.wouldRequireApproval) {
-      return {
-        ok: false,
-        code: ERROR_CODES.APPROVAL_REQUIRED,
-        message: readiness.reason,
-        detail: readiness
-      };
-    }
-    return undefined;
-  }
-
-  private resolveElement(refId: string):
-    | {
-        ok: true;
-        element: HTMLElement;
-      }
-    | {
-        ok: false;
-        code: string;
-        message: string;
-      } {
-    const refMap = this.ensureRefMap();
-    const result = resolveRef(refMap, refId);
-    if (!result.ok) {
-      return {
-        ok: false,
-        code: result.code,
-        message: result.message
-      };
-    }
-    const entry = refMap.resolve(refId);
-    if (entry?.element instanceof HTMLElement && !refMap.isEntryStale(entry)) {
-      return {
-        ok: true,
-        element: entry.element
-      };
-    }
-    return {
-      ok: false,
-      code: ERROR_CODES.REF_STALE,
-      message: `Ref is stale: ${refId}`
-    };
-  }
-
   private resolveAnyElement(refId: string):
     | {
         ok: true;
@@ -552,15 +356,6 @@ export class ContentRpcHandler {
     }
     return this.refMap;
   }
-}
-
-function isTextEntryElement(
-  element: HTMLElement
-): element is HTMLInputElement | HTMLTextAreaElement {
-  return (
-    element.tagName.toLowerCase() === 'input' ||
-    element.tagName.toLowerCase() === 'textarea'
-  );
 }
 
 function highlightElement(element: Element): void {
@@ -808,14 +603,6 @@ async function waitForFonts(document: Document): Promise<boolean> {
     new Promise((resolve) => setTimeout(resolve, 250))
   ]);
   return true;
-}
-
-function iframeActionUnauthorized(): ContentRpcResponse {
-  return {
-    ok: false,
-    code: ERROR_CODES.IFRAME_ACTION_UNAUTHORIZED,
-    message: 'Iframe mutations must be routed through the runtime tool boundary'
-  };
 }
 
 function formActionUnauthorized(): ContentRpcResponse {

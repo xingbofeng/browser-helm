@@ -6,6 +6,7 @@ import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { formVerifyResultSchema, type FormVerifyResult } from '../../shared/schemas/form-fill.schema';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
+import { toolMeta } from '../core/tool-meta';
 import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({
@@ -31,12 +32,7 @@ export function bhFormVerify(
   return {
     name: TOOL_NAMES.FORM_VERIFY,
     // 验证表单准备状态。
-    title: 'Verify Form',
-    description: 'Verifies form readiness before submit.',
-    ui: {
-      titleKey: 'tool.title.bh_form_verify',
-      descriptionKey: 'tool.description.bh_form_verify',
-    },
+    ...toolMeta('Verify Form', 'Verifies form readiness before submit.', 'tool.title.bh_form_verify', 'tool.description.bh_form_verify'),
     modes: ['form', 'debug'],
     risk: 'low',
     argsSchema,

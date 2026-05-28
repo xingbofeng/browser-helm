@@ -4,6 +4,8 @@ import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { toolResultSchema } from '../../shared/schemas/tool-result.schema';
 import type { ToolSpec } from '../core/tool-spec';
 
+import { toolMeta } from '../core/tool-meta';
+
 const argsSchema = z.object({
   message: z.string().min(1),
   code: z.string().min(1).optional()
@@ -20,16 +22,11 @@ export const bhAgentFail: ToolSpec<
 > = {
   name: 'bh_agent_fail',
   // 以结构化错误结束当前运行。
-  title: 'Agent Fail',
-  description: 'Fails current run with structured error',
+  ...toolMeta('Agent Fail', 'Fails current run with structured error', 'tool.title.bh_agent_fail', 'tool.description.bh_agent_fail'),
   modes: ['internal'],
   risk: 'safe',
   argsSchema,
   resultSchema: toolResultSchema,
-  ui: {
-    titleKey: 'tool.title.bh_agent_fail',
-    descriptionKey: 'tool.description.bh_agent_fail',
-  },
   execute(args) {
     return Promise.resolve({
       ok: false,

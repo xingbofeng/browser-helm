@@ -5,6 +5,7 @@ import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
+import { toolMeta } from '../core/tool-meta';
 import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({
@@ -18,12 +19,7 @@ export function bhViewportGetInfo(
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
   return {
     name: TOOL_NAMES.VIEWPORT_GET_INFO,
-    title: 'Viewport Get Info',
-    description: 'Reads viewport and scroll state for page or iframe',
-    ui: {
-      titleKey: 'tool.title.bh_viewport_get_info',
-      descriptionKey: 'tool.description.bh_viewport_get_info',
-    },
+    ...toolMeta('Viewport Get Info', 'Reads viewport and scroll state for page or iframe', 'tool.title.bh_viewport_get_info', 'tool.description.bh_viewport_get_info'),
     modes: ['ask', 'debug', 'form', 'act'],
     risk: 'safe',
     argsSchema,

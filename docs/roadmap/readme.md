@@ -57,5 +57,8 @@ HITL / 人在环规则：
 - v1.0 加 TaskClassifier、ToolSelector、RecoveryPolicy、Goal/SuccessCriteria、mode-based lightweight plan、Evidence/Confidence、Capability/Permission、Human-readable DebugReport。
 - v1.0.1 将 v0.4 Cockpit 产品化为单 Agent side panel：真实 streaming、可恢复 AgentMessage、模型配置弹窗、精简 Debug，并删除不用的旧四 Tab UI 代码。
 - v1.0.2 一次性补齐 v1.0 必须工具，并完成长页面 / iframe 读取闭环：page read、article read、iframe list/read、viewport get/scroll；用户任务必须接入真实 AgentLoop tool-calling，避免只基于一次 snapshot 摘要回答。
+- v1.1.3 做 public release readiness：版本号、tag、GitHub Release、checksum、coverage/security/release CI、README 隐私声明和工具文档一致性。
 - v1.2 加 trace replay seed、StepSummary、RunSummary、SessionSummary，并把成功 plan 沉淀成 workflow draft。
+- v1.2 同时落地 per-domain permission/domain policy seed、MV3 session persistence，以及 Goal/SuccessCriteria 与 summary/workflow replay 的完成判断桥接。
 - v1.3+ / v2.0 加 eval、prompt injection eval、skill、MCP、tool sandbox、agent-as-tool。
+- v1.7 在 v1.2-v1.6 能力稳定后，集中做完整 Mode System / RuntimeStrategy 收敛，以及全面 tool summary/error/debug i18n hardening。

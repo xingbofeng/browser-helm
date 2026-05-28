@@ -136,7 +136,13 @@ export default defineBackground(() => {
       void openNativeSidePanel(tabId).then(sendResponse);
       return true;
     }
-    void host.handleMessage(message).then(sendResponse);
+    void host.handleMessage(message, {
+      senderId: sender.id,
+      senderUrl: sender.url,
+      senderOrigin: sender.origin,
+      isExtensionPage: Boolean(sender.url?.startsWith(chrome.runtime.getURL(''))),
+      isContentScript: !sender.url?.startsWith(chrome.runtime.getURL('')) && Boolean(sender.tab)
+    }).then(sendResponse);
     return true;
   });
 

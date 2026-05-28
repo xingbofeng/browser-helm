@@ -148,11 +148,11 @@ export class RunLifecycleService {
     if (!tabId) {
       this.deps.store.appendTrace(record, {
         runId, type: TRACE_EVENT_NAMES.RUN_FAILED,
-        payload: { code: ERROR_CODES.CONTENT_SCRIPT_UNAVAILABLE, summary: 'No active browser tab is available' }
+        payload: { code: ERROR_CODES.CONTENT_SCRIPT_UNAVAILABLE, summary: t('runtime.error.noActiveTab', locale) }
       });
       this.deps.store.setSnapshot(runId, {
         runId, mode, status: 'error', refs: [],
-        error: { code: ERROR_CODES.CONTENT_SCRIPT_UNAVAILABLE, message: 'No active browser tab is available' },
+        error: { code: ERROR_CODES.CONTENT_SCRIPT_UNAVAILABLE, message: t('runtime.error.noActiveTab', locale) },
         messages: [
           ...(this.deps.initialMessages(runId, input.task, locale, {
             includeUserTask: !observeOnly,

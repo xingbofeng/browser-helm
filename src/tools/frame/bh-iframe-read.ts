@@ -6,6 +6,7 @@ import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ToolSpec } from '../core/tool-spec';
+import { toolMeta } from '../core/tool-meta';
 import { parseFrameRef } from './frame-ref';
 
 const argsSchema = z.union([
@@ -38,12 +39,7 @@ export function bhIframeRead(
   return {
     name: TOOL_NAMES.IFRAME_READ,
     // 读取 iframe 文档或 iframe 内 stable ref 的只读摘要。
-    title: 'Read Iframe Target',
-    description: 'Reads an iframe document by iframeId or a target by composite stable ref_id',
-    ui: {
-      titleKey: 'tool.title.bh_iframe_read',
-      descriptionKey: 'tool.description.bh_iframe_read',
-    },
+    ...toolMeta('Read Iframe Target', 'Reads an iframe document by iframeId or a target by composite stable ref_id', 'tool.title.bh_iframe_read', 'tool.description.bh_iframe_read'),
     modes: ['ask', 'debug', 'form', 'act'],
     risk: 'safe',
     argsSchema,

@@ -34,12 +34,12 @@ describe('toolSpecMetaSchema', () => {
     expect(() => runModeSchema.parse('admin')).toThrowError();
   });
 
-  it('provides bilingual run mode labels', () => {
+  it('provides run mode label keys', () => {
     expect(runModeLabels).toEqual({
-      ask: '询问 / Ask',
-      debug: '调试 / Debug',
-      form: '表单 / Form',
-      act: '执行 / Act'
+      ask: 'ask',
+      debug: 'debug',
+      form: 'form',
+      act: 'act'
     });
   });
 });

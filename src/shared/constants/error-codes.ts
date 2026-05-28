@@ -54,6 +54,7 @@ export const ERROR_CODE_DEFINITIONS = [
   { number: 3511, code: 'FILL_RETRY_EXHAUSTED', description: '填写重试已耗尽' },
   { number: 3512, code: 'FIELD_NOT_WRITABLE', description: '字段不可写' },
   { number: 3513, code: 'FIELD_NOT_VISIBLE', description: '字段不可见' },
+  { number: 3514, code: 'APPROVAL_CONTEXT_STALE', description: '审批上下文已过期，页面状态已变化' },
   { number: 3514, code: 'CROSS_FORM_FILL_REJECTED', description: '跨表单批量填写已拒绝' },
   { number: 3515, code: 'SUBMIT_DISABLED', description: '提交按钮处于禁用状态' },
   { number: 3516, code: 'APPROVAL_CONTEXT_STALE', description: '审批上下文已过期，需要重新验证' },
@@ -116,9 +117,9 @@ export const ERROR_CODES = {
   FILL_RETRY_EXHAUSTED: 'FILL_RETRY_EXHAUSTED',
   FIELD_NOT_WRITABLE: 'FIELD_NOT_WRITABLE',
   FIELD_NOT_VISIBLE: 'FIELD_NOT_VISIBLE',
+  APPROVAL_CONTEXT_STALE: 'APPROVAL_CONTEXT_STALE',
   CROSS_FORM_FILL_REJECTED: 'CROSS_FORM_FILL_REJECTED',
   SUBMIT_DISABLED: 'SUBMIT_DISABLED',
-  APPROVAL_CONTEXT_STALE: 'APPROVAL_CONTEXT_STALE',
   SUBMIT_TARGET_NOT_READY: 'SUBMIT_TARGET_NOT_READY',
 } as const;
 

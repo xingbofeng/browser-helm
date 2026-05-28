@@ -4,6 +4,7 @@ import { fillPlanSchema, type FillPlan } from '../../shared/schemas/form-fill.sc
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import type { ToolSpec } from '../core/tool-spec';
+import { toolMeta } from '../core/tool-meta';
 import {
   formInferFillPlanArgsSchema,
   inferLocalFillPlan,
@@ -28,13 +29,8 @@ export function bhFormInferFillPlan(
   return {
     name: TOOL_NAMES.FORM_INFER_FILL_PLAN,
     // 根据用户任务推断表单填写方案。
-    title: 'Infer Fill Plan',
-    description: 'Infers a form fill plan from the user task and field snapshots.',
+    ...toolMeta('Infer Fill Plan', 'Infers a form fill plan from the user task and field snapshots.', 'tool.title.bh_form_infer_fill_plan', 'tool.description.bh_form_infer_fill_plan'),
     risk: 'low',
-    ui: {
-      titleKey: 'tool.title.bh_form_infer_fill_plan',
-      descriptionKey: 'tool.description.bh_form_infer_fill_plan',
-    },
     modes: ['form'],
     argsSchema: formInferFillPlanArgsSchema,
     resultSchema: toolResultSchema,

@@ -307,7 +307,7 @@ describe('content RPC frame aggregation', () => {
 
     const client = new ChromeContentRpcClient(42);
     const response = await client.request({
-      type: CONTENT_RPC_MESSAGES.IFRAME_TYPE,
+      type: 'BH_IFRAME_TYPE',
       frameId: 7,
       refId: 'ref_102',
       text: 'hello@example.com',
@@ -324,7 +324,7 @@ describe('content RPC frame aggregation', () => {
     expect(sendMessage).toHaveBeenCalledWith(
       42,
       {
-        type: CONTENT_RPC_MESSAGES.IFRAME_TYPE,
+        type: 'BH_IFRAME_TYPE',
         frameId: 7,
         refId: 'ref_102',
         text: 'hello@example.com',
@@ -358,7 +358,7 @@ describe('content RPC frame aggregation', () => {
 
     const client = new ChromeContentRpcClient(42);
     const response = await client.request({
-      type: CONTENT_RPC_MESSAGES.IFRAME_CLICK,
+      type: 'BH_IFRAME_CLICK',
       frameId: 99,
       refId: 'ref_102'
     });

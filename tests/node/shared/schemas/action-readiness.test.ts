@@ -56,22 +56,22 @@ describe('action readiness schemas', () => {
     ]);
   });
 
-  it('provides bilingual action kind labels', () => {
+  it('provides action kind label keys', () => {
     expect(actionKindLabels).toEqual({
-      click: '点击 / Click',
-      type: '输入 / Type',
-      select: '选择 / Select',
-      submit: '提交 / Submit',
-      focus: '聚焦 / Focus'
+      click: 'click',
+      type: 'type',
+      select: 'select',
+      submit: 'submit',
+      focus: 'focus'
     });
   });
 
-  it('provides bilingual tool risk labels', () => {
+  it('provides tool risk label keys', () => {
     expect(toolRiskLabels).toEqual({
-      safe: '安全 / Safe',
-      low: '低风险 / Low',
-      medium: '中风险 / Medium',
-      high: '高风险 / High'
+      safe: 'safe',
+      low: 'low',
+      medium: 'medium',
+      high: 'high'
     });
   });
 

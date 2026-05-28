@@ -20,7 +20,10 @@ describe('prompt-builder', () => {
             }
           },
           required: ['page']
-        }
+        },
+        readOnly: true,
+        requiresApproval: false,
+        contextVisibility: 'summary'
       }
     ]);
 

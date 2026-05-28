@@ -161,11 +161,11 @@ export class RunManager {
       return {
         ok: false,
         code: ERROR_CODES.RUNTIME_UNAVAILABLE,
-        summary: 'Run is not available for page element inspection',
+        summary: t('runtime.error.highlightUnavailable', 'zh'),
         changedPage: false,
         requiresObserve: false,
         error: {
-          message: 'Run is not available for page element inspection'
+          message: t('runtime.error.highlightUnavailable', 'zh'),
         }
       };
     }

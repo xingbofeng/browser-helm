@@ -8,6 +8,7 @@ import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-res
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import { t } from '../../i18n/t';
 import type { Locale } from '../../i18n/types';
+import { toolMeta } from '../core/tool-meta';
 import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({});
@@ -17,16 +18,11 @@ export function bhDebugCollectPageHealth(
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
   return {
     name: TOOL_NAMES.DEBUG_COLLECT_PAGE_HEALTH,
-    title: 'Collect Page Health',
-    description: 'Collects a read-only shallow page health summary',
+    ...toolMeta('Collect Page Health', 'Collects a read-only shallow page health summary', 'tool.title.bh_debug_collect_page_health', 'tool.description.bh_debug_collect_page_health'),
     modes: ['debug'],
     risk: 'safe',
     argsSchema,
     resultSchema: toolResultSchema,
-    ui: {
-      titleKey: 'tool.title.bh_debug_collect_page_health',
-      descriptionKey: 'tool.description.bh_debug_collect_page_health',
-    },
     async execute(_args, ctx) {
       const locale: Locale = ctx.locale ?? 'zh';
       const response = await rpc.request({ type: CONTENT_RPC_MESSAGES.PAGE_OBSERVE });

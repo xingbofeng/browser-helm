@@ -4,6 +4,8 @@ import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { toolResultSchema } from '../../shared/schemas/tool-result.schema';
 import type { ToolSpec } from '../core/tool-spec';
 
+import { toolMeta } from '../core/tool-meta';
+
 const argsSchema = z.object({
   question: z.string().min(1)
 });
@@ -19,16 +21,11 @@ export const bhAgentAskUser: ToolSpec<
 > = {
   name: 'bh_agent_ask_user',
   // 请求用户补充输入。
-  title: 'Agent Ask User',
-  description: 'Requests user input before continuing',
+  ...toolMeta('Agent Ask User', 'Requests user input before continuing', 'tool.title.bh_agent_ask_user', 'tool.description.bh_agent_ask_user'),
   modes: ['internal'],
   risk: 'safe',
   argsSchema,
   resultSchema: toolResultSchema,
-  ui: {
-    titleKey: 'tool.title.bh_agent_ask_user',
-    descriptionKey: 'tool.description.bh_agent_ask_user',
-  },
   execute(args) {
     return Promise.resolve({
       ok: false,

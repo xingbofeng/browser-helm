@@ -5,6 +5,7 @@ import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ToolSpec } from '../core/tool-spec';
+import { toolMeta } from '../core/tool-meta';
 
 const argsSchema = z.object({});
 
@@ -21,12 +22,7 @@ export function bhFrameList(
   return {
     name: 'bh_frame_list',
     // 调试跨域 iframe 与动态 widget 时列出当前页面 frame 元信息。
-    title: 'Frame List',
-    description: 'Lists frame ids and urls for the current page',
-    ui: {
-      titleKey: 'tool.title.bh_frame_list',
-      descriptionKey: 'tool.description.bh_frame_list',
-    },
+    ...toolMeta('Frame List', 'Lists frame ids and urls for the current page', 'tool.title.bh_frame_list', 'tool.description.bh_frame_list'),
     modes: ['debug', 'form', 'act'],
     risk: 'safe',
     argsSchema,

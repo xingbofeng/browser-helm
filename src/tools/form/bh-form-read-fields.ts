@@ -5,6 +5,7 @@ import { formReadFieldsPayloadSchema } from '../../shared/schemas/structured-pag
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import type { ToolSpec } from '../core/tool-spec';
+import { toolMeta } from '../core/tool-meta';
 import { isToolResult, loadFormToolData } from './form-tool-data';
 
 const argsSchema = z.object({});
@@ -22,12 +23,7 @@ export function bhFormReadFields(
   return {
     name: 'bh_form_read_fields',
     // 读取当前页面字段快照，返回 label/type/required/valuePreview/validation。
-    title: 'Read Form Fields',
-    description: 'Reads form field snapshots',
-    ui: {
-      titleKey: 'tool.title.bh_form_read_fields',
-      descriptionKey: 'tool.description.bh_form_read_fields',
-    },
+    ...toolMeta('Read Form Fields', 'Reads form field snapshots', 'tool.title.bh_form_read_fields', 'tool.description.bh_form_read_fields'),
     modes: ['debug', 'form'],
     risk: 'safe',
     argsSchema,

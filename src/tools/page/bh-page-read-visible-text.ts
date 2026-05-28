@@ -6,6 +6,7 @@ import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ToolSpec } from '../core/tool-spec';
+import { toolMeta } from '../core/tool-meta';
 
 const argsSchema = z.object({
   cursor: z.number().int().nonnegative().optional(),
@@ -18,12 +19,7 @@ export function bhPageReadVisibleText(
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
   return {
     name: TOOL_NAMES.PAGE_READ_VISIBLE_TEXT,
-    title: 'Page Read Visible Text',
-    description: 'Reads current page visible text with cursor pagination',
-    ui: {
-      titleKey: 'tool.title.bh_page_read_visible_text',
-      descriptionKey: 'tool.description.bh_page_read_visible_text',
-    },
+    ...toolMeta('Page Read Visible Text', 'Reads current page visible text with cursor pagination', 'tool.title.bh_page_read_visible_text', 'tool.description.bh_page_read_visible_text'),
     modes: ['ask', 'debug', 'form'],
     risk: 'safe',
     argsSchema,

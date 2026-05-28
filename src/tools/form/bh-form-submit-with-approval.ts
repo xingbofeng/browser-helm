@@ -5,7 +5,9 @@ import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { verifyStatusSchema } from '../../shared/schemas/form-fill.schema';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
+import { toolMeta } from '../core/tool-meta';
 import type { ToolSpec } from '../core/tool-spec';
+import { buildSubmitApprovalSnapshotDigest } from '../../shared/schemas/approval-snapshot-digest.schema';
 
 const argsSchema = z.object({
   formRefId: z.string().min(1).optional(),
@@ -28,6 +30,10 @@ const argsSchema = z.object({
     skipped: z.boolean().optional(),
   })),
   warnings: z.array(z.string().min(1)),
+  /** Optional form identity fields for stale-digest comparison. */
+  frameKey: z.string().optional(),
+  formAction: z.string().optional(),
+  formMethod: z.string().optional(),
 });
 
 /**
@@ -47,18 +53,27 @@ export function bhFormSubmitWithApproval(
   return {
     name: TOOL_NAMES.FORM_SUBMIT_WITH_APPROVAL,
     // 提交审批。
-    title: 'Submit Form (Approval Required)',
-    description: 'Requests user approval before submitting a form.',
-    ui: {
-      titleKey: 'tool.title.bh_form_submit_with_approval',
-      descriptionKey: 'tool.description.bh_form_submit_with_approval',
-    },
+    ...toolMeta('Submit Form (Approval Required)', 'Requests user approval before submitting a form.', 'tool.title.bh_form_submit_with_approval', 'tool.description.bh_form_submit_with_approval'),
     modes: ['form'],
     risk: 'high',
     argsSchema,
     resultSchema: toolResultSchema,
 		// eslint-disable-next-line @typescript-eslint/require-await
 		async execute(args) {
+      const snapshotDigest = buildSubmitApprovalSnapshotDigest({
+        formRefId: args.formRefId,
+        fieldRefIds: args.fields.map((f) => f.fieldRefId),
+        submitTargetRefId: args.submitTargetRefId,
+        frameKey: args.frameKey ?? deriveFrameKey([
+          ...args.fields.map((f) => f.fieldRefId),
+          ...(args.formRefId ? [args.formRefId] : []),
+          ...(args.submitTargetRefId ? [args.submitTargetRefId] : [])
+        ]),
+        formAction: args.formAction,
+        formMethod: args.formMethod,
+        fields: args.fields
+      });
+
       const payload = {
         formRefId: args.formRefId,
         formName: args.formName,
@@ -74,6 +89,7 @@ export function bhFormSubmitWithApproval(
         highRisk: args.verifyFailed,
         fields: args.fields,
         warnings: args.verifyFailed ? [...args.warnings, 'Verification failed, user chose to submit anyway'] : args.warnings,
+        snapshotDigest
       };
 
       return {
@@ -92,4 +108,15 @@ export function bhFormSubmitWithApproval(
       };
     },
   };
+}
+
+function deriveFrameKey(refIds: string[]): string | undefined {
+  const frameKeys = new Set<string>();
+  for (const refId of refIds) {
+    const match = /^frame_(\d+):/.exec(refId);
+    if (match?.[1]) {
+      frameKeys.add(`frame_${match[1]}`);
+    }
+  }
+  return frameKeys.size === 1 ? [...frameKeys][0] : undefined;
 }

@@ -10,7 +10,10 @@ const tools: ToolPromptContract[] = [
     description: 'Observe page',
     modes: ['ask', 'debug', 'form', 'act'],
     risk: 'safe',
-    argsSchema: {}
+    argsSchema: {},
+    readOnly: true,
+    requiresApproval: false,
+    contextVisibility: 'summary'
   },
   {
     name: 'bh_form_fill_many',
@@ -18,7 +21,10 @@ const tools: ToolPromptContract[] = [
     description: 'Fill fields',
     modes: ['form'],
     risk: 'medium',
-    argsSchema: {}
+    argsSchema: {},
+    readOnly: false,
+    requiresApproval: false,
+    contextVisibility: 'summary'
   },
   {
     name: 'bh_form_submit_with_approval',
@@ -26,7 +32,10 @@ const tools: ToolPromptContract[] = [
     description: 'Submit form',
     modes: ['form'],
     risk: 'high',
-    argsSchema: {}
+    argsSchema: {},
+    readOnly: false,
+    requiresApproval: true,
+    contextVisibility: 'summary'
   }
 ];
 

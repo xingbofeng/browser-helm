@@ -6,6 +6,7 @@ import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ToolSpec } from '../core/tool-spec';
+import { toolMeta } from '../core/tool-meta';
 
 const argsSchema = z.object({
   cursor: z.number().int().nonnegative().optional(),
@@ -21,12 +22,7 @@ export function bhPageReadArticle(
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
   return {
     name: TOOL_NAMES.PAGE_READ_ARTICLE,
-    title: 'Page Read Article',
-    description: 'Reads article-like main content with optional headings and links',
-    ui: {
-      titleKey: 'tool.title.bh_page_read_article',
-      descriptionKey: 'tool.description.bh_page_read_article',
-    },
+    ...toolMeta('Page Read Article', 'Reads article-like main content with optional headings and links', 'tool.title.bh_page_read_article', 'tool.description.bh_page_read_article'),
     modes: ['ask', 'debug', 'form'],
     risk: 'safe',
     argsSchema,

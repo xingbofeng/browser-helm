@@ -338,16 +338,36 @@ export function validateRuntimeToolDecision(
   snapshot: RunSnapshot,
   decision: AgentDecision
 ): RuntimeToolDecisionRejection | undefined {
-  if (decision.type !== 'tool_call' || decision.tool !== TOOL_NAMES.FORM_FILL_MANY) {
+  if (decision.type !== 'tool_call') {
     return undefined;
   }
-  const fields = readFillFields(decision.args);
-  if (!fields) {
-    return {
-      code: ERROR_CODES.TOOL_ARGS_INVALID,
-      message: 'Form fill arguments are invalid',
-      kind: 'blocked'
-    };
+  if (decision.tool !== TOOL_NAMES.FORM_FILL_MANY && decision.tool !== TOOL_NAMES.FORM_FILL_FIELD) {
+    return undefined;
+  }
+
+  // Normalize both FORM_FILL_FIELD and FORM_FILL_MANY into a common field list
+  let fields: Array<{ fieldRefId: string; value: string }>;
+  if (decision.tool === TOOL_NAMES.FORM_FILL_FIELD) {
+    const fieldRefId = decision.args.fieldRefId;
+    const value = decision.args.value;
+    if (typeof fieldRefId !== 'string' || typeof value !== 'string') {
+      return {
+        code: ERROR_CODES.TOOL_ARGS_INVALID,
+        message: 'Form fill arguments are invalid',
+        kind: 'blocked'
+      };
+    }
+    fields = [{ fieldRefId, value }];
+  } else {
+    const rawFields = readFillFields(decision.args);
+    if (!rawFields) {
+      return {
+        code: ERROR_CODES.TOOL_ARGS_INVALID,
+        message: 'Form fill arguments are invalid',
+        kind: 'blocked'
+      };
+    }
+    fields = rawFields;
   }
 
   const writableFields = new Map(
@@ -381,6 +401,13 @@ export function validateRuntimeToolDecision(
       return {
         code: ERROR_CODES.TOOL_ARGS_INVALID,
         message: `Form fill rejected: field ${field.fieldRefId} is disabled`,
+        kind: 'blocked'
+      };
+    }
+    if (candidate.writable?.readonly) {
+      return {
+        code: ERROR_CODES.TOOL_ARGS_INVALID,
+        message: `Form fill rejected: field ${field.fieldRefId} is read-only`,
         kind: 'blocked'
       };
     }

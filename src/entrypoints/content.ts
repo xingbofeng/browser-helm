@@ -52,12 +52,14 @@ function installWithDomainPolicy(
   installPageHealthBridge(globalScope);
   const floatingPanel = installFloatingPanel();
 
-  const currentLocale: Locale = 'zh';
-  const handler = new ContentRpcHandler(document, currentLocale);
+  // Bootstrap locale from chrome.storage.local; start with 'zh' as default.
+  // The handler is created synchronously so listeners register immediately,
+  // then locale is updated asynchronously once storage is read.
+  let handlerLocale: Locale = 'zh';
+  const handler = new ContentRpcHandler(document, handlerLocale);
   void readLocale().then((locale) => {
-    // Locale is read eagerly so future content-script lifecycle work can keep
-    // honoring user settings without making listener registration async.
-    void locale;
+    handlerLocale = locale;
+    handler.updateLocale(locale);
   });
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (isFloatingPanelToggleMessage(message)) {

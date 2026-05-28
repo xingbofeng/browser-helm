@@ -6,6 +6,8 @@ import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ToolSpec } from '../core/tool-spec';
+
+import { toolMeta } from '../core/tool-meta';
 import { parseIframeId } from './bh-viewport-get-info';
 
 const argsSchema = z.object({
@@ -24,12 +26,7 @@ export function bhViewportScroll(
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
   return {
     name: TOOL_NAMES.VIEWPORT_SCROLL,
-    title: 'Viewport Scroll',
-    description: 'Scrolls the page or iframe viewport and requires a follow-up observe/read',
-    ui: {
-      titleKey: 'tool.title.bh_viewport_scroll',
-      descriptionKey: 'tool.description.bh_viewport_scroll',
-    },
+    ...toolMeta('Viewport Scroll', 'Scrolls the page or iframe viewport and requires a follow-up observe/read', 'tool.title.bh_viewport_scroll', 'tool.description.bh_viewport_scroll'),
     modes: ['ask', 'debug', 'form', 'act'],
     risk: 'low',
     argsSchema,

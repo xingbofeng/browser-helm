@@ -41,3 +41,9 @@ BrowserHelm 运行在用户浏览器中，可能访问敏感的已登录页面�
 - memory summaries
 
 默认不发送完整本地 trace、未 mask 密码、hidden fields、完整 storage dump 或 secrets。
+
+## Page Health Hook
+
+当前浅层 debug 能力会默认注入 `page-health-hook.js` 到页面主世界，用于捕获 console error、console message 和 network failure 摘要。该 hook 不读取 cookie、密码字段或用户输入，但 network URL 本身可能包含敏感 path/query，因此写入 trace、UI 或模型上下文前必须继续走 redaction。
+
+发布版文案必须明确：page-health hook 是 BrowserHelm 的浅层诊断 fallback，不等同于 CDP deep debug。后续 v1.3 应改为 Debug mode opt-in，并在注入前给用户提示。

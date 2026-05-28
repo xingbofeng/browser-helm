@@ -6,6 +6,7 @@ import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ToolSpec } from '../core/tool-spec';
+import { toolMeta } from '../core/tool-meta';
 
 const argsSchema = z.object({});
 
@@ -15,12 +16,7 @@ export function bhIframeList(
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
   return {
     name: TOOL_NAMES.IFRAME_LIST,
-    title: 'Iframe List',
-    description: 'Lists iframes with stable iframeId metadata',
-    ui: {
-      titleKey: 'tool.title.bh_iframe_list',
-      descriptionKey: 'tool.description.bh_iframe_list',
-    },
+    ...toolMeta('Iframe List', 'Lists iframes with stable iframeId metadata', 'tool.title.bh_iframe_list', 'tool.description.bh_iframe_list'),
     modes: ['ask', 'debug', 'form', 'act'],
     risk: 'safe',
     argsSchema,

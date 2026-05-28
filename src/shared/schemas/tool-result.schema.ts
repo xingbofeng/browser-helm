@@ -3,10 +3,10 @@ import { z } from 'zod';
 export const toolRiskSchema = z.enum(['safe', 'low', 'medium', 'high']);
 
 export const toolRiskLabels = {
-  safe: '安全 / Safe',
-  low: '低风险 / Low',
-  medium: '中风险 / Medium',
-  high: '高风险 / High'
+  safe: 'safe' as const,
+  low: 'low' as const,
+  medium: 'medium' as const,
+  high: 'high' as const,
 } as const satisfies Record<z.infer<typeof toolRiskSchema>, string>;
 
 export const toolResultSchema = z.object({

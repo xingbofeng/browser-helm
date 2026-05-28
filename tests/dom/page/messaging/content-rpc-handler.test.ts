@@ -157,7 +157,7 @@ describe('content-rpc-handler iframe actions', () => {
         }
       });
     const clickGrant = handler.handle({
-      type: CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE,
+      type: 'BH_IFRAME_ACTION_AUTHORIZE',
       frameId: 4,
       refId: buttonRef,
       action: 'click'
@@ -168,7 +168,7 @@ describe('content-rpc-handler iframe actions', () => {
     expect(clickGrant.actionToken).not.toBe('BH_RUNTIME_AUTHORIZED_IFRAME_ACTION');
     expect(
       handler.handle({
-        type: CONTENT_RPC_MESSAGES.IFRAME_CLICK,
+        type: 'BH_IFRAME_CLICK',
         frameId: 4,
         refId: buttonRef,
         actionToken: clickGrant.actionToken
@@ -179,7 +179,7 @@ describe('content-rpc-handler iframe actions', () => {
     });
     expect(clicked).toBe(true);
     const typeGrant = handler.handle({
-      type: CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE,
+      type: 'BH_IFRAME_ACTION_AUTHORIZE',
       frameId: 4,
       refId: inputRef,
       action: 'type'
@@ -189,7 +189,7 @@ describe('content-rpc-handler iframe actions', () => {
     }
     expect(
       handler.handle({
-        type: CONTENT_RPC_MESSAGES.IFRAME_TYPE,
+        type: 'BH_IFRAME_TYPE',
         frameId: 4,
         refId: inputRef,
         text: 'BrowserHelm',
@@ -272,7 +272,7 @@ describe('content-rpc-handler iframe actions', () => {
 
     expect(
       handler.handle({
-        type: CONTENT_RPC_MESSAGES.IFRAME_CLICK,
+        type: 'BH_IFRAME_CLICK',
         frameId: 4,
         refId: buttonRef
       })
@@ -284,7 +284,7 @@ describe('content-rpc-handler iframe actions', () => {
 
     expect(
       handler.handle({
-        type: CONTENT_RPC_MESSAGES.IFRAME_TYPE,
+        type: 'BH_IFRAME_TYPE',
         frameId: 4,
         refId: inputRef,
         text: 'hello@example.com',
@@ -321,7 +321,7 @@ describe('content-rpc-handler iframe actions', () => {
       (element) => element.tagName === 'input'
     )?.refId ?? '';
     const grant = handler.handle({
-      type: CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE,
+      type: 'BH_IFRAME_ACTION_AUTHORIZE',
       frameId: 4,
       refId: buttonRef,
       action: 'click'
@@ -332,7 +332,7 @@ describe('content-rpc-handler iframe actions', () => {
 
     expect(
       handler.handle({
-        type: CONTENT_RPC_MESSAGES.IFRAME_TYPE,
+        type: 'BH_IFRAME_TYPE',
         frameId: 4,
         refId: inputRef,
         text: 'wrong action',
@@ -350,7 +350,7 @@ describe('content-rpc-handler iframe actions', () => {
 
     expect(
       handler.handle({
-        type: CONTENT_RPC_MESSAGES.IFRAME_CLICK,
+        type: 'BH_IFRAME_CLICK',
         frameId: 4,
         refId: buttonRef,
         actionToken: grant.actionToken
@@ -362,7 +362,7 @@ describe('content-rpc-handler iframe actions', () => {
     expect(clicked).toBe(true);
     expect(
       handler.handle({
-        type: CONTENT_RPC_MESSAGES.IFRAME_CLICK,
+        type: 'BH_IFRAME_CLICK',
         frameId: 4,
         refId: buttonRef,
         actionToken: grant.actionToken
@@ -390,7 +390,7 @@ describe('content-rpc-handler iframe actions', () => {
       (element) => element.name === '删除账号'
     )?.refId ?? '';
     const grant = handler.handle({
-      type: CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE,
+      type: 'BH_IFRAME_ACTION_AUTHORIZE',
       frameId: 4,
       refId: buttonRef,
       action: 'click'
@@ -401,7 +401,7 @@ describe('content-rpc-handler iframe actions', () => {
 
     expect(
       handler.handle({
-        type: CONTENT_RPC_MESSAGES.IFRAME_CLICK,
+        type: 'BH_IFRAME_CLICK',
         frameId: 4,
         refId: buttonRef,
         actionToken: grant.actionToken
@@ -426,7 +426,7 @@ describe('content-rpc-handler iframe actions', () => {
       (element) => element.tagName === 'input'
     )?.refId ?? '';
     const grant = handler.handle({
-      type: CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE,
+      type: 'BH_IFRAME_ACTION_AUTHORIZE',
       frameId: 4,
       refId: passwordRef,
       action: 'type'
@@ -437,7 +437,7 @@ describe('content-rpc-handler iframe actions', () => {
 
     expect(
       handler.handle({
-        type: CONTENT_RPC_MESSAGES.IFRAME_TYPE,
+        type: 'BH_IFRAME_TYPE',
         frameId: 4,
         refId: passwordRef,
         text: 'super-secret',

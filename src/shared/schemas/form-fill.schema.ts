@@ -114,6 +114,8 @@ export const fieldVerifyResultSchema = z.object({
 export const formVerifyResultSchema = z.object({
   status: verifyStatusSchema,
   formRefId: z.string().min(1).optional(),
+  formAction: z.string().optional(),
+  formMethod: z.string().optional(),
   allValid: z.boolean(),
   missingRequired: z.array(fieldVerifyResultSchema),
   invalidFields: z.array(fieldVerifyResultSchema),

@@ -181,7 +181,7 @@ describe('agent side panel components', () => {
       );
     });
 
-    expect(container.querySelector('strong')?.textContent).toBe('加粗');
+    expect(container.querySelector('.bh-markdownContent strong')?.textContent).toBe('加粗');
     expect(container.querySelector('img')).toBeNull();
     expect(container.innerHTML).not.toContain('onerror');
     const links = [...container.querySelectorAll('a')];

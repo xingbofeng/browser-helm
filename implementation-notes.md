@@ -1182,3 +1182,110 @@ Manifest 默认 host 权限也同步收口：`host_permissions` 为空，`http:/
 
 **待确认**：
 - [ ] 无。
+
+## v1.2 AgentLoop Prompt/Context Hardening 排期 - 2026-05-28
+
+**目标**：判断 Tools Contract 写入 prompt、KV Cache 不变性、Context 压缩/预算/脱敏、Parse Error Repair 和 i18n locale bootstrap 是否已被 v1.1 后续版本承接；未被承接的内容补入 v1.2 roadmap。
+
+**设计决策**：v1.1 后续 notes 已覆盖部分 prompt 历史预算、未知工具 repair、字段值脱敏和工具说明 i18n，但缺少版本级方案来约束 Tools Contract 的 KV-cache 稳定注入、统一 PromptContextPolicy、一次性 parse repair 以及 locale 单源 bootstrap。因此将 v1.2 从 Memory + Workflow Replay 扩展为 Memory/Replay + AgentLoop prompt/context hardening，并在 `docs/roadmap/v1.2-memory-workflow-replay.md` 中新增 T14-T17。
+
+**偏差说明**：本次只更新 roadmap 和决策记录，没有修改 runtime 实现；Context 历史预算已有实现痕迹，但仍需要在 v1.2 中收敛为统一入口，而不是继续由多个局部补丁维护。
+
+**权衡分析**：
+- 方案一：继续放在 v1.1 hardening。优点是离当前表单链路近；缺点是 v1.1 已经完成且范围很大，继续追加会让版本边界失控。
+- 方案二：作为独立 v1.1.x 补丁。优点是交付聚焦；缺点是 KV-cache、context summary、trace replay 和 memory summary 都与 v1.2 的 prompt/replay 基础设施强相关。
+- 选择方案三：补入 v1.2，因为 v1.2 正好要做 StepSummary、RunSummary、SessionSummary、memory masking 和 trace replay seed，适合统一 Prompt ABI 与 ContextPolicy。
+
+**待确认**：
+- [ ] v1.2 是否需要先拆出一个 `implement-v1-2-agentloop-hardening` OpenSpec change，再与 memory/replay 并行推进？
+- [ ] Tools Contract stable prefix 是否按 locale 分 cache，还是 tool contract description 固定英文、UI i18n 与模型 contract 分离？
+
+## v1.1.2 P0/P1 前置与 P2 版本落点 - 2026-05-28
+
+**目标**：回答完整 Mode System、完整 CDP debug 平台、全面 i18n、完整 eval 框架以及剩余 P2 内容是否已有版本规划；同时将 P0/P1 从后续版本中前置为立即修复项。
+
+**设计决策**：新增 `docs/roadmap/v1.1.2-agentloop-security-hardening.md`，把 Tools Contract + KV-cache stable prompt ABI、PromptContextPolicy/预算/脱敏、Submit Approval stale revalidation、Prompt Injection hardening、Parse Error Repair、i18n locale bootstrap 和最小安全回归测试作为 v1.1.2 立即 hardening 范围。`docs/roadmap/v1.2-memory-workflow-replay.md` 改为复用 v1.1.2 的 Prompt ABI/ContextPolicy/Parse Repair/locale bootstrap，并只扩展 memory/workflow/replay 相关能力。
+
+**偏差说明**：上一轮曾把这些 prompt/context hardening 项补进 v1.2；本次根据“P1 和 P0 现在就要修”的决策，将它们前置到 v1.1.2。v1.2 仍保留 memory summary、workflow preview 和 trace replay seed 对这些基础设施的扩展要求。
+
+**权衡分析**：
+- 方案一：全部留在 v1.2。优点是与 memory/replay summary 基础设施强相关；缺点是 P0/P1 安全问题会被延后。
+- 方案二：在 v1.1 继续追加零散补丁。优点是离当前代码近；缺点是 v1.1 范围已经完成且过大，容易继续失控。
+- 选择方案三：拆出 v1.1.2 立即 hardening。优点是能马上修主链路安全，同时给 v1.2 留出稳定基础；缺点是需要新增一个 roadmap 版本槽。
+
+**P2 版本落点**：
+- 完整 Mode System 重写：不进 v1.1.2；若最小 ToolSelector/权限边界不足，v1.2+ 后单独 proposal。
+- 完整 CDP debug 平台：已有 roadmap 落点 v1.3 DevTools/CDP。
+- 全面 i18n tool summary/error：v1.1.2 只修 locale bootstrap 和主界面关键文案；全量迁移后续 i18n hardening。
+- 完整 eval 框架：v1.1.2 只建安全回归用例；完整 eval/replay 与 v1.2 trace replay seed 对齐。
+- per-domain 权限模型：发布前必须做，建议排 v1.2 或 v1.2.x permission hardening。
+- Goal/SuccessCriteria finish 判断：建议 v1.2+ 与 workflow/session summary 一起推进。
+
+**待确认**：
+- [ ] 是否立刻创建 `openspec/changes/implement-v1-1-2-agentloop-security-hardening` 并开始按 T1-T7 执行？
+
+## 剩余 P2/长期项版本规划落地 - 2026-05-28
+
+**目标**：将完整 Mode System、完整 CDP debug 平台、全面 i18n tool summary/error、完整 eval 框架、per-domain 权限模型和 Goal/SuccessCriteria 等剩余项全部落入后续版本规划文档，避免只停留在口头 backlog。
+
+**设计决策**：新增 `docs/roadmap/v1.7-runtime-quality-i18n.md`，集中承接完整 Mode System / RuntimeStrategy 收敛、完整 ToolSelector、Goal/SuccessCriteria 产品化和全面用户可见 i18n hardening。更新 `docs/roadmap/v1.2-memory-workflow-replay.md`，把 per-domain permission/domain policy seed 与 Goal/SuccessCriteria summary bridge 放入 v1.2。更新 `docs/roadmap/v1.3-devtools-cdp.md`，明确完整 CDP debug 平台由 v1.3 承接。更新 `docs/roadmap/v2.0-platform.md`，明确完整 eval framework 由 v2.0 承接。同步 `docs/roadmap/readme.md` 和 `docs/roadmap/final-version-structure.md` 的版本总览。
+
+**偏差说明**：没有把完整 Mode System 和全面 i18n 硬塞进 v1.1.2，因为 v1.1.2 只修 P0/P1 主链路安全；完整 runtime strategy 和 i18n 治理需要等 v1.2-v1.6 的工具面稳定后再统一收敛。
+
+**权衡分析**：
+- 方案一：全部放 v1.2。优点是近期可见；缺点是 v1.2 已经承担 memory/workflow/replay，范围过重。
+- 方案二：全部放 v2.0。优点是平台期统一治理；缺点是 Mode System 和 i18n 会拖太久，影响 v1.x 产品质量。
+- 选择方案三：按自然依赖拆分。v1.2 做 domain permission 和 completion bridge，v1.3 做 CDP，v1.7 做 RuntimeStrategy/i18n，v2.0 做完整 eval。
+
+**待确认**：
+- [ ] v1.7 是否需要后续补设计图，保持 roadmap 系列视觉完整。
+
+## v1.1.2 Roadmap 结构化重写 - 2026-05-28
+
+**目标**：将 `docs/roadmap/v1.1.2-agentloop-security-hardening.md` 从修复清单改写为与其他 roadmap 一致的 10 模块版本级需求说明，并补充足够详细的任务、技术方案、目录结构和验收标准。
+
+**设计决策**：沿用 `docs/roadmap/readme.md` 规定的 10 模块结构：背景、用户故事、目标、不做什么、产品方案、设计图/视觉参考、技术方案、目录结构、依赖关系、验收标准。把 review 后校准出的 P0/P1 纳入 v1.1.2：`FORM_FILL_FIELD` 同等级安全校验、submit approval digest stale revalidation、合法 JSON prompt 裁剪、content script locale bootstrap、`.reasonix/` 清理和 README 准确性修正。
+
+**偏差说明**：本次只更新 roadmap 文档，没有实现代码修复或运行测试。完整 Mode System、CDP、全量 i18n、完整 eval、memory/workflow replay 仍按此前版本落点放到 v1.7、v1.3、v1.7、v2.0 和 v1.2。
+
+**权衡分析**：
+- 方案一：保留短清单。优点是直观；缺点是不符合项目 roadmap 模板，也不足以指导 OpenSpec/实现。
+- 方案二：一次性写成完整版本说明。优点是边界、任务、技术方案、测试和验收更清楚；缺点是文档更长。
+- 选择方案二，因为 v1.1.2 是 P0/P1 hardening，需要比普通 TODO 更明确的验收边界。
+
+**待确认**：
+- [ ] 是否基于该 roadmap 创建 `openspec/changes/implement-v1-1-2-agentloop-security-hardening` 并开始实现？
+
+## v1.1.3 发布治理与后续落点补齐 - 2026-05-29
+
+**目标**：根据公开仓库审计报告，把版本治理、公开声明准确性、非表单高风险审批、MV3 生命周期、page-health hook、coverage/security/release CI 等新增问题全部补入 roadmap，并新增 v1.1.3。
+
+**设计决策**：v1.1.2 继续承接主链路安全 hardening，并新增非表单 high-risk action 审批语义、runtime message sender boundary、Ask 观察性滚动语义和 README 隐私/工具表修正。新增 `docs/roadmap/v1.1.3-public-release-readiness.md`，专门承接 public release readiness：版本号/tag/release/checksum/CHANGELOG、coverage/security/release CI、工具文档一致性、manifest 权限审计和发布隐私声明。v1.2 增加 MV3 session persistence；v1.3 增加 page-health hook opt-in/CDP 替代；v2.0 增加 release/eval dashboard 平台化。
+
+**偏差说明**：没有把 release workflow、coverage、安全扫描塞进 v1.1.2，因为 v1.1.2 是 runtime/security 修复；公开发布治理需要独立验收，故新增 v1.1.3。没有要求 v1.2 立即完整持久化所有 trace，但要求 pending approval/action、run generation 和 session audit 可恢复或安全失效。
+
+**权衡分析**：
+- 方案一：所有问题都放 v1.1.2。优点是集中；缺点是 runtime 修复和发布治理混在一起，范围过大。
+- 方案二：发布治理放 v2.0。优点是平台化；缺点是公开仓库已经存在误导性声明和无 Release 问题，不能拖到平台期。
+- 选择方案三：v1.1.2 修主链路安全，v1.1.3 修公开发布治理，v1.2/v1.3/v2.0 分别承接持久化、CDP/page-health 和平台化 eval/release dashboard。
+
+**待确认**：
+- [ ] v1.1.2 实现时，`bh_iframe_click` / `bh_iframe_type` 是直接隐藏/删除，还是补专用 approved execution flow？推荐先隐藏/删除公开暴露。
+- [ ] v1.1.3 是否作为第一个正式 GitHub Release 版本号，还是先用 `v1.1.3-rc.1`？
+
+## v1.1.2 DeepSeek 修复复查补丁 - 2026-05-29
+
+**目标**：复查并补齐 DeepSeek 第三轮修复遗留问题，包括公开工具文档漂移、iframe mutating 工具残留、submit approval stale digest 上下文对比和 page-health hook 文档边界。
+
+**设计决策**：选择直接删除公开 `bh_iframe_click` / `bh_iframe_type` ToolSpec，而不是继续隐藏或标记 deprecated。原因是当前没有非表单 high-risk action 的 approved resume flow，保留工具会让用户看到“批准但不执行”的危险能力错觉。
+
+**偏差说明**：底层 Content RPC 的 iframe click/type 分支也同步删除，避免未来被误接回 ToolRegistry。历史测试中仍有一些旧 iframe mutating action 场景需要后续迁移为“工具不存在/不暴露”的断言。
+
+**权衡分析**：
+- 方案一：隐藏旧工具但保留实现。优点是测试改动少；缺点是继续留下误暴露风险。
+- 方案二：删除公开工具和底层 RPC。优点是能力边界清晰；缺点是旧测试和历史文档需要迁移。
+- 选择方案二，因为 v1.1.2 的安全目标优先于兼容旧 iframe mutating action 原型。
+
+**待确认**：
+- [ ] 是否要在下一步统一迁移旧 iframe action 测试为 removed-tool 回归测试？
+- [ ] 是否要在 v1.3 前把 page-health hook 改成真正 Debug mode opt-in？

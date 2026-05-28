@@ -6,6 +6,7 @@ import {
 } from '../../shared/schemas/agent-decision.schema';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
+import { tZh } from '../../i18n/t';
 
 type DecisionParseError = {
   code:
@@ -27,8 +28,7 @@ type DecisionParseFailure = {
 
 export type DecisionParseResult = DecisionParseSuccess | DecisionParseFailure;
 
-const MULTI_ACTION_QUESTION =
-  '我一次只能执行一个下一步动作。请确认要继续执行哪一步，或提供需要填写的具体字段值。';
+const MULTI_ACTION_QUESTION = tZh('agent.error.decision.noNextAction');
 
 const TOOL_ALIASES: Record<string, string> = {
   bh_page_get_visible_text: TOOL_NAMES.PAGE_READ_VISIBLE_TEXT
@@ -44,7 +44,7 @@ export class DecisionParser {
         ok: false,
         error: {
           code: ERROR_CODES.MODEL_OUTPUT_INVALID_JSON,
-          message: 'Model output is not valid JSON'
+          message: tZh('agent.error.decision.notJson')
         }
       };
     }
@@ -55,7 +55,7 @@ export class DecisionParser {
         ok: false,
         error: {
           code: ERROR_CODES.MODEL_OUTPUT_SCHEMA_INVALID,
-          message: 'Model output does not match AgentDecision schema',
+          message: tZh('agent.error.decision.schemaInvalid'),
           detail: normalizeZodError(result.error)
         }
       };

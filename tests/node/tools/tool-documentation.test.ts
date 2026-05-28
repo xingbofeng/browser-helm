@@ -19,9 +19,7 @@ const toolFiles = [
   'src/tools/form/bh-form-list.ts',
   'src/tools/form/bh-form-read-fields.ts',
   'src/tools/frame/bh-frame-list.ts',
-  'src/tools/frame/bh-iframe-click.ts',
   'src/tools/frame/bh-iframe-read.ts',
-  'src/tools/frame/bh-iframe-type.ts',
   'src/tools/page/bh-page-observe.ts',
   'src/tools/form/bh-form-infer-fill-plan.ts',
   'src/tools/form/bh-form-fill-field.ts',
@@ -42,7 +40,7 @@ describe('tool documentation standard', () => {
   it.each(toolFiles)('%s keeps a Chinese maintenance comment before title', (file) => {
     const source = readFileSync(resolve(process.cwd(), file), 'utf8');
 
-    expect(source).toMatch(/\/\/ [^\n]*[\u4E00-\u9FFF][^\n]*\n\s*title:/);
+    expect(source).toMatch(/\/\/ [^\n]*[\u4E00-\u9FFF][^\n]*\n\s*...toolMeta/);
   });
 
   it('documents every tool in src/tools/README.md', () => {
@@ -56,7 +54,8 @@ describe('tool documentation standard', () => {
       if (!raw) continue;
       // TOOL_NAMES 常量 → bh_xxx蛇形；字符串字面量直接用
       const name = raw.startsWith('bh_') ? raw : 'bh_' + raw.toLowerCase();
-      expect(readme).toContain(`| \`${name}`);
+      // Accept both active tools (| \`name`) and deprecated tools (| ~~\`name`~~)
+      expect(readme).toMatch(new RegExp(`\\| (?:~~)?\`${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
     }
     expect(readme).not.toContain('src/tools/page/bh-frame-list.ts');
   });
