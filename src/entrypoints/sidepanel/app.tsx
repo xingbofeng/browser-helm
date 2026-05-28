@@ -47,6 +47,10 @@ export function App() {
     };
   }, [targetMode]);
 
+  if (!locale) {
+    return null;
+  }
+
   return (
     <I18nProvider initialLocale={locale}>
       <CockpitApp

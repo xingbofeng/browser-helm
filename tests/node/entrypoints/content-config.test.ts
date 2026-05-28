@@ -130,18 +130,19 @@ describe('content script config', () => {
     expect((globalThis as Record<string, unknown>)[marker]).toBe(true);
   });
 
-  it('injects shallow page-health hooks into the page context', async () => {
+  it('injects shallow page-health hooks through a web-accessible script file', async () => {
     vi.stubGlobal('defineContentScript', (config: unknown) => config);
     const addListener = vi.fn();
-    const appendedScripts: Array<{ id?: string; textContent?: string; remove: () => void }> = [];
+    const appendedScripts: Array<{ id?: string; src?: string; textContent?: string; remove: () => void }> = [];
     const documentElement = {
-      appendChild: (node: { id?: string; textContent?: string; remove: () => void }) => {
+      appendChild: (node: { id?: string; src?: string; textContent?: string; remove: () => void }) => {
         appendedScripts.push(node);
         return node;
       }
     };
     vi.stubGlobal('chrome', {
       runtime: {
+        getURL: (path: string) => `chrome-extension://browserhelm/${path}`,
         onMessage: {
           addListener
         }
@@ -158,6 +159,7 @@ describe('content script config', () => {
       getElementById: vi.fn(() => null),
       createElement: vi.fn(() => ({
         id: '',
+        src: '',
         textContent: '',
         remove: vi.fn()
       }))
@@ -171,10 +173,7 @@ describe('content script config', () => {
 
     expect(appendedScripts).toHaveLength(1);
     expect(appendedScripts[0]?.id).toBe('browserhelm-page-health-hook');
-    expect(appendedScripts[0]?.textContent).toContain('console.error');
-    expect(appendedScripts[0]?.textContent).toContain('"warn"');
-    expect(appendedScripts[0]?.textContent).toContain('console_message');
-    expect(appendedScripts[0]?.textContent).toContain('window.fetch');
-    expect(appendedScripts[0]?.textContent).toContain('XMLHttpRequest');
+    expect(appendedScripts[0]?.src).toBe('chrome-extension://browserhelm/page-health-hook.js');
+    expect(appendedScripts[0]?.textContent).toBe('');
   });
 });

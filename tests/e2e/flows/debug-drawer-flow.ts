@@ -33,11 +33,11 @@ export class DebugDrawerFlow {
     await cockpit.openDebugTab('Trace');
 
     // trace header 存在
-    await expect(page.getByText(/Trace \/ 调试日志/u)).toBeVisible();
+    await expect(page.getByText(/Trace \/ (调试日志|Debug Log|Debug log)/u)).toBeVisible();
     // 有 trace item
     await expect(page.locator('.bh-traceItem').first()).toBeVisible();
     // 含 run_started
-    await expect(page.getByText('开始任务')).toBeVisible();
+    await expect(page.getByText(/开始任务|Task started/u)).toBeVisible();
   }
 
   /** trace item 大 payload 默认折叠。 */
@@ -88,7 +88,7 @@ export class DebugDrawerFlow {
 
     const page = await sidePanel.openRun(snapshot.runId);
     const cockpit = new CockpitPanel(page);
-    await cockpit.openDebugTab('工具');
+    await cockpit.openDebugTab(/^(工具|Tools)$/u);
 
     // 工具 tab 有内容（至少 observed 后有工具结果）
     await expect(page.locator('.bh-toolInspector').first()).toBeVisible();
@@ -99,11 +99,11 @@ export class DebugDrawerFlow {
     // 通过直接打开 side panel 没有 run 的状态验证
     const page = await this.flowContext.sidePanel().open();
     const cockpit = new CockpitPanel(page);
-    await cockpit.openDebugTab('工具');
+    await cockpit.openDebugTab(/^(工具|Tools)$/u);
 
     // 空态消息
     await expect(
-      page.getByText(/暂无工具调用记录|工具|空/)
+      page.getByText(/暂无工具调用记录|No tool calls|工具|Tools|空/)
         .first()
     ).toBeVisible();
   }

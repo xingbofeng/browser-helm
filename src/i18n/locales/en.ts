@@ -31,6 +31,7 @@ export const en = {
   'chat.mode.debug': 'Advanced Debug',
 
   // ── Header Actions ──
+  'header.clearSessionAria': 'Clear session',
   'header.settingsAria': 'Open settings',
   'header.debugAria': 'Advanced debug options',
 
@@ -89,6 +90,7 @@ export const en = {
 
   // ── Form Action Cards ──
   'form.card.inferPlan': 'Infer fill plan',
+  'form.card.inferPlanNeedsValues': 'Please provide the specific field values to fill. I will not invent personal information or overwrite existing input.',
   'form.card.fillFields': 'Field fill',
   'form.card.verify': 'Form verification',
   'form.card.submitDenied': 'Submit denied',
@@ -111,10 +113,6 @@ export const en = {
   // ── Error / CockpitApp ──
   'error.sendFailed': 'Send failed',
   'error.cantStart': 'BrowserHelm could not start the current task.',
-
-  // ── Revise Goal Bar ──
-  'reviseGoal.hint': 'Goal can be revised for this run',
-  'reviseGoal.button': 'Revise goal',
 
   // ── Approval Drawer ──
   'approval.aria': 'Approval',
@@ -228,7 +226,7 @@ export const en = {
   // ── Run Progress ──
   'runProgress.label': 'Running…',
   'runProgress.observing': 'Observing page',
-  'runProgress.thinking': 'Model thinking',
+  'runProgress.thinking': 'Preparing next step',
   'runProgress.executing': 'Executing tool',
 
   // ── Trace Log ──
@@ -240,9 +238,10 @@ export const en = {
   'trace.event.toolStarted': 'Calling tool: {tool}',
   'trace.event.toolResult': 'Tool result: {tool}',
   'trace.event.unknownTool': 'Unknown tool',
-  'trace.event.modelStarted': 'Generating response',
-  'trace.event.modelDelta': 'Generating',
-  'trace.event.modelFinished': 'Response complete',
+  'trace.event.modelStarted': 'Reading model decision',
+  'trace.event.modelDelta': 'Reading model decision',
+  'trace.event.modelFinished': 'Model decision read',
+  'trace.event.modelFailed': 'Model request failed',
   'trace.event.runFinished': 'Task complete',
   'trace.event.runFailed': 'Task failed',
   'trace.event.planUpdated': 'Plan updated',
@@ -254,9 +253,9 @@ export const en = {
   'trace.summary.toolResultDone': 'Done: {summary}',
   'trace.summary.toolResultFailed': 'Failed: {summary}',
   'trace.summary.toolReturned': 'Tool returned result',
-  'trace.summary.modelStarted': 'Model {model} started output.',
-  'trace.summary.modelDelta': 'Received {chunks} chunks, ~{chars} characters.',
-  'trace.summary.modelFinished': 'Generation complete, ~{chars} characters.',
+  'trace.summary.modelStarted': 'Model {model} is producing the next-step decision.',
+  'trace.summary.modelDelta': 'Received {chunks} decision chunks, ~{chars} characters.',
+  'trace.summary.modelFinished': 'Decision read, ~{chars} characters.',
   'trace.summary.runFailed': 'Run did not complete.',
   'trace.summary.planUpdated': 'Agent updated current goal and steps.',
   'trace.summary.contextBuilt': 'Built {count} context messages.',
@@ -323,6 +322,7 @@ export const en = {
   'tool.description.bh_agent_ask_user': 'Requests user input before continuing',
   'tool.description.bh_agent_fail': 'Fails current run with structured error',
   'tool.description.bh_agent_finish': 'Completes current run with final summary',
+  'tool.description.bh_request_act_mode': 'Asks the user to switch to Act mode without changing the page.',
   'tool.description.bh_debug_collect_page_health': 'Collects a read-only shallow page health summary',
   'tool.description.bh_element_inspect': 'Inspects a page element from its stable ref',
   'tool.description.bh_element_read_state': 'Reads current state for a page element from its stable ref',
@@ -332,11 +332,12 @@ export const en = {
   'tool.description.bh_form_inspect': 'Inspects form fields and submit state',
   'tool.description.bh_form_list': 'Lists detected forms and field counts',
   'tool.description.bh_form_read_fields': 'Reads form field snapshots',
-  'tool.description.bh_frame_list': 'Lists frame ids and urls for the current page',
-  'tool.description.bh_iframe_click': 'Clicks an iframe target after readiness and approval checks',
+  // Deprecated: old iframe tool descriptions kept for zh.ts key parity
+  'tool.description.bh_frame_list': '[DEPRECATED] Lists frame ids and urls for the current page',
+  'tool.description.bh_iframe_click': '[DEPRECATED] Clicks an iframe target after readiness and approval checks',
   'tool.description.bh_iframe_list': 'Lists iframes with stable iframeId metadata',
   'tool.description.bh_iframe_read': 'Reads an iframe document by iframeId or a target by composite stable ref_id',
-  'tool.description.bh_iframe_type': 'Types into an iframe target after readiness and approval checks',
+  'tool.description.bh_iframe_type': '[DEPRECATED] Types into an iframe target after readiness and approval checks',
   'tool.description.bh_page_observe': 'Observes the current page and returns a bounded summary',
   'tool.description.bh_page_read_visible_text': 'Reads current page visible text with cursor pagination',
   'tool.description.bh_page_read_article': 'Reads article-like main content with optional headings and links',
@@ -384,13 +385,43 @@ export const en = {
   'diagnosis.source.user': 'User input',
 
   // ── Run Progress Detail ──
-  'runProgress.thinkingDetail': 'BrowserHelm is synthesizing page observations, conversation history, and tool results.',
+  'runProgress.thinkingDetail': 'BrowserHelm is synchronizing the current page, history, and run state.',
   'runProgress.executingDetail': 'Running {tool}; cards and debug info will update automatically on completion.',
   'runProgress.observingDetail': 'Reading title, text summary, links, forms, and interactive elements.',
   'runProgress.waitingUser': 'Waiting for your input',
   'runProgress.waitingUserDetail': 'The agent needs more information to continue.',
   'runProgress.recovering': 'Recovering',
   'runProgress.recoveringDetail': 'Selecting the next step based on error information.',
+  'runProgress.turnStarted': 'Starting the next step',
+  'runProgress.turnStartedDetail': 'BrowserHelm is checking the current run state before acting.',
+  'runProgress.toolsSelected': 'Choosing available tools',
+  'runProgress.toolsSelectedDetail': 'BrowserHelm is narrowing the tools that are safe for this mode.',
+  'runProgress.contextBuilt': 'Preparing page context',
+  'runProgress.contextBuiltDetail': 'BrowserHelm is packaging the page, history, and recent tool results for the AI.',
+  'runProgress.readingDecision': 'Reading the AI decision',
+  'runProgress.readingDecisionDetail': 'BrowserHelm is validating the model output before running anything.',
+  'runProgress.modelStreaming': 'Reading model decision',
+  'runProgress.modelStreamingDetail': 'The model is generating this step decision; received {count} characters so far.',
+  'runProgress.preparingAction': 'Preparing the selected action',
+  'runProgress.preparingActionDetail': 'BrowserHelm is applying runtime safety checks before the next step.',
+  'runProgress.confirmingFill': 'Confirming filled fields',
+  'runProgress.confirmingFillDetail': 'The field value is already entered; BrowserHelm is checking whether verification or a final response is needed.',
+  'runFlow.aria': 'Run process',
+  'runFlow.reasoningTitle': 'Reasoning',
+  'runFlow.thinkingStatus': 'Thinking',
+  'runFlow.toolStatus': 'Running action',
+  'runFlow.modelStarted': 'The model {model} is preparing the next safe step.',
+  'runFlow.modelFailed': 'Model request failed: {summary}',
+  'runFlow.fallbackTitle': 'Retrying model request',
+  'runFlow.fallbackDetail': 'Streaming failed; BrowserHelm is trying a fallback request. Reason: {reason}',
+  'runFlow.repairTitle': 'Repairing decision',
+  'runFlow.repairDetail': 'BrowserHelm rejected the previous decision and asked for a safer one.',
+  'runFlow.toolStarted': 'BrowserHelm is running {tool}.',
+
+  // ── Runtime Form Fill ──
+  'runtime.formFill.explicitValuesTitle': 'Please provide specific field values',
+  'runtime.formFill.explicitValuesContent': 'For safety, BrowserHelm can only fill values that you explicitly provide. Please tell me what to enter for: {fields}.',
+  'runtime.formFill.explicitValuesFallbackFields': 'the form fields',
 
   // ── Trace Store ──
   'traceStore.runStarted': 'Run started',
@@ -440,8 +471,10 @@ export const en = {
   'runtime.error.highlightUnavailable': 'Run is not available for page element inspection',
   'runtime.error.toolUnavailable': 'Run is not available for tool execution',
   'runtime.error.refNotFound': 'Could not find a deterministic replacement ref',
-  'runtime.modeSwitch.title': 'Switch to Act mode',
-  'runtime.modeSwitch.askToAct': 'This request would change the page. Ask mode only reads and explains pages; it does not type, click, submit, or send. Switch to Act and send it again. I can fill low-risk fields first, while send, submit, delete, and other final actions still require a separate confirmation.',
+  'runtime.modeSwitch.title': 'Act mode required',
+  'runtime.modeSwitch.askToAct': 'This request would change the page. Ask mode only reads and explains pages; it does not type, click, submit, or send. Switch to Act to continue this request. This run can fill low-risk fields only; send, submit, delete, and other final actions still require a separate confirmation.',
+  'runtime.modeSwitch.continueAct': 'Switch to Act and continue',
+  'runtime.modeSwitch.keepAsk': 'Keep Ask',
   'runtime.error.argsRepair': 'Tool arguments need user or model repair before retrying',
   'runtime.error.userCancelReason': 'Run was cancelled by the user',
 
@@ -637,7 +670,8 @@ export const en = {
   'tool.title.bh_form_submit_with_approval': 'Submit Form (Approval Required)',
   'tool.title.bh_form_verify': 'Verify Form',
   'tool.title.bh_form_infer_fill_plan': 'Infer Form Fill Plan',
-  'tool.title.bh_frame_list': 'Frame List',
+  // Deprecated: old iframe tool title kept for zh.ts key parity
+  'tool.title.bh_frame_list': '[DEPRECATED] Frame List',
   'tool.title.bh_iframe_list': 'Iframe List',
   'tool.title.bh_iframe_read': 'Read Iframe Content',
   'tool.title.bh_viewport_get_info': 'Viewport Info',

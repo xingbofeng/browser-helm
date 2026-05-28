@@ -59,17 +59,21 @@ export function inferLocalFillPlan(args: FormInferFillPlanArgs, locale: Locale =
       skipped.push({ fieldRefId: field.refId, label: field.label, name: field.name, type: field.type, reason: field.type === 'file' ? t('fillPlan.skip.fileUpload', locale) : t('fillPlan.skip.hidden', locale) });
       continue;
     }
-    if (field.valuePreview && field.valuePreview !== 'empty' && field.valuePreview !== 'unchecked') {
-      skipped.push({ fieldRefId: field.refId, label: field.label, name: field.name, type: field.type, reason: t('fillPlan.skip.existingValue', locale) });
-      targets.push(mk(field, undefined, 'empty', 'low', t('fillPlan.skip.existingValueReason', locale), t('fillPlan.skip.existingValue', locale), locale));
-      continue;
-    }
-
     const ti = inferField(field, task, rawTask, {
       requestedFreeText,
       preferredFreeTextRefId,
       locale,
     });
+    if (
+      field.type !== 'checkbox' &&
+      field.valuePreview &&
+      field.valuePreview !== 'empty' &&
+      field.valuePreview !== 'unchecked'
+    ) {
+      skipped.push({ fieldRefId: field.refId, label: field.label, name: field.name, type: field.type, reason: t('fillPlan.skip.existingValue', locale) });
+      targets.push(mk(field, undefined, 'empty', 'low', t('fillPlan.skip.existingValueReason', locale), t('fillPlan.skip.existingValue', locale), locale));
+      continue;
+    }
     if (ti.skipReason) {
       skipped.push({ fieldRefId: field.refId, label: field.label, name: field.name, type: field.type, reason: ti.skipReason });
     }
@@ -92,8 +96,11 @@ function inferField(field: FieldInput, task: string, rawTask: string, context: {
   const locale = context.locale ?? 'zh';
 
   if (field.type === 'checkbox') {
-    const want = /勾|选|同意|接受|订阅|全选|check|agree|accept|subscribe|select all/i.test(combined + task);
-    return want
+    if (hasCheckboxOptOutIntent(rawTask) && isOptOutCheckboxField(combined, rawTask)) {
+      return mk(field, 'false', 'label-match', 'high', t('fillPlan.confidence.labelMatch', locale, { label: field.label ?? field.name ?? '' }), undefined, locale);
+    }
+    const want = /(?:勾选|选中|同意|接受|订阅|全选|check|agree|accept|subscribe|select all)/i.test(task);
+    return want && !hasCheckboxOptOutIntent(rawTask)
       ? mk(field, 'true', 'label-match', 'high', t('fillPlan.confidence.labelMatch', locale, { label: field.label ?? field.name ?? '' }), undefined, locale)
       : mk(field, undefined, 'empty', 'low', t('fillPlan.confidence.userRequired', locale), t('fillPlan.confidence.userRequired', locale), locale);
   }
@@ -163,6 +170,15 @@ function inferField(field: FieldInput, task: string, rawTask: string, context: {
   }
 
   return mk(field, '', 'empty', 'low', t('fillPlan.confidence.userRequired', locale), t('fillPlan.confidence.userRequired', locale), locale);
+}
+
+function hasCheckboxOptOutIntent(task: string): boolean {
+  return /(?:不要勾选|不勾选|别勾选|取消勾选|取消选中|不订阅|取消订阅|不接收|拒绝接收|do not (?:check|select|subscribe|receive)|don't (?:check|select|subscribe|receive)|opt out|unsubscribe|no marketing)/iu.test(task);
+}
+
+function isOptOutCheckboxField(combined: string, task: string): boolean {
+  const text = `${combined} ${task}`.toLowerCase();
+  return /(?:营销|推荐|通知|电子邮件|交流信息|订阅|更新|newsletter|marketing|updates|recommendation|offers|email)/iu.test(text);
 }
 
 function extractRequestedFreeText(task: string): string | undefined {

@@ -1,0 +1,495 @@
+$ npm test 2>&1 | grep -A 20 "FAIL\|❯\|failed\|AssertionError"
+[exit 0]
+ [31m❯[39m tests/node/ui/components/timeline-inspector.test.tsx [2m([22m[2m5 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 14[2mms[22m[39m
+     [32m✓[39m renders tool result flags and redacted args[32m 5[2mms[22m[39m
+     [32m✓[39m renders trace detail without replay controls[32m 1[2mms[22m[39m
+     [32m✓[39m renders localized tool descriptions for tool trace items[32m 1[2mms[22m[39m
+     [32m✓[39m renders English tool descriptions when locale is English[32m 1[2mms[22m[39m
+[31m     [31m×[31m summarizes streaming delta trace events instead of rendering every chunk[39m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/dom/page/dom/form-fill-dom.test.ts [2m([22m[2m46 tests[22m[2m)[22m[32m 66[2mms[22m[39m
+[90mstderr[2m | tests/dom/ui/qa-card.test.tsx[2m > [22m[2mQA 卡片 / 页面观察卡组件[2m > [22m[2m页面观察默认使用问答卡片类组件
+[22m[39mAn update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+[90mstderr[2m | tests/dom/ui/qa-card.test.tsx[2m > [22m[2mQA 卡片 / 页面观察卡组件[2m > [22m[2m成功卡显示统计 chips
+[22m[39mAn update to Root inside a test was not wrapped in act(...).
+--
+ [31m❯[39m tests/node/ui/components/agent-components.test.tsx [2m([22m[2m9 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 130[2mms[22m[39m
+     [32m✓[39m only exposes ask and act modes in the primary composer[32m 23[2mms[22m[39m
+     [32m✓[39m derives page summaries even when runtime messages only contain user-authored messages[32m 25[2mms[22m[39m
+     [32m✓[39m derives an initial page summary when runtime messages are absent[32m 5[2mms[22m[39m
+     [32m✓[39m renders diagnosis evidence and confidence without exposing raw ref ids[32m 4[2mms[22m[39m
+[31m     [31m×[31m sanitizes untrusted agent markdown before rendering HTML[39m[32m 14[2mms[22m[39m
+     [32m✓[39m keeps scrolling while a streaming message grows in place[32m 16[2mms[22m[39m
+     [32m✓[39m keeps Debug collapsed, then renders merged elements/forms only after opening[32m 17[2mms[22m[39m
+     [32m✓[39m saves model configuration and tests provider connection without leaking the key[32m 18[2mms[22m[39m
+     [32m✓[39m warns and saves explicit consent for local provider endpoints[32m 7[2mms[22m[39m
+ [32m✓[39m tests/node/ui/ui-import-boundary.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 23[2mms[22m[39m
+[90mstderr[2m | tests/dom/ui/sidepanel/cockpit-app-interaction.test.tsx[2m > [22m[2mCockpitApp interaction[2m > [22m[2mstarts a run, renders structured tabs and cancels through RuntimePort
+[22m[39mAn update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+--
+      [32m"Invalid discriminator value. Expected 'run_started' | 'run_finished' | 'run_failed' | 'run_cancelled' | 'turn_started' | 'turn_finished' | 'model_output_received' | 'model_decision' | 'decision_parse_failed' | 'tool_started' | 'tool_result' | 'tool_failed' | 'context_built' | 'context_compacted' | 'context_summary' | 'approval_required' | 'state_changed' | 'task_classified' | 'tools_selected' | 'capabilities_resolved' | 'plan_updated' | 'recovery_action' | 'findings_reported' | 'debug_report_created' | 'model_stream_started' | 'model_stream_delta' | 'model_stream_finished' | 'model_stream_failed' | 'model_stream_fallback_started' | 'model_stream_fallback_finished' | 'provider_test_started' | 'provider_test_finished' | 'provider_test_failed' | 'fill_plan_created' | 'field_fill_started' | 'field_fill_result' | 'form_verify_result' | 'submit_approval_requested' | 'form_submit_result' | 'approval_approved' | 'approval_denied' | 'approval_expired' | 'model_prompt' | 'snapshot_updated' | 'runtime_event_invalid'"[39m
+    ]
+  }
+}
+[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  type: [32m'runtime_event_invalid'[39m,
+  timestamp: [33m1710000000123[39m,
+  payload: {
+    originalType: [32m'event_2'[39m,
+    validationErrors: [
+      [32m"Invalid discriminator value. Expected 'run_started' | 'run_finished' | 'run_failed' | 'run_cancelled' | 'turn_started' | 'turn_finished' | 'model_output_received' | 'model_decision' | 'decision_parse_failed' | 'tool_started' | 'tool_result' | 'tool_failed' | 'context_built' | 'context_compacted' | 'context_summary' | 'approval_required' | 'state_changed' | 'task_classified' | 'tools_selected' | 'capabilities_resolved' | 'plan_updated' | 'recovery_action' | 'findings_reported' | 'debug_report_created' | 'model_stream_started' | 'model_stream_delta' | 'model_stream_finished' | 'model_stream_failed' | 'model_stream_fallback_started' | 'model_stream_fallback_finished' | 'provider_test_started' | 'provider_test_finished' | 'provider_test_failed' | 'fill_plan_created' | 'field_fill_started' | 'field_fill_result' | 'form_verify_result' | 'submit_approval_requested' | 'form_submit_result' | 'approval_approved' | 'approval_denied' | 'approval_expired' | 'model_prompt' | 'snapshot_updated' | 'runtime_event_invalid'"[39m
+    ]
+  }
+}
+
+ [32m✓[39m tests/node/integration/agent-tools/mock-run-finish.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/node/integration/agent-tools/missing-tool-failure.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/node/runtime/run/run-store.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+[90mstderr[2m | tests/dom/ui/sidepanel/cockpit-app-interaction.test.tsx[2m > [22m[2mCockpitApp interaction[2m > [22m[2mrenders pending approval and sends deny decisions
+[22m[39mAn update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ [32m✓[39m tests/node/page/messaging/content-rpc-client.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+--
+  type: [32m'decision_parse_failed'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    repairAttempt: [33m0[39m,
+    parseError: {
+      code: [32m'TOOL_NOT_FOUND'[39m,
+      message: [32m'Model selected unavailable tool: bh_debug_collect_page_health'[39m,
+      kind: [32m'tool_not_found'[39m,
+      detail: [36m[Object][39m
+    }
+  }
+}
+[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977222068[39m,
+  type: [32m'model_stream_started'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    provider: [32m'api.example.com'[39m,
+    model: [32m'demo-model'[39m,
+    streamingEnabled: [33mfalse[39m
+--
+  type: [32m'decision_parse_failed'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    repairAttempt: [33m0[39m,
+    parseError: {
+      code: [32m'TOOL_NOT_FOUND'[39m,
+      message: [32m'Model selected unavailable tool: bh_form_infer_fill_plan'[39m,
+      kind: [32m'tool_not_found'[39m,
+      detail: [36m[Object][39m
+    }
+  }
+}
+[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977222131[39m,
+  type: [32m'model_stream_started'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    provider: [32m'api.example.com'[39m,
+    model: [32m'demo-model'[39m,
+    streamingEnabled: [33mfalse[39m
+--
+  type: [32m'decision_parse_failed'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    repairAttempt: [33m1[39m,
+    parseError: {
+      code: [32m'TOOL_NOT_FOUND'[39m,
+      message: [32m'Model selected unavailable tool: bh_form_fill_many'[39m,
+      kind: [32m'tool_not_found'[39m,
+      detail: [36m[Object][39m
+    }
+  }
+}
+
+ [32m✓[39m tests/node/tools/page/page-tools.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/node/shared/schemas/agent-decision.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/node/runtime/run/tools/tool-execution-service.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/node/ui/stores/agent-store.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/node/runtime/side-panel-target.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/node/tools/frame/iframe-tools.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/node/agent/parser/decision-parser.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+[90mstdout[2m | tests/node/runtime/run-manager.test.ts[2m > [22m[2mRunManager[2m > [22m[2mnotifies subscribers when async AgentLoop diagnostics enrich the snapshot
+--
+  type: [32m'decision_parse_failed'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    repairAttempt: [33m0[39m,
+    parseError: {
+      code: [32m'MODEL_OUTPUT_INVALID_JSON'[39m,
+      message: [32m'Model output is not valid JSON'[39m
+    }
+  }
+}
+[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977222368[39m,
+  type: [32m'model_stream_started'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    provider: [32m'api.example.com'[39m,
+    model: [32m'demo-model'[39m,
+    streamingEnabled: [33mfalse[39m
+  }
+}
+--
+  type: [32m'decision_parse_failed'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    repairAttempt: [33m1[39m,
+    parseError: {
+      code: [32m'MODEL_OUTPUT_INVALID_JSON'[39m,
+      message: [32m'Model output is not valid JSON'[39m
+    }
+  }
+}
+[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977222369[39m,
+  type: [32m'run_finished'[39m,
+  payload: { status: [32m'finished'[39m, message: [32m'已完成页面观察。'[39m }
+}
+
+[90mstdout[2m | tests/node/runtime/run-manager.test.ts[2m > [22m[2mRunManager[2m > [22m[2mrepairs a repeated form fill after the previous fill already succeeded
+[22m[39m[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977222370[39m,
+--
+  type: [32m'decision_parse_failed'[39m,
+  payload: {
+    stepIndex: [33m1[39m,
+    repairAttempt: [33m0[39m,
+    parseError: {
+      code: [32m'TOOL_ARGS_INVALID'[39m,
+      message: [32m'The previous form fill already succeeded. Do not call bh_form_fill_many again for the same already-filled value; call bh_form_verify or return finish.'[39m,
+      kind: [32m'repeated_form_fill'[39m,
+      detail: [36m[Object][39m
+    }
+  }
+}
+[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977222373[39m,
+  type: [32m'model_stream_started'[39m,
+  payload: {
+    stepIndex: [33m1[39m,
+    provider: [32m'api.example.com'[39m,
+    model: [32m'demo-model'[39m,
+    streamingEnabled: [33mfalse[39m
+--
+  type: [32m'decision_parse_failed'[39m,
+  payload: {
+    stepIndex: [33m2[39m,
+    repairAttempt: [33m0[39m,
+    parseError: {
+      code: [32m'TOOL_ARGS_INVALID'[39m,
+      message: [32m'A form fill for the same field refs already succeeded earlier in this run. Do not call bh_form_fill_many again for fields that were already filled. Return finish if the user goal is satisfied, or call bh_form_verify for those field refs if explicit validation is needed.'[39m,
+      kind: [32m'repeated_form_fill'[39m,
+      detail: [36m[Object][39m
+    }
+  }
+}
+[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977222385[39m,
+  type: [32m'model_stream_started'[39m,
+  payload: {
+    stepIndex: [33m2[39m,
+    provider: [32m'api.example.com'[39m,
+    model: [32m'demo-model'[39m,
+    streamingEnabled: [33mfalse[39m
+--
+  type: [32m'decision_parse_failed'[39m,
+  payload: {
+    stepIndex: [33m2[39m,
+    repairAttempt: [33m0[39m,
+    parseError: {
+      code: [32m'TOOL_ARGS_INVALID'[39m,
+      message: [32m'The previous form verification already succeeded. Do not call bh_form_verify again; return finish or request submit approval if the user asked to submit.'[39m,
+      kind: [32m'repeated_form_verify'[39m
+    }
+  }
+}
+[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977222404[39m,
+  type: [32m'model_stream_started'[39m,
+  payload: {
+    stepIndex: [33m2[39m,
+    provider: [32m'api.example.com'[39m,
+    model: [32m'demo-model'[39m,
+    streamingEnabled: [33mfalse[39m
+  }
+--
+  type: [32m'decision_parse_failed'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    repairAttempt: [33m0[39m,
+    parseError: {
+      code: [32m'TOOL_ARGS_INVALID'[39m,
+      message: [32m'Field ref_109 already has a value. Do not call bh_form_fill_many or bh_form_fill_field to overwrite an existing field value. Return finish if the current page already satisfies the user request, or ask_user if you need confirmation before replacing the existing value.'[39m,
+      kind: [32m'existing_value_overwrite'[39m,
+      detail: [36m[Object][39m
+    }
+  }
+}
+[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977222408[39m,
+  type: [32m'model_stream_started'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    provider: [32m'api.example.com'[39m,
+    model: [32m'demo-model'[39m,
+    streamingEnabled: [33mfalse[39m
+--
+  type: [32m'decision_parse_failed'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    repairAttempt: [33m0[39m,
+    parseError: {
+      code: [32m'TOOL_ARGS_INVALID'[39m,
+      message: [32m'Field ref_109 already has a value. Do not call bh_form_fill_many or bh_form_fill_field to overwrite an existing field value. Return finish if the current page already satisfies the user request, or ask_user if you need confirmation before replacing the existing value.'[39m,
+      kind: [32m'existing_value_overwrite'[39m,
+      detail: [36m[Object][39m
+    }
+  }
+}
+[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977222417[39m,
+  type: [32m'model_stream_started'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    provider: [32m'api.example.com'[39m,
+    model: [32m'demo-model'[39m,
+    streamingEnabled: [33mfalse[39m
+--
+  type: [32m'decision_parse_failed'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    repairAttempt: [33m1[39m,
+    parseError: {
+      code: [32m'TOOL_ARGS_INVALID'[39m,
+      message: [32m'Field ref_109 already has a value. Do not call bh_form_fill_many or bh_form_fill_field to overwrite an existing field value. Return finish if the current page already satisfies the user request, or ask_user if you need confirmation before replacing the existing value. Existing-value overwrite repair must return finish or ask_user. Do not call tools such as bh_form_read_fields during this repair.'[39m,
+      kind: [32m'existing_value_overwrite'[39m,
+      detail: [36m[Object][39m
+    }
+  }
+}
+[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977222418[39m,
+  type: [32m'run_finished'[39m,
+  payload: { status: [32m'finished'[39m, message: [32m'相关字段已有值，我没有覆盖已有输入，也没有提交表单。'[39m }
+}
+
+[90mstdout[2m | tests/node/runtime/run-manager.test.ts[2m > [22m[2mRunManager[2m > [22m[2mfinishes gracefully when the model keeps trying to overwrite an existing value
+[22m[39m[BrowserHelm trace] {
+--
+  type: [32m'decision_parse_failed'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    repairAttempt: [33m0[39m,
+    parseError: {
+      code: [32m'TOOL_ARGS_INVALID'[39m,
+      message: [32m'Field ref_109 already has a value. Do not call bh_form_fill_many or bh_form_fill_field to overwrite an existing field value. Return finish if the current page already satisfies the user request, or ask_user if you need confirmation before replacing the existing value.'[39m,
+      kind: [32m'existing_value_overwrite'[39m,
+      detail: [36m[Object][39m
+    }
+  }
+}
+[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977222421[39m,
+  type: [32m'model_stream_started'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    provider: [32m'api.example.com'[39m,
+    model: [32m'demo-model'[39m,
+    streamingEnabled: [33mfalse[39m
+--
+  type: [32m'decision_parse_failed'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    repairAttempt: [33m1[39m,
+    parseError: {
+      code: [32m'TOOL_ARGS_INVALID'[39m,
+      message: [32m'Field ref_109 already has a value. Do not call bh_form_fill_many or bh_form_fill_field to overwrite an existing field value. Return finish if the current page already satisfies the user request, or ask_user if you need confirmation before replacing the existing value. Existing-value overwrite repair must return finish or ask_user. Do not call tools such as bh_form_fill_many during this repair.'[39m,
+      kind: [32m'existing_value_overwrite'[39m,
+      detail: [36m[Object][39m
+    }
+  }
+}
+[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977222421[39m,
+  type: [32m'run_finished'[39m,
+  payload: { status: [32m'finished'[39m, message: [32m'相关字段已有值，我没有覆盖已有输入，也没有提交表单。'[39m }
+}
+
+[90mstdout[2m | tests/node/runtime/run-manager.test.ts[2m > [22m[2mRunManager[2m > [22m[2mallows explicit select option labels to map to DOM option values in unified AgentLoop
+[22m[39m[BrowserHelm trace] {
+--
+  type: [32m'decision_parse_failed'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    repairAttempt: [33m0[39m,
+    parseError: {
+      code: [32m'TOOL_NOT_FOUND'[39m,
+      message: [32m'Model selected unavailable tool: bh_click'[39m,
+      kind: [32m'tool_not_found'[39m,
+      detail: [36m[Object][39m
+    }
+  }
+}
+[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977222436[39m,
+  type: [32m'model_stream_started'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    provider: [32m'api.example.com'[39m,
+    model: [32m'demo-model'[39m,
+    streamingEnabled: [33mfalse[39m
+--
+  type: [32m'model_stream_failed'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    model: [32m'demo-model'[39m,
+    charCount: [33m0[39m,
+    summary: [32m'timeout after 600000ms'[39m
+  }
+}
+
+[90mstdout[2m | tests/node/runtime/run-manager.test.ts[2m > [22m[2mRunManager[2m > [22m[2mfails stuck model requests instead of leaving the run thinking forever
+[22m[39m[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977822454[39m,
+  type: [32m'model_decision'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    decision: {
+      type: [32m'fail'[39m,
+      message: [32m'模型请求超时，请稍后重试。'[39m,
+      code: [32m'MODEL_REQUEST_FAILED'[39m
+    }
+  }
+}
+
+[90mstdout[2m | tests/node/runtime/run-manager.test.ts[2m > [22m[2mRunManager[2m > [22m[2mnormalizes legacy bh_ask_user decisions and shows a non-error user prompt
+[22m[39m[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977222457[39m,
+  type: [32m'run_started'[39m,
+  payload: { task: [32m'你随便填就行'[39m, mode: [32m'act'[39m }
+}
+
+[90mstdout[2m | tests/node/runtime/run-manager.test.ts[2m > [22m[2mRunManager[2m > [22m[2mnormalizes legacy bh_ask_user decisions and shows a non-error user prompt
+[22m[39m[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977222457[39m,
+  type: [32m'tool_started'[39m,
+  payload: { tool: [32m'bh_page_observe'[39m, args: {} }
+}
+
+--
+  type: [32m'model_stream_failed'[39m,
+  payload: { stepIndex: [33m0[39m, charCount: [33m2[39m, summary: [32m'stream broke [MASKED]'[39m }
+}
+[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977222684[39m,
+  type: [32m'model_stream_fallback_started'[39m,
+  payload: { stepIndex: [33m0[39m, reason: [32m'stream_failed: stream broke [MASKED]'[39m }
+}
+
+[90mstdout[2m | tests/node/runtime/run-manager.test.ts[2m > [22m[2mRunManager[2m > [22m[2mfalls back to complete when provider streaming fails
+[22m[39m[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977222685[39m,
+  type: [32m'model_stream_fallback_finished'[39m,
+  payload: {
+    stepIndex: [33m0[39m,
+    model: [32m'demo-model'[39m,
+    finalPreview: [32m'{"type":"finish","message":"fallback 完成回答"}'[39m
+  }
+}
+
+[90mstdout[2m | tests/node/runtime/run-manager.test.ts[2m > [22m[2mRunManager[2m > [22m[2mfalls back to complete when provider streaming fails
+[22m[39m[BrowserHelm trace] {
+  runId: [32m'run_1'[39m,
+  timestamp: [33m1779977222685[39m,
+  type: [32m'model_decision'[39m,
+  payload: {
+--
+[41m[1m FAIL [22m[49m tests/node/ui/components/agent-components.test.tsx[2m > [22magent side panel components[2m > [22msanitizes untrusted agent markdown before rendering HTML
+[31m[1mAssertionError[22m: expected '当前页面：' to be '加粗' // Object.is equality[39m
+
+Expected: [32m"加粗"[39m
+Received: [31m"当前页面："[39m
+
+[36m [2m❯[22m tests/node/ui/components/agent-components.test.tsx:[2m184:60[22m[39m
+    [90m182|[39m     })[33m;[39m
+    [90m183|[39m
+    [90m184|[39m     [34mexpect[39m(container[33m.[39m[34mquerySelector[39m([32m'strong'[39m)[33m?.[39mtextContent)[33m.[39m[34mtoBe[39m([32m'加粗'[39m)[33m;[39m
+    [90m   |[39m                                                            [31m^[39m
+    [90m185|[39m     [34mexpect[39m(container[33m.[39m[34mquerySelector[39m([32m'img'[39m))[33m.[39m[34mtoBeNull[39m()[33m;[39m
+    [90m186|[39m     [34mexpect[39m(container[33m.[39minnerHTML)[33m.[39mnot[33m.[39m[34mtoContain[39m([32m'onerror'[39m)[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/node/ui/components/timeline-inspector.test.tsx[2m > [22mtimeline and inspector components[2m > [22msummarizes streaming delta trace events instead of rendering every chunk
+[31m[1mAssertionError[22m: expected '<section class="bh-traceLog"><header …' to contain '生成中'[39m
+
+Expected: [32m"生成中"[39m
+Received: [31m"<section class="bh-traceLog"><header class="bh-traceHeader"><strong>Trace / 调试日志</strong><span>3 条</span></header><ol class="bh-traceItems"><li class="bh-traceItem"><div class="bh-traceItemHeader"><strong>正在读取模型决策</strong></div><p class="bh-traceSummary">模型 gpt-test 正在输出下一步决策。</p><details class="bh-traceDetails"><summary>查看原始详情</summary><div class="bh-structuredPayload"><dl class="bh-payloadObject"><div class="bh-payloadRow"><dt>model</dt><dd><span class="bh-payloadPrimitive">&quot;<!-- -->gpt-test<!-- -->&quot;</span></dd></div></dl></div></details></li><li class="bh-traceItem"><div class="bh-traceItemHeader"><strong>读取模型决策中</strong></div><p class="bh-traceSummary">已收到 2 个决策片段，约 11 字符。</p><details class="bh-traceDetails"><summary>查看原始详情</summary><div class="bh-structuredPayload"><dl class="bh-payloadObject"><div class="bh-payloadRow"><dt>chunkCount</dt><dd><span class="bh-payloadPrimitive">2</span></dd></div><div class="bh-payloadRow"><dt>charCount</dt><dd><span class="bh-payloadPrimitive">11</span></dd></div><div class="bh-payloadRow"><dt>lastPreview</dt><dd><span class="bh-payloadPrimitive">&quot;<!-- --> world<!-- -->&quot;</span></dd></div></dl></div></details></li><li class="bh-traceItem"><div class="bh-traceItemHeader"><strong>模型决策读取完成</strong></div><p class="bh-traceSummary">决策读取完成，约 11 字符。</p><details class="bh-traceDetails"><summary>查看原始详情</summary><div class="bh-structuredPayload"><dl class="bh-payloadObject"><div class="bh-payloadRow"><dt>charCount</dt><dd><span class="bh-payloadPrimitive">11</span></dd></div></dl></div></details></li></ol></section>"[39m
+
+[36m [2m❯[22m tests/node/ui/components/timeline-inspector.test.tsx:[2m123:18[22m[39m
+    [90m121|[39m     )[33m;[39m
+    [90m122|[39m
+    [90m123|[39m     [34mexpect[39m(html)[33m.[39m[34mtoContain[39m([32m'生成中'[39m)[33m;[39m
+    [90m   |[39m                  [31m^[39m
+    [90m124|[39m     [34mexpect[39m(html)[33m.[39m[34mtoContain[39m([32m'查看原始详情'[39m)[33m;[39m
+    [90m125|[39m     [34mexpect[39m(html)[33m.[39m[34mtoContain[39m([32m'chunkCount'[39m)[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m136 passed[39m[22m[2m | [22m[33m1 skipped[39m[90m (139)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m942 passed[39m[22m[2m | [22m[33m1 skipped[39m[90m (945)[39m
+[2m   Start at [22m 22:07:00
+[2m   Duration [22m 2.68s[2m (transform 5.83s, setup 0ms, import 10.97s, tests 3.37s, environment 3.51s)[22m
+

@@ -11,6 +11,7 @@ export const TOOL_DESCRIPTION_KEYS: Record<ToolName, TranslationKey> = {
   [TOOL_NAMES.AGENT_ASK_USER]: 'tool.description.bh_agent_ask_user',
   [TOOL_NAMES.AGENT_FAIL]: 'tool.description.bh_agent_fail',
   [TOOL_NAMES.AGENT_FINISH]: 'tool.description.bh_agent_finish',
+  [TOOL_NAMES.REQUEST_ACT_MODE]: 'tool.description.bh_request_act_mode',
   [TOOL_NAMES.DEBUG_COLLECT_PAGE_HEALTH]: 'tool.description.bh_debug_collect_page_health',
   [TOOL_NAMES.ELEMENT_INSPECT]: 'tool.description.bh_element_inspect',
   [TOOL_NAMES.ELEMENT_READ_STATE]: 'tool.description.bh_element_read_state',

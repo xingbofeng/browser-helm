@@ -1,6 +1,7 @@
 import type { ToolResult } from '../../../../shared/schemas/tool-result.schema';
 import type { RunSnapshot, RuntimeEvent, ExecuteToolInput } from '../../../../runtime/runtime-messages';
 import type { RunMode } from '../../../../shared/schemas/tool.schema';
+import type { ContentRpcClient } from '../../../../page/messaging/content-rpc-client';
 import type { ToolRouter } from '../../../../tools/core/tool-router';
 import type { RuntimeToolResultSnapshot } from '../../../../runtime/runtime-messages';
 import type { ToolRuntimeAdapter } from './adapters/tool-runtime-adapter';
@@ -21,7 +22,7 @@ export type ToolExecutionDeps = {
   getRecord: (runId: string) => { task: string; mode: RunMode; tabId?: number | undefined; trace: RuntimeEvent[]; skipProviderResponse?: boolean | undefined; locale?: Locale } | undefined;
   appendTrace: (record: { trace: RuntimeEvent[] }, event: RuntimeEvent) => void;
   createToolRouter: (tabId: number) => ToolRouter;
-  createContentRpcClient: (tabId: number) => void;
+  createContentRpcClient: (tabId: number) => ContentRpcClient;
   setSnapshot: (runId: string, snapshot: RunSnapshot) => void;
   setPendingAction: (requestId: string, input: ExecuteToolInput) => void;
   snapshotToolResult: (tool: string, result: ToolResult) => RuntimeToolResultSnapshot;

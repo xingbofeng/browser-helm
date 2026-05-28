@@ -62,17 +62,17 @@ export class StreamingStatusFlow {
       apiKey: 'sk-e2e-secret'
     });
 
-    const input = sidePanelPage.getByRole('textbox', { name: '任务' });
+    const input = sidePanelPage.getByRole('textbox', { name: /^(任务|Task)$/u });
     await input.fill('总结这个长页面');
-    await sidePanelPage.getByRole('button', { name: '启动任务' }).click();
+    await sidePanelPage.getByRole('button', { name: /^(启动任务|Start task)$/u }).click();
 
-    await expect(sidePanelPage.getByText('正文读取完成')).toBeVisible();
+    await expect(sidePanelPage.getByText(/正文读取完成|Article read (completed|done)/u)).toBeVisible();
     await expect(sidePanelPage.getByText(/首轮流式/u)).toBeVisible();
     await expect(sidePanelPage.getByText(/首轮流式 正在吐字 完成。/u)).toBeVisible();
     await expect(
       sidePanelPage
-        .getByLabel('BrowserHelm Agent 消息')
-        .getByText('等待 BrowserHelm 输出...')
+        .getByLabel(/BrowserHelm Agent (消息|messages)/u)
+        .getByText(/等待 BrowserHelm 输出|Waiting for BrowserHelm output/u)
     ).toHaveCount(0);
   }
 
@@ -99,7 +99,7 @@ export class StreamingStatusFlow {
     // 即便 article read 可能失败，side panel 不应崩溃
     const page = await sidePanel.openRun(snapshot.runId);
     // 面板至少存在且没白屏
-    await expect(page.getByLabel('BrowserHelm Agent 消息')).toBeVisible();
+    await expect(page.getByLabel(/BrowserHelm Agent (消息|messages)/u)).toBeVisible();
   }
 
   /** AI 完成后不残留错误的运行中目标状态。 */
@@ -130,7 +130,7 @@ export class StreamingStatusFlow {
 
     // UI 验证 - 消息区域可见，非白屏状态
     const page = await sidePanel.openRun(snapshot.runId);
-    await expect(page.getByLabel('BrowserHelm Agent 消息')).toBeVisible();
+    await expect(page.getByLabel(/BrowserHelm Agent (消息|messages)/u)).toBeVisible();
   }
 
   /** 用户发送消息后 extension 自动滚动到底部。 */
@@ -142,12 +142,12 @@ export class StreamingStatusFlow {
     const sidePanelPage = await this.flowContext.sidePanel().open(tabId);
 
     // 输入并发送消息
-    const input = sidePanelPage.getByRole('textbox', { name: '任务' });
+    const input = sidePanelPage.getByRole('textbox', { name: /^(任务|Task)$/u });
     await input.fill('测试自动滚动');
-    await sidePanelPage.getByRole('button', { name: '启动任务' }).click();
+    await sidePanelPage.getByRole('button', { name: /^(启动任务|Start task)$/u }).click();
 
     // 等待消息列表有内容
-    const messages = sidePanelPage.getByLabel('BrowserHelm Agent 消息');
+    const messages = sidePanelPage.getByLabel(/BrowserHelm Agent (消息|messages)/u);
     await expect(messages).toBeVisible();
 
     // 验证消息区域的滚动行为：消息区域应当有新内容

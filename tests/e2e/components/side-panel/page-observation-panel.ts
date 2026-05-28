@@ -5,13 +5,13 @@ export class PageObservationPanel {
 
   async expectVisible(expected: { url: string; title: string }): Promise<void> {
     await expect(this.page.getByRole('heading', { name: /BrowserHelm/u })).toBeVisible();
-    await expect(this.page.getByLabel('BrowserHelm Agent 消息')).toBeVisible();
+    await expect(this.page.getByLabel(/BrowserHelm Agent (消息|messages)/u)).toBeVisible();
     await expect(this.page.getByText(expected.title)).toBeVisible();
     await expect(
       this.page.locator('.bh-pageObservationBody span').getByText(new URL(expected.url).hostname, { exact: true })
     ).toBeVisible();
     await expect(this.page.getByText(expected.url)).toHaveCount(0);
-    await this.openDebugTab('工具');
+    await this.openDebugTab(/^(工具|Tools)$/u);
     await expect(this.page.getByRole('heading', { name: 'bh_page_observe' })).toBeVisible();
     await expect(this.page.locator('.bh-toolCode').getByText('OK')).toBeVisible();
   }
@@ -19,14 +19,14 @@ export class PageObservationPanel {
   async expectEmpty(expected: { url: string; title: string }): Promise<void> {
     await this.expectVisible(expected);
     await expect(this.page.getByText(/empty/u).first()).toBeVisible();
-    await this.openDebugTab('元素与表单');
+    await this.openDebugTab(/^(元素与表单|Elements & Forms)$/u);
     await expect(this.page.locator('.bh-elementListItem')).toHaveCount(0);
-    await expect(this.page.locator('.bh-debugSummary').getByText('元素 0')).toBeVisible();
+    await expect(this.page.locator('.bh-debugSummary').getByText(/元素 0|Elements 0/u)).toBeVisible();
   }
 
-  private async openDebugTab(tabName: string): Promise<void> {
+  private async openDebugTab(tabName: string | RegExp): Promise<void> {
     if (!(await this.page.getByRole('button', { name: /Trace/u }).first().isVisible())) {
-      await this.page.getByRole('button', { name: '高级开发者选项' }).click();
+      await this.page.getByRole('button', { name: /^(高级开发者选项|Advanced debug options)$/u }).click();
     }
     await this.page.getByRole('button', { name: tabName }).click();
   }

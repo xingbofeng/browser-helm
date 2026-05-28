@@ -1,5 +1,4 @@
 import type { TaskClassification } from '../../shared/schemas/mode-system.schema';
-import type { TaskActionIntent } from '../../shared/schemas/mode-system.schema';
 import { t } from '../../i18n/t';
 import type { Locale } from '../../i18n/types';
 
@@ -45,7 +44,6 @@ const rules: Rule[] = [
 
 export function classifyTask(task: string, locale: Locale = 'zh'): TaskClassification {
   const normalized = task.trim();
-  const actionIntent = detectActionIntent(normalized);
   for (const rule of rules) {
     const matchedSignals = rule.patterns
       .map((pattern) => normalized.match(pattern)?.[0])
@@ -56,11 +54,7 @@ export function classifyTask(task: string, locale: Locale = 'zh'): TaskClassific
         mode: rule.mode,
         reason: t(rule.reasonKey, locale),
         confidence: rule.confidence,
-        matchedSignals,
-        ...(actionIntent ? {
-          actionIntent,
-          requiresApproval: isApprovalIntent(actionIntent)
-        } : {})
+        matchedSignals
       };
     }
   }
@@ -72,19 +66,4 @@ export function classifyTask(task: string, locale: Locale = 'zh'): TaskClassific
     confidence: 'low',
     matchedSignals: []
   };
-}
-
-function detectActionIntent(task: string): TaskActionIntent | undefined {
-  if (/提交|submit/iu.test(task)) return 'submit';
-  if (/发送|send/iu.test(task)) return 'send';
-  if (/删除|delete/iu.test(task)) return 'delete';
-  if (/上传|upload/iu.test(task)) return 'upload';
-  if (/点击|click/iu.test(task)) return 'click';
-  if (/输入|type|填写|填入|选择|select|回复|评论|留言|搜索/iu.test(task)) return 'type';
-  if (/执行|execute/iu.test(task)) return 'execute';
-  return undefined;
-}
-
-function isApprovalIntent(intent: TaskActionIntent): boolean {
-  return intent === 'submit' || intent === 'send' || intent === 'delete' || intent === 'upload' || intent === 'execute';
 }

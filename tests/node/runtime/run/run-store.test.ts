@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { RunStore } from '../../../../src/background/runtime/run/run-store';
 import type { RunRecord } from '../../../../src/background/runtime/run/runtime-service-types';
 import type { RunSnapshot, RuntimeEvent } from '../../../../src/runtime/runtime-messages';
+import { TRACE_EVENT_NAMES } from '../../../../src/shared/constants/event-names';
 
 describe('RunStore', () => {
   it('creates incrementing run IDs', () => {
@@ -66,14 +67,86 @@ describe('RunStore', () => {
     
     const event: RuntimeEvent = {
       runId: 'run_1',
-      type: 'test_event',
+      type: TRACE_EVENT_NAMES.STATE_CHANGED,
       payload: { data: 'test' }
     };
     
     store.appendTrace(record, event);
     
-    expect(record.trace).toContain(event);
-    expect(listener).toHaveBeenCalledWith(event);
+    expect(record.trace).toHaveLength(1);
+    expect(record.trace[0]!.runId).toBe('run_1');
+    expect(record.trace[0]!.type).toBe(TRACE_EVENT_NAMES.STATE_CHANGED);
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('stamps appended trace events that do not include timestamps', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1710000000123);
+    const store = new RunStore();
+    const record: RunRecord = {
+      task: 'test',
+      mode: 'ask',
+      trace: []
+    };
+
+    store.appendTrace(record, {
+      runId: 'run_1',
+      type: TRACE_EVENT_NAMES.STATE_CHANGED,
+      payload: { data: 'test' }
+    });
+
+    expect(record.trace[0]?.timestamp).toBe(1710000000123);
+  });
+
+  it('prints every appended trace event to the console sink', () => {
+    const traceConsole = vi.fn();
+    const store = new RunStore({ traceConsole });
+    const record: RunRecord = {
+      task: 'test',
+      mode: 'ask',
+      trace: []
+    };
+
+    store.appendTrace(record, {
+      runId: 'run_1',
+      type: TRACE_EVENT_NAMES.STATE_CHANGED,
+      payload: { status: 'thinking' }
+    });
+
+    expect(traceConsole).toHaveBeenCalledTimes(1);
+    const loggedEvent = traceConsole.mock.calls[0]?.[0] as RuntimeEvent | undefined;
+    expect(loggedEvent).toMatchObject({
+      runId: 'run_1',
+      type: TRACE_EVENT_NAMES.STATE_CHANGED,
+      payload: { status: 'thinking' }
+    });
+    expect(loggedEvent?.timestamp).toBeTypeOf('number');
+  });
+
+  it('prints invalid trace events as runtime_event_invalid markers', () => {
+    const traceConsole = vi.fn();
+    const store = new RunStore({ traceConsole });
+    const record: RunRecord = {
+      task: 'test',
+      mode: 'ask',
+      trace: []
+    };
+
+    store.appendTrace(record, {
+      runId: 'run_1',
+      type: TRACE_EVENT_NAMES.TOOL_STARTED,
+      payload: {}
+    });
+
+    expect(traceConsole).toHaveBeenCalledTimes(1);
+    const loggedEvent = traceConsole.mock.calls[0]?.[0] as RuntimeEvent | undefined;
+    expect(loggedEvent).toMatchObject({
+      runId: 'run_1',
+      type: 'runtime_event_invalid',
+      payload: {
+        originalType: TRACE_EVENT_NAMES.TOOL_STARTED
+      }
+    });
   });
 
   it('notifies multiple listeners', () => {
@@ -92,13 +165,13 @@ describe('RunStore', () => {
     
     const event: RuntimeEvent = {
       runId: 'run_1',
-      type: 'test_event'
+      type: TRACE_EVENT_NAMES.STATE_CHANGED
     };
     
     store.appendTrace(record, event);
     
-    expect(listener1).toHaveBeenCalledWith(event);
-    expect(listener2).toHaveBeenCalledWith(event);
+    expect(listener1).toHaveBeenCalledTimes(1);
+    expect(listener2).toHaveBeenCalledTimes(1);
   });
 
   it('allows unsubscribe from events', () => {

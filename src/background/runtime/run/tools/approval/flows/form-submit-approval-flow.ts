@@ -61,12 +61,15 @@ export class FormSubmitApprovalFlow implements ToolApprovalFlow {
       ? args.submitTargetRefId
       : undefined;
     const formRefId = typeof args.formRefId === 'string' ? args.formRefId : undefined;
+    const fieldRefIds = readFieldRefIds(args);
     const verifyFailed = args.verifyFailed === true;
     const rpc = this.deps.createContentRpcClient(record.tabId);
+
+    // Re-verify with the same fieldRefIds and submitRefId as the original approval
     const verifyResponse = await rpc.request({
       type: CONTENT_RPC_MESSAGES.FORM_VERIFY,
-      fieldRefIds: [],
-      ...(formRefId ? { formRefId } : {})
+      fieldRefIds,
+      ...(submitTargetRefId ? { submitRefId: submitTargetRefId } : {})
     });
     if (!verifyResponse.ok) {
       const result: ToolResult = {
@@ -116,8 +119,11 @@ export class FormSubmitApprovalFlow implements ToolApprovalFlow {
     const grantResponse = await rpc.request({
       type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
       action: 'submit',
-      fieldRefIds: [],
-      ...(submitTargetRefId ? { submitTargetRefId } : {})
+      fieldRefIds,
+      ...(formRefId ? { formRefId } : {}),
+      ...(submitTargetRefId ? { submitTargetRefId } : {}),
+      runId: input.runId,
+      stepId: `${input.runId}:submit`
     });
     if (!grantResponse.ok || !('actionToken' in grantResponse)) {
       const message = grantResponse.ok ? 'Form submit authorization failed' : grantResponse.message;
@@ -143,6 +149,9 @@ export class FormSubmitApprovalFlow implements ToolApprovalFlow {
       type: CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT,
       actionToken: grantResponse.actionToken,
       allowDisabledSubmit: verifyFailed,
+      runId: input.runId,
+      stepId: `${input.runId}:submit`,
+      ...(formRefId ? { formRefId } : {}),
       ...(submitTargetRefId ? { submitTargetRefId } : {})
     });
 
@@ -224,4 +233,23 @@ export class FormSubmitApprovalFlow implements ToolApprovalFlow {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readFieldRefIds(args: Record<string, unknown>): string[] {
+  if (Array.isArray(args.fieldRefIds)) {
+    return args.fieldRefIds.filter((id): id is string => typeof id === 'string');
+  }
+  if (!Array.isArray(args.fields)) {
+    return [];
+  }
+  return args.fields.flatMap((field) => {
+    if (
+      typeof field === 'object' &&
+      field !== null &&
+      typeof (field as { fieldRefId?: unknown }).fieldRefId === 'string'
+    ) {
+      return [(field as { fieldRefId: string }).fieldRefId];
+    }
+    return [];
+  });
 }

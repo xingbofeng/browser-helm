@@ -121,11 +121,147 @@ describe('CockpitApp interaction', () => {
     container.remove();
   });
 
+  it('clears the current session from the header action', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const runtime = new FakeRuntimePort({
+      snapshots: [
+        {
+          runId: 'active_run',
+          mode: 'ask',
+          status: 'thinking',
+          refs: [],
+          messages: [
+            {
+              id: 'active_run:task',
+              role: 'user',
+              kind: 'task',
+              status: 'complete',
+              content: '检查当前页面',
+              createdAt: 1,
+              updatedAt: 1
+            },
+            {
+              id: 'active_run:agent',
+              role: 'agent',
+              kind: 'agent_status',
+              status: 'streaming',
+              title: 'BrowserHelm',
+              content: '正在读取模型决策',
+              createdAt: 2,
+              updatedAt: 2
+            }
+          ],
+          trace: [
+            { runId: 'active_run', type: 'model_stream_started', timestamp: 2, payload: { model: 'gpt-test' } }
+          ],
+          structuredPageData: structuredData()
+        }
+      ]
+    });
+    const cancelRun = vi.spyOn(runtime, 'cancelRun');
+
+    await act(async () => {
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} initialRunId="active_run" /></I18nProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('检查当前页面');
+    expect(container.textContent).toContain('example.com');
+
+    await act(async () => {
+      changeInput('任务', '草稿也应该被清掉');
+      button('清空会话').click();
+      await Promise.resolve();
+    });
+
+    expect(cancelRun).toHaveBeenCalledWith('active_run');
+    expect(input('任务').value).toBe('');
+    expect(container.textContent).toContain('Ready');
+    expect(container.textContent).not.toContain('检查当前页面');
+    expect(container.textContent).not.toContain('example.com');
+    root.unmount();
+    container.remove();
+  });
+
+  it('continues an Ask mode action request in Act mode from the mode switch card', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const runtime = new FakeRuntimePort({
+      snapshots: [
+        {
+          runId: 'ask_blocked',
+          targetTabId: 88,
+          mode: 'ask',
+          status: 'waiting_for_user',
+          refs: [],
+          messages: [
+            {
+              id: 'ask_blocked:task',
+              role: 'user',
+              kind: 'task',
+              status: 'complete',
+              content: '帮我搜索下“最近的 agent 文章”',
+              createdAt: 1,
+              updatedAt: 1
+            },
+            {
+              id: 'ask_blocked:mode-switch-request',
+              role: 'agent',
+              kind: 'recommendation',
+              status: 'complete',
+              title: '需要执行模式',
+              content: '这个请求会改变页面内容。Ask 模式只读取和解释页面。',
+              createdAt: 2,
+              updatedAt: 2
+            }
+          ]
+        }
+      ]
+    });
+    const startRun = vi.spyOn(runtime, 'startRun');
+
+    await act(async () => {
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} initialRunId="ask_blocked" targetTabId={999} /></I18nProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('需要执行模式');
+    expect(container.textContent).toContain('切换到执行并继续');
+    expect(container.textContent).toContain('保持 Ask');
+
+    await act(async () => {
+      button('切换到执行并继续').click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const actStartInput = startRun.mock.calls.at(-1)?.[0];
+    expect(actStartInput).toMatchObject({
+      task: '帮我搜索下“最近的 agent 文章”',
+      mode: 'act',
+      tabId: 88
+    });
+    expect(actStartInput?.conversationHistory).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: 'user', content: '帮我搜索下“最近的 agent 文章”' }),
+      expect.objectContaining({ role: 'agent', content: '这个请求会改变页面内容。Ask 模式只读取和解释页面。' })
+    ]));
+    expect(container.textContent).not.toContain('需要执行模式');
+    expect(container.textContent).not.toContain('切换到执行并继续');
+    root.unmount();
+    container.remove();
+  });
+
   it('keeps previous user messages in the waterfall across multiple sends', async () => {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
     const runtime = new FakeRuntimePort();
+    const startRun = vi.spyOn(runtime, 'startRun');
 
     await act(async () => {
       root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} /></I18nProvider>);
@@ -150,6 +286,221 @@ describe('CockpitApp interaction', () => {
     expect(container.textContent?.indexOf('第一次检查页面摘要')).toBeLessThan(
       container.textContent?.indexOf('继续检查表单字段') ?? -1
     );
+    const secondStartInput = startRun.mock.calls.at(-1)?.[0];
+    expect(secondStartInput?.task).toBe('继续检查表单字段');
+    expect(secondStartInput?.conversationHistory).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: 'user', content: '第一次检查页面摘要' })
+    ]));
+    root.unmount();
+    container.remove();
+  });
+
+  it('passes all visible prior chat messages as continuation history', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const runtime = new FakeRuntimePort({
+      snapshots: [
+        {
+          runId: 'needs_values',
+          mode: 'act',
+          status: 'waiting_for_user',
+          refs: [],
+          messages: [
+            {
+              id: 'needs_values:observe-status',
+              role: 'agent',
+              kind: 'agent_status',
+              status: 'complete',
+              title: '页面观察',
+              content: '已观察 Apple 注册页面。',
+              createdAt: 0,
+              updatedAt: 0
+            },
+            {
+              id: 'needs_values:task',
+              role: 'user',
+              kind: 'task',
+              status: 'complete',
+              content: '帮我填 Apple 注册表单',
+              createdAt: 1,
+              updatedAt: 1
+            },
+            {
+              id: 'needs_values:error',
+              role: 'agent',
+              kind: 'error',
+              status: 'error',
+              title: '运行出错',
+              content: '字段已有值，未覆盖。',
+              createdAt: 2,
+              updatedAt: 2
+            },
+            {
+              id: 'needs_values:ask-user-required',
+              role: 'agent',
+              kind: 'recommendation',
+              status: 'complete',
+              title: '需要你提供具体字段值',
+              content: '请提供姓氏、名字和邮箱。',
+              createdAt: 3,
+              updatedAt: 3
+            }
+          ]
+        }
+      ]
+    });
+    const startRun = vi.spyOn(runtime, 'startRun');
+
+    await act(async () => {
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} initialRunId="needs_values" /></I18nProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      changeInput('任务', '姓氏：Counter；名字：Xing；邮箱：name@example.com');
+      button('启动任务').click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const nextStartInput = startRun.mock.calls.at(-1)?.[0];
+    expect(nextStartInput?.conversationHistory).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: 'agent', title: '页面观察', content: '已观察 Apple 注册页面。' }),
+      expect.objectContaining({ role: 'user', content: '帮我填 Apple 注册表单' }),
+      expect.objectContaining({ role: 'agent', title: '运行出错', content: '字段已有值，未覆盖。' }),
+      expect.objectContaining({ role: 'agent', title: '需要你提供具体字段值', content: '请提供姓氏、名字和邮箱。' })
+    ]));
+    root.unmount();
+    container.remove();
+  });
+
+  it('passes previous run trace as full continuation history', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const runtime = new FakeRuntimePort({
+      snapshots: [
+        {
+          runId: 'tool_history',
+          mode: 'act',
+          status: 'finished',
+          refs: [],
+          messages: [
+            {
+              id: 'tool_history:task',
+              role: 'user',
+              kind: 'task',
+              status: 'complete',
+              content: '帮我搜索 agent 文章',
+              createdAt: 1,
+              updatedAt: 1
+            }
+          ],
+          trace: [
+            {
+              runId: 'tool_history',
+              type: 'tool_started',
+              timestamp: 10,
+              payload: {
+                tool: 'bh_form_fill_many',
+                args: {
+                  fields: [{ fieldRefId: 'ref_search', value: 'agent 文章' }]
+                }
+              }
+            },
+            {
+              runId: 'tool_history',
+              type: 'tool_result',
+              timestamp: 20,
+              payload: {
+                tool: 'bh_form_fill_many',
+                ok: true,
+                summary: '填写成功 1/1 个字段'
+              }
+            }
+          ]
+        }
+      ]
+    });
+    const startRun = vi.spyOn(runtime, 'startRun');
+
+    await act(async () => {
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} initialRunId="tool_history" /></I18nProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      changeInput('任务', '继续看看结果');
+      button('启动任务').click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const nextStartInput = startRun.mock.calls.at(-1)?.[0];
+    const traceHistory = nextStartInput?.conversationHistory?.find((item) =>
+      item.role === 'system' && item.title === 'Previous run trace'
+    );
+    expect(traceHistory?.content).toContain('bh_form_fill_many');
+    expect(traceHistory?.content).toContain('ref_search');
+    expect(traceHistory?.content).toContain('填写成功 1/1 个字段');
+    root.unmount();
+    container.remove();
+  });
+
+  it('merges current snapshot messages into continuation history before sending', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const runtime = new FakeRuntimePort({
+      snapshots: [
+        {
+          runId: 'snapshot_history',
+          mode: 'act',
+          status: 'waiting_for_user',
+          refs: [],
+          messages: [
+            {
+              id: 'snapshot_history:task',
+              role: 'user',
+              kind: 'task',
+              status: 'complete',
+              content: '帮我填 Apple 注册表单',
+              createdAt: 1,
+              updatedAt: 1
+            },
+            {
+              id: 'snapshot_history:ask-user-required',
+              role: 'agent',
+              kind: 'recommendation',
+              status: 'complete',
+              title: '需要你提供具体字段值',
+              content: '请提供姓氏、名字和邮箱。',
+              createdAt: 2,
+              updatedAt: 2
+            }
+          ]
+        }
+      ]
+    });
+    const startRun = vi.spyOn(runtime, 'startRun');
+
+    await act(async () => {
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} initialRunId="snapshot_history" /></I18nProvider>);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      changeInput('任务', 'counterxing');
+      button('启动任务').click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const nextStartInput = startRun.mock.calls.at(-1)?.[0];
+    expect(nextStartInput?.conversationHistory).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: 'user', content: '帮我填 Apple 注册表单' }),
+      expect.objectContaining({ role: 'agent', title: '需要你提供具体字段值', content: '请提供姓氏、名字和邮箱。' })
+    ]));
     root.unmount();
     container.remove();
   });
@@ -282,7 +633,7 @@ describe('CockpitApp interaction', () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain('正在读取页面正文');
+    expect(container.textContent).toContain('正在执行动作');
     expect(container.textContent).toContain('正在运行 bh_page_read_article');
     root.unmount();
     container.remove();
@@ -417,7 +768,7 @@ describe('CockpitApp interaction', () => {
       model: 'gpt-new',
       apiKey: 'sk-new-secret',
       streamingEnabled: true,
-      allowLocalProviderEndpoints: true
+      allowLocalProviderEndpoints: false
     });
     expect(container.textContent).not.toContain('sk-new-secret');
     root.unmount();
@@ -458,7 +809,7 @@ describe('CockpitApp interaction', () => {
       model: 'gpt-next',
       apiKey: 'sk-existing-secret',
       streamingEnabled: true,
-      allowLocalProviderEndpoints: true
+      allowLocalProviderEndpoints: false
     });
     expect(container.textContent).not.toContain('sk-existing-secret');
     root.unmount();
@@ -926,7 +1277,7 @@ describe('CockpitApp interaction', () => {
     container.remove();
   });
 
-  it('revises the current run goal from the composer', async () => {
+  it('does not show the runtime goal revision entry in the main composer', async () => {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
@@ -951,16 +1302,13 @@ describe('CockpitApp interaction', () => {
     });
     await act(async () => {
       changeInput('任务', '改为只检查提交按钮为什么不可用');
-      button('修改目标').click();
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    expect(reviseGoal).toHaveBeenCalledWith({
-      runId: 'run_existing',
-      goal: '改为只检查提交按钮为什么不可用'
-    });
-    expect(container.textContent).toContain('当前 run 可修改目标');
+    expect(reviseGoal).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain('当前 run 可修改目标');
+    expect(container.textContent).not.toContain('修改目标');
     root.unmount();
     container.remove();
   });

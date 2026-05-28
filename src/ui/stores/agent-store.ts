@@ -23,6 +23,7 @@ type AgentStoreState = {
   setDisplayState: (state: RunDisplayState) => void;
   selectStep: (stepId: string) => void;
   cancelRun: () => void;
+  reset: () => void;
 };
 
 export function createAgentStore() {
@@ -44,6 +45,14 @@ export function createAgentStore() {
     },
     cancelRun: () => {
       store.setState({ displayState: 'cancelled' });
+    },
+    reset: () => {
+      store.setState({
+        runId: undefined,
+        mode: 'ask',
+        displayState: 'idle',
+        selectedStepId: undefined
+      });
     }
   });
   return store;

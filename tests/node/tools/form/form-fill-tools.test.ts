@@ -46,6 +46,24 @@ describe('bhFormInferFillPlan', () => {
     expect(cb.requestedValue).toBe('true');
   });
 
+  it('infers marketing checkbox opt-out from negative task context', async () => {
+    const r = await tool.execute({
+      userTask: '不要勾选营销，不接收 Apple 电子邮件',
+      formSummary: 'account form',
+      fields: [
+        {
+          refId: 'updates',
+          label: '通知 接收 Apple 电子邮件和营销内容',
+          type: 'checkbox',
+          valuePreview: 'checked'
+        }
+      ]
+    }, ctx);
+    const cb = fillPlanSchema.parse(r.data).fields.find(f => f.fieldRefId === 'updates')!;
+    expect(cb.requestedValue).toBe('false');
+    expect(cb.skipReason).toBeUndefined();
+  });
+
   it('does not fabricate default values when the user did not provide them', async () => {
     const r = await tool.execute({ userTask: '帮我填写这个表单', formSummary: 'reg form', fields: [
       { refId: 'email', label: '邮箱', type: 'email' },

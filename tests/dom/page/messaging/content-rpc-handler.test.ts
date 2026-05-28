@@ -78,7 +78,9 @@ describe('content-rpc-handler iframe actions', () => {
     expect(handler.handle({
       type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
       fieldRefId,
-      value: 'Alice'
+      value: 'Alice',
+      runId: 'run_1',
+      stepId: 'run_1:fill'
     })).toMatchObject({
       ok: false,
       code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED
@@ -87,7 +89,9 @@ describe('content-rpc-handler iframe actions', () => {
     const grant = handler.handle({
       type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
       action: 'fill',
-      fieldRefIds: [fieldRefId]
+      fieldRefIds: [fieldRefId],
+      runId: 'run_1',
+      stepId: 'run_1:fill'
     });
     if (!grant.ok || !('actionToken' in grant)) {
       throw new Error('expected form action token');
@@ -97,7 +101,9 @@ describe('content-rpc-handler iframe actions', () => {
       type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
       fieldRefId,
       value: 'Alice',
-      actionToken: grant.actionToken
+      actionToken: grant.actionToken,
+      runId: 'run_1',
+      stepId: 'run_1:fill'
     })).toMatchObject({
       ok: true
     });
@@ -106,7 +112,9 @@ describe('content-rpc-handler iframe actions', () => {
       type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
       fieldRefId,
       value: 'Bob',
-      actionToken: grant.actionToken
+      actionToken: grant.actionToken,
+      runId: 'run_1',
+      stepId: 'run_1:fill'
     })).toMatchObject({
       ok: false,
       code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED

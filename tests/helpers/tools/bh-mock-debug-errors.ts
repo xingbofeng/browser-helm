@@ -13,10 +13,7 @@ const findingSchema = z.object({
   selector: z.string().optional()
 });
 
-export const bhMockDebugErrors: ToolSpec<
-  z.infer<typeof argsSchema>,
-  z.infer<typeof toolResultSchema>
-> = {
+export const bhMockDebugErrors: ToolSpec<z.infer<typeof argsSchema>> = {
   name: 'bh_mock_debug_errors',
   title: 'Mock Debug Errors',
   description: 'Returns synthetic frontend debug findings for kernel tests',

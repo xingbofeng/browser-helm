@@ -23,16 +23,16 @@ describe('classifyTask', () => {
 
     expect(result.mode).toBe('act');
     expect(result.reason).toContain('执行');
-    expect(result.actionIntent).toBe('submit');
-    expect(result.requiresApproval).toBe(true);
+    expect(result.actionIntent).toBeUndefined();
+    expect(result.requiresApproval).toBeUndefined();
   });
 
-  it('preserves action intent when a form task asks to submit', () => {
+  it('keeps form classification separate from action permission decisions', () => {
     const result = classifyTask('帮我提交这个表单', 'zh');
 
     expect(result.mode).toBe('form');
-    expect(result.actionIntent).toBe('submit');
-    expect(result.requiresApproval).toBe(true);
+    expect(result.actionIntent).toBeUndefined();
+    expect(result.requiresApproval).toBeUndefined();
   });
 
   it('classifies general questions as ask mode', () => {

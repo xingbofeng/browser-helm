@@ -14,10 +14,7 @@ const formFieldSchema = z.object({
   required: z.boolean()
 });
 
-export const bhMockFormList: ToolSpec<
-  z.infer<typeof argsSchema>,
-  z.infer<typeof toolResultSchema>
-> = {
+export const bhMockFormList: ToolSpec<z.infer<typeof argsSchema>> = {
   name: 'bh_mock_form_list',
   title: 'Mock Form List',
   description: 'Returns synthetic form fields for kernel tests',

@@ -28,6 +28,11 @@ export const startRunInputSchema = z.object({
   task: z.string().min(1),
   goal: z.string().min(1).optional(),
   successCriteria: z.array(z.string().min(1)).optional(),
+  conversationHistory: z.array(z.object({
+    role: z.enum(['user', 'agent', 'system']),
+    title: z.string().min(1).optional(),
+    content: z.string().min(1)
+  })).optional(),
   runKind: z.enum(['observe_only', 'diagnose', 'answer', 'form_assist']).optional(),
   mode: runModeSchema.optional(),
   tabId: z.number().int().positive().optional()
@@ -153,8 +158,25 @@ export type RuntimeToolResultSnapshot = {
   requiresApproval?: boolean | undefined;
 };
 
+export type RuntimeTaskStateDecision = 'tool_call' | 'finish' | 'ask_user' | 'fail';
+
+export type RuntimeTaskState = {
+  goal: string;
+  completed: string[];
+  remaining: string[];
+  recommendedNextDecision?: RuntimeTaskStateDecision | undefined;
+  reason?: string | undefined;
+  filledFieldRefs: string[];
+  verifiedFieldRefs: string[];
+  runtimeCompleted: string[];
+  runtimeFactsOverrideModelNotes: true;
+  updatedBy: 'runtime' | 'model' | 'runtime_and_model';
+  updatedAt: number;
+};
+
 export type RunSnapshot = {
   runId: string;
+  targetTabId?: number | undefined;
   mode: RunMode;
   status:
     | 'created'
@@ -185,6 +207,7 @@ export type RunSnapshot = {
   debugReport?: DebugReport;
   canInterrupt?: boolean;
   canReviseGoal?: boolean;
+  taskState?: RuntimeTaskState | undefined;
   toolResult?: RuntimeToolResultSnapshot;
   pendingApproval?: ApprovalUiState | undefined;
   messages?: AgentMessage[] | undefined;
@@ -214,23 +237,109 @@ function runtimeEventWithPayload<TType extends string>(type: TType) {
   });
 }
 
+// ── Typed payload schemas for critical events ──
+
+const toolResultPayloadSchema = z.object({
+  tool: z.string().min(1),
+  ok: z.boolean(),
+  code: z.string(),
+  summary: z.string(),
+  changedPage: z.boolean().optional(),
+  requiresObserve: z.boolean().optional(),
+  requiresApproval: z.boolean().optional()
+}).passthrough();
+
+const approvalRequiredPayloadSchema = z.object({
+  request: z.record(z.string(), z.unknown()),
+  summary: z.string().optional()
+}).passthrough();
+
+const modelStreamDeltaPayloadSchema = z.object({
+  stepIndex: z.number().int().nonnegative().optional(),
+  charCount: z.number().int().nonnegative().optional()
+}).passthrough();
+
+const modelStreamFinishedPayloadSchema = z.object({
+  stepIndex: z.number().int().nonnegative().optional(),
+  model: z.string().optional(),
+  charCount: z.number().int().nonnegative().optional(),
+  finalPreview: z.string().optional()
+}).passthrough();
+
+const runStartedPayloadSchema = z.object({
+  task: z.string().optional(),
+  mode: z.string().optional(),
+  goal: z.string().optional(),
+  successCriteria: z.array(z.string()).optional()
+}).passthrough();
+
+const runFailedPayloadSchema = z.object({
+  code: z.string().optional(),
+  summary: z.string().optional()
+}).passthrough();
+
+const decisionParseFailedPayloadSchema = z.object({
+  stepIndex: z.number().int().nonnegative().optional(),
+  repairAttempt: z.number().int().nonnegative().optional(),
+  parseError: z.record(z.string(), z.unknown()).optional()
+}).passthrough();
+
+const fillResultPayloadSchema = z.object({
+  filled: z.number().int().nonnegative().optional(),
+  total: z.number().int().nonnegative().optional(),
+  skipped: z.number().int().nonnegative().optional(),
+  failed: z.number().int().nonnegative().optional()
+}).passthrough();
+
+const formVerifyResultPayloadSchema = z.object({
+  ok: z.boolean().optional(),
+  verifyResult: z.record(z.string(), z.unknown()).optional()
+}).passthrough();
+
+const formSubmitResultPayloadSchema = z.object({
+  formRefId: z.string().optional(),
+  outcome: z.string().optional(),
+  summary: z.string().optional()
+}).passthrough();
+
+const turnStartedPayloadSchema = z.object({
+  stepIndex: z.number().int().nonnegative().optional(),
+  maxSteps: z.number().int().nonnegative().optional()
+}).passthrough();
+
+const turnFinishedPayloadSchema = z.object({
+  stepIndex: z.number().int().nonnegative().optional()
+}).passthrough();
+
+const toolStartedPayloadSchema = z.object({
+  stepIndex: z.number().int().nonnegative().optional(),
+  tool: z.string().min(1),
+  args: z.record(z.string(), z.unknown()).optional()
+}).passthrough();
+
+const contextBuiltPayloadSchema = z.object({
+  stepIndex: z.number().int().nonnegative().optional(),
+  messageCount: z.number().int().nonnegative().optional(),
+  estimatedChars: z.number().int().nonnegative().optional()
+}).passthrough();
+
 export const runtimeEventSchema = z.discriminatedUnion('type', [
-  runtimeEventWithPayload(TRACE_EVENT_NAMES.RUN_STARTED),
-  runtimeEventWithPayload(TRACE_EVENT_NAMES.RUN_FINISHED),
-  runtimeEventWithPayload(TRACE_EVENT_NAMES.RUN_FAILED),
+  runtimeEventBaseSchema.extend({ type: z.literal(TRACE_EVENT_NAMES.RUN_STARTED), payload: runStartedPayloadSchema.optional() }),
+  runtimeEventBaseSchema.extend({ type: z.literal(TRACE_EVENT_NAMES.RUN_FINISHED), payload: runtimeEventPayloadSchema.optional() }),
+  runtimeEventBaseSchema.extend({ type: z.literal(TRACE_EVENT_NAMES.RUN_FAILED), payload: runFailedPayloadSchema.optional() }),
   runtimeEventWithPayload(TRACE_EVENT_NAMES.RUN_CANCELLED),
-  runtimeEventWithPayload(TRACE_EVENT_NAMES.TURN_STARTED),
-  runtimeEventWithPayload(TRACE_EVENT_NAMES.TURN_FINISHED),
+  runtimeEventBaseSchema.extend({ type: z.literal(TRACE_EVENT_NAMES.TURN_STARTED), payload: turnStartedPayloadSchema.optional() }),
+  runtimeEventBaseSchema.extend({ type: z.literal(TRACE_EVENT_NAMES.TURN_FINISHED), payload: turnFinishedPayloadSchema.optional() }),
   runtimeEventWithPayload(TRACE_EVENT_NAMES.MODEL_OUTPUT_RECEIVED),
   runtimeEventWithPayload(TRACE_EVENT_NAMES.MODEL_DECISION),
-  runtimeEventWithPayload(TRACE_EVENT_NAMES.DECISION_PARSE_FAILED),
-  runtimeEventWithPayload(TRACE_EVENT_NAMES.TOOL_STARTED),
-  runtimeEventWithPayload(TRACE_EVENT_NAMES.TOOL_RESULT),
+  runtimeEventBaseSchema.extend({ type: z.literal(TRACE_EVENT_NAMES.DECISION_PARSE_FAILED), payload: decisionParseFailedPayloadSchema.optional() }),
+  runtimeEventBaseSchema.extend({ type: z.literal(TRACE_EVENT_NAMES.TOOL_STARTED), payload: toolStartedPayloadSchema.optional() }),
+  runtimeEventBaseSchema.extend({ type: z.literal(TRACE_EVENT_NAMES.TOOL_RESULT), payload: toolResultPayloadSchema.optional() }),
   runtimeEventWithPayload(TRACE_EVENT_NAMES.TOOL_FAILED),
-  runtimeEventWithPayload(TRACE_EVENT_NAMES.CONTEXT_BUILT),
+  runtimeEventBaseSchema.extend({ type: z.literal(TRACE_EVENT_NAMES.CONTEXT_BUILT), payload: contextBuiltPayloadSchema.optional() }),
   runtimeEventWithPayload(TRACE_EVENT_NAMES.CONTEXT_COMPACTED),
   runtimeEventWithPayload(TRACE_EVENT_NAMES.CONTEXT_SUMMARY),
-  runtimeEventWithPayload(TRACE_EVENT_NAMES.APPROVAL_REQUIRED),
+  runtimeEventBaseSchema.extend({ type: z.literal(TRACE_EVENT_NAMES.APPROVAL_REQUIRED), payload: approvalRequiredPayloadSchema.optional() }),
   runtimeEventWithPayload(TRACE_EVENT_NAMES.STATE_CHANGED),
   runtimeEventWithPayload(TRACE_EVENT_NAMES.TASK_CLASSIFIED),
   runtimeEventWithPayload(TRACE_EVENT_NAMES.TOOLS_SELECTED),
@@ -240,8 +349,8 @@ export const runtimeEventSchema = z.discriminatedUnion('type', [
   runtimeEventWithPayload(TRACE_EVENT_NAMES.FINDINGS_REPORTED),
   runtimeEventWithPayload(TRACE_EVENT_NAMES.DEBUG_REPORT_CREATED),
   runtimeEventWithPayload(TRACE_EVENT_NAMES.MODEL_STREAM_STARTED),
-  runtimeEventWithPayload(TRACE_EVENT_NAMES.MODEL_STREAM_DELTA),
-  runtimeEventWithPayload(TRACE_EVENT_NAMES.MODEL_STREAM_FINISHED),
+  runtimeEventBaseSchema.extend({ type: z.literal(TRACE_EVENT_NAMES.MODEL_STREAM_DELTA), payload: modelStreamDeltaPayloadSchema.optional() }),
+  runtimeEventBaseSchema.extend({ type: z.literal(TRACE_EVENT_NAMES.MODEL_STREAM_FINISHED), payload: modelStreamFinishedPayloadSchema.optional() }),
   runtimeEventWithPayload(TRACE_EVENT_NAMES.MODEL_STREAM_FAILED),
   runtimeEventWithPayload(TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_STARTED),
   runtimeEventWithPayload(TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_FINISHED),
@@ -250,16 +359,23 @@ export const runtimeEventSchema = z.discriminatedUnion('type', [
   runtimeEventWithPayload(TRACE_EVENT_NAMES.PROVIDER_TEST_FAILED),
   runtimeEventWithPayload(TRACE_EVENT_NAMES.FILL_PLAN_CREATED),
   runtimeEventWithPayload(TRACE_EVENT_NAMES.FIELD_FILL_STARTED),
-  runtimeEventWithPayload(TRACE_EVENT_NAMES.FIELD_FILL_RESULT),
-  runtimeEventWithPayload(TRACE_EVENT_NAMES.FORM_VERIFY_RESULT),
+  runtimeEventBaseSchema.extend({ type: z.literal(TRACE_EVENT_NAMES.FIELD_FILL_RESULT), payload: fillResultPayloadSchema.optional() }),
+  runtimeEventBaseSchema.extend({ type: z.literal(TRACE_EVENT_NAMES.FORM_VERIFY_RESULT), payload: formVerifyResultPayloadSchema.optional() }),
   runtimeEventWithPayload(TRACE_EVENT_NAMES.SUBMIT_APPROVAL_REQUESTED),
-  runtimeEventWithPayload(TRACE_EVENT_NAMES.FORM_SUBMIT_RESULT),
+  runtimeEventBaseSchema.extend({ type: z.literal(TRACE_EVENT_NAMES.FORM_SUBMIT_RESULT), payload: formSubmitResultPayloadSchema.optional() }),
   runtimeEventWithPayload(APPROVAL_EVENT_NAMES.APPROVED),
   runtimeEventWithPayload(APPROVAL_EVENT_NAMES.DENIED),
   runtimeEventWithPayload(APPROVAL_EVENT_NAMES.EXPIRED),
   runtimeEventWithPayload('model_prompt'),
   runtimeEventBaseSchema.extend({
     type: z.literal('snapshot_updated')
+  }),
+  runtimeEventBaseSchema.extend({
+    type: z.literal('runtime_event_invalid'),
+    payload: z.object({
+      originalType: z.string().optional(),
+      validationErrors: z.array(z.string()).optional()
+    }).passthrough().optional()
   })
 ]);
 

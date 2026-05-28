@@ -26,6 +26,8 @@ type FormActionGrant = {
   fieldRefIds: Set<string>;
   submitTargetRefId?: string | undefined;
   expiresAt: number;
+  runId: string;
+  stepId: string;
 };
 
 const IFRAME_ACTION_TOKEN_TTL_MS = 30_000;
@@ -276,12 +278,14 @@ export class ContentRpcHandler {
           actionToken: this.createFormActionToken(
             message.action,
             message.fieldRefIds ?? [],
-            message.submitTargetRefId
+            message.submitTargetRefId,
+            message.runId,
+            message.stepId
           )
         };
       }
       case CONTENT_RPC_MESSAGES.FORM_FILL_FIELD: {
-        if (!this.consumeFormActionToken(message.actionToken, 'fill', [message.fieldRefId])) {
+        if (!this.consumeFormActionToken(message.actionToken, 'fill', [message.fieldRefId], undefined, message.runId, message.stepId)) {
           return formActionUnauthorized();
         }
         const fr = fillSingleField(this.document, this.ensureRefMap(), { fieldRefId: message.fieldRefId, value: message.value, clear: message.clear }, this.locale);
@@ -291,7 +295,7 @@ export class ContentRpcHandler {
         return { ok: true, fillFieldResult: fr } as unknown as ContentRpcResponse;
       }
       case CONTENT_RPC_MESSAGES.FORM_FILL_MANY: {
-        if (!this.consumeFormActionToken(message.actionToken, 'fill', message.targets.map((target) => target.fieldRefId))) {
+        if (!this.consumeFormActionToken(message.actionToken, 'fill', message.targets.map((target) => target.fieldRefId), undefined, message.runId, message.stepId)) {
           return formActionUnauthorized();
         }
         const mr = fillManyFields(this.document, this.ensureRefMap(), message.targets, this.locale);
@@ -310,7 +314,7 @@ export class ContentRpcHandler {
         return { ok: true, verifyResult: verifyForm(this.document, fm, message.submitRefId, this.locale) } as unknown as ContentRpcResponse;
       }
       case CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT: {
-        if (!this.consumeFormActionToken(message.actionToken, 'submit', [], message.submitTargetRefId)) {
+        if (!this.consumeFormActionToken(message.actionToken, 'submit', [], message.submitTargetRefId, message.runId, message.stepId)) {
           return formActionUnauthorized();
         }
         const sr = executeSubmit(this.document, this.ensureRefMap(), message.submitTargetRefId, {
@@ -390,7 +394,9 @@ export class ContentRpcHandler {
   private createFormActionToken(
     action: FormActionKind,
     fieldRefIds: string[],
-    submitTargetRefId?: string
+    submitTargetRefId: string | undefined,
+    runId: string,
+    stepId: string
   ): string {
     this.pruneExpiredFormActionTokens();
     const token = createOpaqueToken('bh_form');
@@ -398,7 +404,9 @@ export class ContentRpcHandler {
       action,
       fieldRefIds: new Set(fieldRefIds),
       submitTargetRefId,
-      expiresAt: Date.now() + FORM_ACTION_TOKEN_TTL_MS
+      expiresAt: Date.now() + FORM_ACTION_TOKEN_TTL_MS,
+      runId,
+      stepId
     });
     return token;
   }
@@ -407,7 +415,9 @@ export class ContentRpcHandler {
     token: string | undefined,
     action: FormActionKind,
     fieldRefIds: string[],
-    submitTargetRefId?: string
+    submitTargetRefId: string | undefined,
+    runId: string,
+    stepId: string
   ): boolean {
     this.pruneExpiredFormActionTokens();
     if (!token) {
@@ -416,6 +426,12 @@ export class ContentRpcHandler {
     const grant = this.formActionGrants.get(token);
     this.formActionGrants.delete(token);
     if (!grant || grant.action !== action || grant.expiresAt <= Date.now()) {
+      return false;
+    }
+    if (grant.runId !== runId) {
+      return false;
+    }
+    if (grant.stepId !== stepId) {
       return false;
     }
     if (action === 'fill') {

@@ -12,6 +12,7 @@ type PageDataStoreState = {
     forms?: TabStatus | undefined;
   };
   setSnapshot: (snapshot: RunSnapshot) => void;
+  clearSnapshot: () => void;
 };
 
 export function createPageDataStore() {
@@ -26,6 +27,12 @@ export function createPageDataStore() {
           interactive: snapshot.structuredPageData?.interactive.status,
           forms: snapshot.structuredPageData?.forms.status
         }
+      });
+    },
+    clearSnapshot: () => {
+      store.setState({
+        snapshot: undefined,
+        tabStatuses: {}
       });
     }
   });

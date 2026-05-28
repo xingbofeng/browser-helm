@@ -13,10 +13,7 @@ const dataSchema = z.object({
   interactiveCount: z.number().int().nonnegative()
 });
 
-export const bhMockPageObserve: ToolSpec<
-  z.infer<typeof argsSchema>,
-  z.infer<typeof toolResultSchema>
-> = {
+export const bhMockPageObserve: ToolSpec<z.infer<typeof argsSchema>> = {
   name: 'bh_mock_page_observe',
   title: 'Mock Page Observe',
   description: 'Returns synthetic page observation data for kernel tests',

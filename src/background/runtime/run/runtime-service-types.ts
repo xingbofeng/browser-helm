@@ -1,10 +1,11 @@
 import type { ContentRpcClient } from '../../../page/messaging/content-rpc-client';
 import type { ModelClient } from '../../../agent/model/model-client';
 import type { SettingsStore } from '../../../storage/interfaces/settings-store';
-import type { ExecuteToolInput, RuntimeEvent } from '../../../runtime/runtime-messages';
+import type { ExecuteToolInput, RuntimeEvent, RuntimeTaskState } from '../../../runtime/runtime-messages';
 import type { RunKind } from '../../../runtime/runtime-messages';
 import type { RunMode } from '../../../shared/schemas/tool.schema';
 import type { Locale } from '../../../i18n/types';
+import type { AgentMessageRole } from '../../../shared/schemas/agent-message.schema';
 
 /** Internal record tracking per-run state within the runtime. */
 export type RunRecord = {
@@ -14,6 +15,12 @@ export type RunRecord = {
   trace: RuntimeEvent[];
   runKind?: RunKind;
   locale?: Locale;
+  taskState?: RuntimeTaskState | undefined;
+  conversationHistory?: Array<{
+    role: AgentMessageRole;
+    title?: string | undefined;
+    content: string;
+  }> | undefined;
 };
 
 /** Dependencies injected into the runtime facade. */
@@ -42,3 +49,13 @@ export type ProviderRecord = {
 
 /** Pending approval action stored for post-approval execution. */
 export type PendingApprovalAction = ExecuteToolInput;
+
+/** Contract describing a tool available to the model prompt. */
+export type ToolPromptContract = {
+  name: string;
+  title: string;
+  description: string;
+  modes: string[];
+  risk: string;
+  argsSchema: unknown;
+};

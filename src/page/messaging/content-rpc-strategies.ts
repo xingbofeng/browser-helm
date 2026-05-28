@@ -51,7 +51,12 @@ export function createContentRpcStrategies(
     new TargetFrameStrategy(context, CONTENT_RPC_MESSAGES.IFRAME_READ),
     new TargetFrameStrategy(context, CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE),
     new TargetFrameStrategy(context, CONTENT_RPC_MESSAGES.IFRAME_CLICK),
-    new TargetFrameStrategy(context, CONTENT_RPC_MESSAGES.IFRAME_TYPE)
+    new TargetFrameStrategy(context, CONTENT_RPC_MESSAGES.IFRAME_TYPE),
+    new FormFrameStrategy(context, CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE),
+    new FormFrameStrategy(context, CONTENT_RPC_MESSAGES.FORM_FILL_FIELD),
+    new FormFrameStrategy(context, CONTENT_RPC_MESSAGES.FORM_FILL_MANY),
+    new FormFrameStrategy(context, CONTENT_RPC_MESSAGES.FORM_VERIFY),
+    new FormFrameStrategy(context, CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT)
   ];
 }
 
@@ -205,6 +210,36 @@ class TargetFrameStrategy implements ContentRpcStrategy {
   }
 }
 
+class FormFrameStrategy implements ContentRpcStrategy {
+  constructor(
+    private readonly context: ContentRpcStrategyContext,
+    readonly type: ContentRpcRequest['type']
+  ) {}
+
+  async execute(message: ContentRpcRequest): Promise<ContentRpcResponse> {
+    const target = resolveFormMessageFrame(message);
+    if (!target.ok) {
+      return target.response;
+    }
+    const frameId = target.frameId;
+    const frames = await this.context.frames();
+    if (!frames.some((frame) => frame.frameId === frameId)) {
+      return {
+        ok: false,
+        code: ERROR_CODES.FRAME_NOT_FOUND,
+        message: `Frame not found: ${frameId}`
+      };
+    }
+    const localMessage = stripFormMessageFrameRefs(message);
+    const response = await safeSendFrameMessage(
+      this.context,
+      frameId === 0 ? undefined : frameId,
+      localMessage
+    );
+    return prefixFormResponseFrameRefs(response, frameId);
+  }
+}
+
 function isTopFrameDefaultableMessage(message: ContentRpcRequest): boolean {
   const defaultableTypes = new Set<ContentRpcRequest['type']>([
     CONTENT_RPC_MESSAGES.PAGE_READ_VISIBLE_TEXT,
@@ -213,6 +248,183 @@ function isTopFrameDefaultableMessage(message: ContentRpcRequest): boolean {
     CONTENT_RPC_MESSAGES.VIEWPORT_SCROLL
   ]);
   return defaultableTypes.has(message.type);
+}
+
+function resolveFormMessageFrame(
+  message: ContentRpcRequest
+): { ok: true; frameId: number } | { ok: false; response: ContentRpcResponse } {
+  const refs = formMessageRefIds(message);
+  const frameIds = Array.from(
+    new Set(refs.map((refId) => parseFrameRefId(refId).frameId ?? 0))
+  );
+  if (frameIds.length <= 1) {
+    return {
+      ok: true,
+      frameId: frameIds[0] ?? 0
+    };
+  }
+  return {
+    ok: false,
+    response: {
+      ok: false,
+      code: ERROR_CODES.FRAME_REF_MISMATCH,
+      message: `Form action refs must belong to one frame: ${frameIds.join(', ')}`
+    }
+  };
+}
+
+function formMessageRefIds(message: ContentRpcRequest): string[] {
+  switch (message.type) {
+    case CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE:
+      return [
+        ...(message.fieldRefIds ?? []),
+        ...(message.formRefId ? [message.formRefId] : []),
+        ...(message.submitTargetRefId ? [message.submitTargetRefId] : [])
+      ];
+    case CONTENT_RPC_MESSAGES.FORM_FILL_FIELD:
+      return [message.fieldRefId];
+    case CONTENT_RPC_MESSAGES.FORM_FILL_MANY:
+      return message.targets.map((target) => target.fieldRefId);
+    case CONTENT_RPC_MESSAGES.FORM_VERIFY:
+      return [
+        ...message.fieldRefIds,
+        ...(message.submitRefId ? [message.submitRefId] : [])
+      ];
+    case CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT:
+      return [
+        ...(message.submitTargetRefId ? [message.submitTargetRefId] : []),
+        ...(message.formRefId ? [message.formRefId] : [])
+      ];
+    default:
+      return [];
+  }
+}
+
+function stripFormMessageFrameRefs(message: ContentRpcRequest): ContentRpcRequest {
+  switch (message.type) {
+    case CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE:
+      return {
+        ...message,
+        fieldRefIds: message.fieldRefIds?.map(stripFramePrefix),
+        formRefId: message.formRefId ? stripFramePrefix(message.formRefId) : undefined,
+        submitTargetRefId: message.submitTargetRefId
+          ? stripFramePrefix(message.submitTargetRefId)
+          : undefined
+      };
+    case CONTENT_RPC_MESSAGES.FORM_FILL_FIELD:
+      return {
+        ...message,
+        fieldRefId: stripFramePrefix(message.fieldRefId)
+      };
+    case CONTENT_RPC_MESSAGES.FORM_FILL_MANY:
+      return {
+        ...message,
+        targets: message.targets.map((target) => ({
+          ...target,
+          fieldRefId: stripFramePrefix(target.fieldRefId)
+        }))
+      };
+    case CONTENT_RPC_MESSAGES.FORM_VERIFY:
+      return {
+        ...message,
+        fieldRefIds: message.fieldRefIds.map(stripFramePrefix),
+        submitRefId: message.submitRefId
+          ? stripFramePrefix(message.submitRefId)
+          : undefined
+      };
+    case CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT:
+      return {
+        ...message,
+        formRefId: message.formRefId ? stripFramePrefix(message.formRefId) : undefined,
+        submitTargetRefId: message.submitTargetRefId
+          ? stripFramePrefix(message.submitTargetRefId)
+          : undefined
+      };
+    default:
+      return message;
+  }
+}
+
+function stripFramePrefix(refId: string): string {
+  return parseFrameRefId(refId).refId;
+}
+
+function prefixFormResponseFrameRefs(
+  response: ContentRpcResponse,
+  frameId: number
+): ContentRpcResponse {
+  if (!response.ok || frameId === 0) {
+    return response;
+  }
+  if ('fillFieldResult' in response) {
+    return {
+      ...response,
+      fillFieldResult: prefixFillFieldResult(response.fillFieldResult, frameId)
+    };
+  }
+  if ('fillManyResult' in response) {
+    return {
+      ...response,
+      fillManyResult: {
+        ...response.fillManyResult,
+        formRefId: response.fillManyResult.formRefId
+          ? prefixRefId(response.fillManyResult.formRefId, frameId)
+          : undefined,
+        fields: response.fillManyResult.fields.map((field) =>
+          prefixFillFieldResult(field, frameId)
+        )
+      }
+    };
+  }
+  if ('verifyResult' in response) {
+    return {
+      ...response,
+      verifyResult: {
+        ...response.verifyResult,
+        formRefId: response.verifyResult.formRefId
+          ? prefixRefId(response.verifyResult.formRefId, frameId)
+          : undefined,
+        missingRequired: response.verifyResult.missingRequired.map((field) =>
+          prefixVerifyFieldResult(field, frameId)
+        ),
+        invalidFields: response.verifyResult.invalidFields.map((field) =>
+          prefixVerifyFieldResult(field, frameId)
+        ),
+        fieldResults: response.verifyResult.fieldResults.map((field) =>
+          prefixVerifyFieldResult(field, frameId)
+        ),
+        disabledSubmitReason: response.verifyResult.disabledSubmitReason
+          ? {
+              ...response.verifyResult.disabledSubmitReason,
+              fieldRefId: response.verifyResult.disabledSubmitReason.fieldRefId
+                ? prefixRefId(response.verifyResult.disabledSubmitReason.fieldRefId, frameId)
+                : undefined
+            }
+          : undefined
+      }
+    };
+  }
+  return response;
+}
+
+function prefixFillFieldResult<T extends { fieldRefId: string }>(
+  field: T,
+  frameId: number
+): T {
+  return {
+    ...field,
+    fieldRefId: prefixRefId(field.fieldRefId, frameId)
+  };
+}
+
+function prefixVerifyFieldResult<T extends { fieldRefId: string }>(
+  field: T,
+  frameId: number
+): T {
+  return {
+    ...field,
+    fieldRefId: prefixRefId(field.fieldRefId, frameId)
+  };
 }
 
 export function mergeFrameObservationResponses(

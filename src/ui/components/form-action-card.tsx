@@ -22,10 +22,11 @@ export function FormActionCard({ toolResult, snapshot }: FormActionCardProps) {
 }
 
 function FillPlanCard({ result, t }: { result: RuntimeToolResultSnapshot; t: ReturnType<typeof useT> }) {
+  const summary = result.ok ? result.summary : t('form.card.inferPlanNeedsValues');
   return (
     <div className="bh-formCard" role="status">
       <div className="bh-formCardIcon"><ClipboardList size={18} /></div>
-      <div className="bh-formCardBody"><strong>{t('form.card.inferPlan')}</strong><StreamingMarkdown content={result.summary} /></div>
+      <div className="bh-formCardBody"><strong>{t('form.card.inferPlan')}</strong><StreamingMarkdown content={summary} /></div>
     </div>
   );
 }

@@ -36,6 +36,13 @@ export default tseslint.config(
     }
   },
   {
-    ignores: ['.output/**', '.wxt/**', 'dist/**', 'node_modules/**', 'eslint.config.js']
+    ignores: [
+      '.output/**',
+      '.wxt/**',
+      'dist/**',
+      'node_modules/**',
+      'eslint.config.js',
+      'public/page-health-hook.js'
+    ]
   }
 );

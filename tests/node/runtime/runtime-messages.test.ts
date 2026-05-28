@@ -58,4 +58,20 @@ describe('startRunInputSchema', () => {
       successCriteria: ['列出阻塞字段', '给出修复建议']
     });
   });
+
+  it('accepts conversation history on chat continuation start input', () => {
+    expect(startRunInputSchema.parse({
+      task: '你随便填就行',
+      mode: 'act',
+      conversationHistory: [
+        { role: 'user', content: '帮我填 Apple 注册表单' },
+        { role: 'agent', title: '需要你提供具体字段值', content: '请提供姓氏、名字和邮箱。' }
+      ]
+    })).toMatchObject({
+      conversationHistory: [
+        { role: 'user', content: '帮我填 Apple 注册表单' },
+        { role: 'agent', content: '请提供姓氏、名字和邮箱。' }
+      ]
+    });
+  });
 });

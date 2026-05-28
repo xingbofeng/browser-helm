@@ -41,11 +41,13 @@ export function bhFormFillField(
     risk: 'medium',
     argsSchema,
     resultSchema: toolResultSchema,
-    async execute(args) {
+    async execute(args, ctx) {
       const grant = await rpc.request({
         type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
         action: 'fill',
-        fieldRefIds: [args.fieldRefId]
+        fieldRefIds: [args.fieldRefId],
+        runId: ctx.runId,
+        stepId: ctx.stepId
       });
       if (!grant.ok || !('actionToken' in grant)) {
         const message = grant.ok ? 'form fill authorization failed' : grant.message;
@@ -64,6 +66,8 @@ export function bhFormFillField(
         value: args.value,
         clear: args.clear,
         actionToken: grant.actionToken,
+        runId: ctx.runId,
+        stepId: ctx.stepId
       });
 
       if (!resp.ok) {

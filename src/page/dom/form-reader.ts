@@ -35,7 +35,7 @@ export function readFormFields(
 ): FormReaderResult {
   const fieldElements = Array.from(
     document.querySelectorAll<HTMLElement>(FIELD_SELECTOR)
-  ).filter(isVisibleElement);
+  ).filter((element) => isVisibleElement(element) || hasVisibleControlLabel(element));
   if (fieldElements.length === 0) {
     return {
       status: 'empty',
@@ -91,6 +91,17 @@ export function readFormFields(
     submit: pageSubmit,
     warnings
   };
+}
+
+function hasVisibleControlLabel(element: HTMLElement): boolean {
+  if (!(element instanceof HTMLInputElement)) {
+    return false;
+  }
+  const type = (element.getAttribute('type') ?? 'text').toLowerCase();
+  if (type !== 'checkbox' && type !== 'radio') {
+    return false;
+  }
+  return Array.from(element.labels ?? []).some((label) => isVisibleElement(label));
 }
 
 function readFieldSnapshot(

@@ -13,6 +13,7 @@ const CONTENT_SCRIPT_INSTALLED_MARKER = '__BROWSER_HELM_CONTENT_RPC_INSTALLED__'
 const PAGE_HEALTH_BRIDGE_MARKER = '__BROWSER_HELM_PAGE_HEALTH_BRIDGE__';
 const PAGE_HEALTH_EVENT = 'BROWSER_HELM_PAGE_HEALTH_EVENT';
 const PAGE_HEALTH_HOOK_ID = 'browserhelm-page-health-hook';
+const PAGE_HEALTH_HOOK_PATH = 'page-health-hook.js';
 const FLOATING_ENTRY_HOST_ID = 'browserhelm-floating-entry-host';
 
 export const contentScript = {
@@ -158,90 +159,16 @@ function installPageHealthPageHooks(): void {
     window.setTimeout(installPageHealthPageHooks, 0);
     return;
   }
+  const hookUrl = safeRuntimeGetUrl(PAGE_HEALTH_HOOK_PATH);
+  if (!hookUrl) {
+    return;
+  }
   const script = document.createElement('script');
   script.id = PAGE_HEALTH_HOOK_ID;
-  script.textContent = `(() => {
-    const marker = "__BROWSER_HELM_PAGE_HEALTH_HOOK_INSTALLED__";
-    const channel = ${JSON.stringify(PAGE_HEALTH_EVENT)};
-    if (window[marker]) return;
-    window[marker] = true;
-    const post = (payload) => {
-      try {
-        window.postMessage({ channel, ...payload }, window.location.origin);
-      } catch {}
-    };
-    const text = (value) => {
-      try {
-        if (value instanceof Error) return value.message;
-        if (typeof value === "string") return value;
-        return JSON.stringify(value);
-      } catch {
-        return String(value);
-      }
-    };
-    const originalConsoleError = console.error;
-    console.error = function browserHelmConsoleError(...args) {
-      post({ kind: "console_error", message: args.map(text).join(" "), source: "console.error" });
-      return originalConsoleError.apply(this, args);
-    };
-    for (const level of ["debug", "info", "log", "warn"]) {
-      const original = console[level];
-      if (typeof original !== "function") continue;
-      console[level] = function browserHelmConsoleMessage(...args) {
-        post({ kind: "console_message", level, message: args.map(text).join(" "), source: "console." + level });
-        return original.apply(this, args);
-      };
-    }
-    window.addEventListener("error", (event) => {
-      post({ kind: "console_error", message: event.message || text(event.error), source: event.filename || "window.error" });
-    });
-    window.addEventListener("unhandledrejection", (event) => {
-      post({ kind: "console_error", message: text(event.reason), source: "unhandledrejection" });
-    });
-    if (typeof window.fetch === "function") {
-      const originalFetch = window.fetch;
-      window.fetch = async function browserHelmFetch(input, init) {
-        const method = (init && init.method) || (input && input.method) || "GET";
-        const url = typeof input === "string" ? input : (input && input.url) || String(input);
-        try {
-          const response = await originalFetch.apply(this, arguments);
-          if (!response.ok) {
-            post({ kind: "network_failure", url, method, status: response.status, errorText: response.statusText || "HTTP error" });
-          }
-          return response;
-        } catch (error) {
-          post({ kind: "network_failure", url, method, errorText: text(error) });
-          throw error;
-        }
-      };
-    }
-    if (typeof window.XMLHttpRequest === "function") {
-      const OriginalXHR = window.XMLHttpRequest;
-      window.XMLHttpRequest = function BrowserHelmXMLHttpRequest() {
-        const xhr = new OriginalXHR();
-        let method = "GET";
-        let url = "";
-        const originalOpen = xhr.open;
-        xhr.open = function browserHelmXhrOpen(nextMethod, nextUrl) {
-          method = String(nextMethod || "GET");
-          url = String(nextUrl || "");
-          return originalOpen.apply(xhr, arguments);
-        };
-        xhr.addEventListener("error", () => {
-          post({ kind: "network_failure", url, method, errorText: "XMLHttpRequest error" });
-        });
-        xhr.addEventListener("loadend", () => {
-          if (xhr.status >= 400) {
-            post({ kind: "network_failure", url, method, status: xhr.status, errorText: xhr.statusText || "HTTP error" });
-          }
-        });
-        return xhr;
-      };
-      window.XMLHttpRequest.prototype = OriginalXHR.prototype;
-    }
-  })();`;
+  script.src = hookUrl;
+  script.onload = () => script.remove();
+  script.onerror = () => script.remove();
   parent.appendChild(script);
-  script.remove();
 }
 
 function isPromise<T>(value: T | Promise<T>): value is Promise<T> {

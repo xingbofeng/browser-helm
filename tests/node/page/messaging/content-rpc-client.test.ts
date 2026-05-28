@@ -4,6 +4,7 @@ import {
   ChromeContentRpcClient,
   mergeFrameObservationResponses
 } from '../../../../src/page/messaging/content-rpc-client';
+import type { ContentRpcRequest } from '../../../../src/page/messaging/content-rpc.schema';
 import { CONTENT_RPC_MESSAGES } from '../../../../src/shared/constants/event-names';
 
 afterEach(() => {
@@ -365,6 +366,262 @@ describe('content RPC frame aggregation', () => {
     expect(response).toMatchObject({
       ok: false,
       code: 'FRAME_NOT_FOUND'
+    });
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('routes iframe form authorization and fill messages to the owning frame', async () => {
+    const sendMessage = vi.fn(async (_tabId: number, message: ContentRpcRequest) => {
+      if (message.type === CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE) {
+        return {
+          ok: true,
+          actionToken: 'frame-token'
+        };
+      }
+      return {
+        ok: true,
+        fillManyResult: {
+          ok: true,
+          fields: [
+            {
+              fieldRefId: 'ref_101',
+              type: 'text',
+              status: 'filled',
+              requestedValue: 'Counter',
+              actualValuePreview: 'Counter',
+              changedPage: true
+            }
+          ],
+          filledCount: 1,
+          skippedCount: 0,
+          failedCount: 0,
+          changedPage: true,
+          requiresObserve: true,
+          summary: '已填写 1 个字段'
+        }
+      };
+    });
+    vi.stubGlobal('chrome', {
+      scripting: {
+        executeScript: vi.fn(async () => [])
+      },
+      tabs: {
+        sendMessage
+      },
+      webNavigation: {
+        getAllFrames: vi.fn(async () => [
+          {
+            frameId: 0,
+            url: 'https://account.apple.com/account'
+          },
+          {
+            frameId: 7,
+            url: 'https://appleid.apple.com/widget/account/',
+            parentFrameId: 0
+          }
+        ])
+      }
+    });
+
+    const client = new ChromeContentRpcClient(42);
+    const authorize = await client.request({
+      type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+      action: 'fill',
+      fieldRefIds: ['frame_7:ref_101'],
+      runId: 'run_1',
+      stepId: 'step_1'
+    });
+    const fill = await client.request({
+      type: CONTENT_RPC_MESSAGES.FORM_FILL_MANY,
+      targets: [
+        {
+          fieldRefId: 'frame_7:ref_101',
+          value: 'Counter'
+        }
+      ],
+      actionToken: 'frame-token',
+      runId: 'run_1',
+      stepId: 'step_1'
+    });
+
+    expect(authorize).toMatchObject({
+      ok: true,
+      actionToken: 'frame-token'
+    });
+    expect(fill).toMatchObject({
+      ok: true,
+      fillManyResult: {
+        fields: [
+          {
+            fieldRefId: 'frame_7:ref_101',
+            status: 'filled'
+          }
+        ]
+      }
+    });
+    expect(sendMessage).toHaveBeenNthCalledWith(
+      1,
+      42,
+      {
+        type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+        action: 'fill',
+        fieldRefIds: ['ref_101'],
+        formRefId: undefined,
+        submitTargetRefId: undefined,
+        runId: 'run_1',
+        stepId: 'step_1'
+      },
+      { frameId: 7 }
+    );
+    expect(sendMessage).toHaveBeenNthCalledWith(
+      2,
+      42,
+      {
+        type: CONTENT_RPC_MESSAGES.FORM_FILL_MANY,
+        targets: [
+          {
+            fieldRefId: 'ref_101',
+            value: 'Counter'
+          }
+        ],
+        actionToken: 'frame-token',
+        runId: 'run_1',
+        stepId: 'step_1'
+      },
+      { frameId: 7 }
+    );
+  });
+
+  it('routes iframe enter-submit execute messages by form ref when no submit button ref exists', async () => {
+    const sendMessage = vi.fn(async (_tabId: number, message: ContentRpcRequest) => {
+      if (message.type === CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE) {
+        return {
+          ok: true,
+          actionToken: 'submit-token'
+        };
+      }
+      return {
+        ok: true,
+        submitResult: 'submitted'
+      };
+    });
+    vi.stubGlobal('chrome', {
+      scripting: {
+        executeScript: vi.fn(async () => [])
+      },
+      tabs: {
+        sendMessage
+      },
+      webNavigation: {
+        getAllFrames: vi.fn(async () => [
+          {
+            frameId: 0,
+            url: 'https://account.example.com'
+          },
+          {
+            frameId: 7,
+            url: 'https://frame.example.com/form',
+            parentFrameId: 0
+          }
+        ])
+      }
+    });
+
+    const client = new ChromeContentRpcClient(42);
+    await client.request({
+      type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+      action: 'submit',
+      fieldRefIds: ['frame_7:ref_101'],
+      formRefId: 'frame_7:form_1',
+      runId: 'run_1',
+      stepId: 'step_1'
+    });
+    const submit = await client.request({
+      type: CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT,
+      formRefId: 'frame_7:form_1',
+      actionToken: 'submit-token',
+      runId: 'run_1',
+      stepId: 'step_1'
+    });
+
+    expect(submit).toMatchObject({
+      ok: true,
+      submitResult: 'submitted'
+    });
+    expect(sendMessage).toHaveBeenNthCalledWith(
+      1,
+      42,
+      {
+        type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+        action: 'submit',
+        fieldRefIds: ['ref_101'],
+        formRefId: 'form_1',
+        submitTargetRefId: undefined,
+        runId: 'run_1',
+        stepId: 'step_1'
+      },
+      { frameId: 7 }
+    );
+    expect(sendMessage).toHaveBeenNthCalledWith(
+      2,
+      42,
+      {
+        type: CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT,
+        formRefId: 'form_1',
+        submitTargetRefId: undefined,
+        actionToken: 'submit-token',
+        runId: 'run_1',
+        stepId: 'step_1'
+      },
+      { frameId: 7 }
+    );
+  });
+
+  it('rejects form actions that mix top-level and iframe refs', async () => {
+    const sendMessage = vi.fn();
+    vi.stubGlobal('chrome', {
+      scripting: {
+        executeScript: vi.fn(async () => [])
+      },
+      tabs: {
+        sendMessage
+      },
+      webNavigation: {
+        getAllFrames: vi.fn(async () => [
+          {
+            frameId: 0,
+            url: 'https://account.apple.com/account'
+          },
+          {
+            frameId: 7,
+            url: 'https://appleid.apple.com/widget/account/',
+            parentFrameId: 0
+          }
+        ])
+      }
+    });
+
+    const client = new ChromeContentRpcClient(42);
+    const response = await client.request({
+      type: CONTENT_RPC_MESSAGES.FORM_FILL_MANY,
+      targets: [
+        {
+          fieldRefId: 'ref_100',
+          value: 'top'
+        },
+        {
+          fieldRefId: 'frame_7:ref_101',
+          value: 'iframe'
+        }
+      ],
+      actionToken: 'frame-token',
+      runId: 'run_1',
+      stepId: 'step_1'
+    });
+
+    expect(response).toMatchObject({
+      ok: false,
+      code: 'FRAME_REF_MISMATCH'
     });
     expect(sendMessage).not.toHaveBeenCalled();
   });

@@ -109,9 +109,9 @@ export class PageObservationFlow {
     const tabId = await this.flowContext.shell().activeTabId();
     const sidePanelPage = await this.flowContext.sidePanel().open(tabId);
 
-    await sidePanelPage.getByRole('button', { name: '高级开发者选项' }).click();
+    await sidePanelPage.getByRole('button', { name: /^(高级开发者选项|Advanced debug options)$/u }).click();
     await expect(
-      sidePanelPage.locator('.bh-debugSummary').getByText('表单 2')
+      sidePanelPage.locator('.bh-debugSummary').getByText(/表单 2|Forms 2/u)
     ).toBeVisible({ timeout: 8_000 });
   }
 

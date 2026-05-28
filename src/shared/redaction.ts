@@ -9,9 +9,31 @@ export function maskProviderSecret(value: string): string {
 }
 
 export function redactTextForModelContext(value: string): string {
-  return maskProviderSecret(value)
-    .replace(emailPattern, '[REDACTED_EMAIL]')
-    .replace(phonePattern, '[REDACTED_PHONE]');
+  return redactUrlQuerySensitiveParams(
+    maskProviderSecret(value)
+      .replace(emailPattern, '[REDACTED_EMAIL]')
+      .replace(phonePattern, '[REDACTED_PHONE]')
+  );
+}
+
+/** Redacts sensitive query parameters from URLs embedded in text. */
+const urlPattern = /https?:\/\/[^\s"'<>]+/giu;
+function redactUrlQuerySensitiveParams(text: string): string {
+  return text.replace(urlPattern, (raw) => {
+    try {
+      const parsed = new URL(raw);
+      let changed = false;
+      for (const key of parsed.searchParams.keys()) {
+        if (/token|key|api[_-]?key|secret|password|email/iu.test(key)) {
+          parsed.searchParams.set(key, '[REDACTED]');
+          changed = true;
+        }
+      }
+      return changed ? parsed.toString() : raw;
+    } catch {
+      return raw;
+    }
+  });
 }
 
 export function redactProviderBaseUrlForTrace(

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { ToolSpec } from '../../src/tools/core/tool-spec';
 import { toolResultSchema } from '../../src/shared/schemas/tool-result.schema';
 
-export function createMockTool(name: string): ToolSpec<{ input: string }, z.infer<typeof toolResultSchema>> {
+export function createMockTool(name: string): ToolSpec<{ input: string }> {
   return {
     name,
     title: `Mock tool: ${name}`,

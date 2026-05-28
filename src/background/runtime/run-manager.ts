@@ -130,7 +130,13 @@ export class RunManager {
   }
 
   getSnapshot(runId: string): RunSnapshot {
-    return this.store.getSnapshot(runId);
+    const snapshot = this.store.getSnapshot(runId);
+    const record = this.store.getRecord(runId);
+    return {
+      ...snapshot,
+      ...(record?.tabId ? { targetTabId: record.tabId } : {}),
+      ...(record?.taskState ? { taskState: record.taskState } : {})
+    };
   }
 
   cancelRun(runId: string): Promise<{ runId: string; status: 'cancelled' }> {

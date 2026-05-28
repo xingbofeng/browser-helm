@@ -152,6 +152,13 @@ describe('setSelectOption', () => {
     expect(el.value).toBe('b');
   });
 
+  it('selects option by visible label', () => {
+    setupPage('<select><option value="CHN">中国</option><option value="USA">美国</option></select>');
+    const el = document.querySelector('select')!;
+    expect(setSelectOption(el, '美国')).toBe(true);
+    expect(el.value).toBe('USA');
+  });
+
   it('returns false for unknown value', () => {
     setupPage('<select><option value="a">A</option></select>');
     expect(setSelectOption(document.querySelector('select')!, 'missing')).toBe(false);
@@ -239,6 +246,14 @@ describe('fillSingleField', () => {
     const r = fillSingleField(document, refMap, { fieldRefId: refId, value: 'true' });
     expect(r.status).toBe('filled');
     expect((document.querySelector('input')!).checked).toBe(true);
+  });
+
+  it('fills visually hidden checkbox when it has a visible label', () => {
+    setupPage('<label><input type="checkbox" name="updates" style="opacity: 0" checked>接收营销内容</label>');
+    const refId = reg(document.querySelector('input')!, { role: 'checkbox', name: '接收营销内容' });
+    const r = fillSingleField(document, refMap, { fieldRefId: refId, value: 'false' });
+    expect(r.status).toBe('filled');
+    expect((document.querySelector('input')!).checked).toBe(false);
   });
 
   it('fills textarea', () => {

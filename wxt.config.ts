@@ -10,11 +10,14 @@ function stripInlineScripts(): Plugin {
   return {
     name: 'strip-inline-scripts',
     enforce: 'post',
-    transformIndexHtml(html) {
-      return html.replace(
-        /<script\b(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/gi,
-        ''
-      );
+    transformIndexHtml: {
+      order: 'post',
+      handler(html) {
+        return html.replace(
+          /<script\b(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/gi,
+          ''
+        );
+      }
     }
   };
 }
@@ -23,6 +26,9 @@ export default defineConfig({
   srcDir: 'src',
   modules: ['@wxt-dev/module-react'],
   vite: () => ({
+    server: {
+      hmr: false
+    },
     plugins: [stripInlineScripts()]
   }),
   manifest: {
@@ -50,12 +56,20 @@ export default defineConfig({
         description: 'Toggle BrowserHelm floating panel'
       }
     },
+    // BrowserHelm uses a minimal manifest permissions model for the Chrome Web Store.
+    // We declare zero host_permissions at install time so the extension does not
+    // request blanket page access by default. The runtime requests <all_urls>
+    // via optional_host_permissions, and Chrome prompts the user only when
+    // BrowserHelm first needs to read or act on a specific page.
+    //
+    // For a more locked-down distribution (e.g. enterprise), consider switching to
+    // the activeTab-only model and removing optional_host_permissions entirely.
     permissions: ['activeTab', 'storage', 'tabs', 'scripting', 'sidePanel', 'webNavigation'],
     host_permissions: [],
     optional_host_permissions: ['http://*/*', 'https://*/*', '<all_urls>'],
     web_accessible_resources: [
       {
-        resources: ['sidepanel.html', 'assets/*', 'icons/*'],
+        resources: ['sidepanel.html', 'page-health-hook.js', 'assets/*', 'icons/*'],
         matches: ['http://*/*', 'https://*/*']
       }
     ]

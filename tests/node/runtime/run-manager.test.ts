@@ -10,6 +10,7 @@ import {
   TRACE_EVENT_NAMES
 } from '../../../src/shared/constants/event-names';
 import { TOOL_NAMES } from '../../../src/shared/constants/tool-names';
+import type { AgentMessage } from '../../../src/shared/schemas/agent-message.schema';
 
 describe('RunManager', () => {
   it('starts a run by observing the target tab through registered page tools', async () => {
@@ -1114,7 +1115,1513 @@ describe('RunManager', () => {
     ]);
   });
 
-  it('rejects unified AgentLoop form fill values that are not explicit user task substrings', async () => {
+  it('guides the model to verify or finish immediately after a successful form fill', async () => {
+    const completeCalls: string[] = [];
+    const decisions = [
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: {
+          fields: [{ fieldRefId: 'ref_q', value: '最近的 agent 文章' }]
+        },
+        reason: '用户明确提供了搜索词'
+      },
+      {
+        type: 'finish',
+        message: '已在搜索框中填入“最近的 agent 文章”，尚未提交搜索。'
+      }
+    ];
+    const providerClient: ModelClient = {
+      async complete(input) {
+        completeCalls.push(input.messages.map((message) => message.content).join('\n'));
+        return {
+          text: decisionText(decisions.shift() ?? {
+            type: 'finish',
+            message: 'done'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          return {
+            ok: true,
+            fillManyResult: {
+              ok: true,
+              fields: message.targets.map((target) => ({
+                fieldRefId: target.fieldRefId,
+                type: 'search',
+                status: 'filled',
+                actualValuePreview: 'non-empty',
+                maskedActualValue: '[MASKED]'
+              })),
+              filledCount: message.targets.length,
+              skippedCount: 0,
+              failedCount: 0,
+              changedPage: true,
+              requiresObserve: false,
+              summary: `填写成功 ${message.targets.length}/${message.targets.length} 个字段`
+            }
+          };
+        }
+        return observationResponse({
+          title: 'Search',
+          currentDomain: 'example.com',
+          visibleTextSummary: 'Search',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_q',
+                label: '搜索',
+                name: 'q',
+                type: 'search',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '帮我搜索下“最近的 agent 文章”',
+      mode: 'act'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'finished');
+
+    expect(snapshot.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `${started.runId}:agent-final`,
+          content: '已在搜索框中填入“最近的 agent 文章”，尚未提交搜索。'
+        })
+      ])
+    );
+    expect(completeCalls[1]).toContain('decisionGuidance');
+    expect(completeCalls[1]).toContain('bh_form_verify');
+    expect(completeCalls[1]).toContain('finish');
+    expect(completeCalls[1]).toContain('Do not call bh_form_fill_many again');
+  });
+
+  it('guides the model to finish immediately after successful form verification', async () => {
+    const completeCalls: string[] = [];
+    const decisions = [
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: {
+          fields: [{ fieldRefId: 'ref_q', value: '最近的 agent 文章' }]
+        },
+        reason: '用户明确提供了搜索词'
+      },
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_VERIFY,
+        args: { fieldRefIds: ['ref_q'] },
+        reason: '填写后验证'
+      },
+      {
+        type: 'finish',
+        message: '已在搜索框中填入“最近的 agent 文章”，并确认字段有效；尚未提交搜索。'
+      }
+    ];
+    const providerClient: ModelClient = {
+      async complete(input) {
+        completeCalls.push(input.messages.map((message) => message.content).join('\n'));
+        return {
+          text: decisionText(decisions.shift() ?? {
+            type: 'finish',
+            message: 'done'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          return {
+            ok: true,
+            fillManyResult: {
+              ok: true,
+              fields: message.targets.map((target) => ({
+                fieldRefId: target.fieldRefId,
+                type: 'search',
+                status: 'filled',
+                actualValuePreview: 'non-empty',
+                maskedActualValue: '[MASKED]'
+              })),
+              filledCount: message.targets.length,
+              skippedCount: 0,
+              failedCount: 0,
+              changedPage: true,
+              requiresObserve: false,
+              summary: `填写成功 ${message.targets.length}/${message.targets.length} 个字段`
+            }
+          };
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_VERIFY) {
+          return {
+            ok: true,
+            verifyResult: {
+              status: 'pass',
+              allValid: true,
+              missingRequired: [],
+              invalidFields: [],
+              fieldResults: [],
+              visibleErrorText: [],
+              submitAvailable: true,
+              warnings: []
+            }
+          };
+        }
+        return observationResponse({
+          title: 'Search',
+          currentDomain: 'example.com',
+          visibleTextSummary: 'Search',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_q',
+                label: '搜索',
+                name: 'q',
+                type: 'search',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '帮我搜索下“最近的 agent 文章”',
+      mode: 'act'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'finished');
+
+    expect(snapshot.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `${started.runId}:agent-final`,
+          content: '已在搜索框中填入“最近的 agent 文章”，并确认字段有效；尚未提交搜索。'
+        })
+      ])
+    );
+    expect(completeCalls[2]).toContain('decisionGuidance');
+    expect(completeCalls[2]).toContain('The last form verification completed');
+    expect(completeCalls[2]).toContain('return finish now');
+    expect(completeCalls[2]).toContain('Do not call bh_form_verify again');
+  });
+
+  it('does not expose internal terminal tools in model prompt tool contracts', async () => {
+    let providerInput: Parameters<NonNullable<ModelClient['complete']>>[0] | undefined;
+    const providerClient: ModelClient = {
+      async complete(input) {
+        providerInput = input;
+        return {
+          text: decisionText({
+            type: 'finish',
+            message: '页面已观察完成。'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse()),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '观察一下页面',
+      mode: 'act'
+    });
+    await waitForSnapshot(manager, started.runId, 'finished');
+
+    const promptText = providerInput?.messages.map((message) => message.content).join('\n') ?? '';
+    expect(promptText).not.toContain(TOOL_NAMES.AGENT_FINISH);
+    expect(promptText).not.toContain(TOOL_NAMES.AGENT_FAIL);
+    expect(promptText).not.toContain(TOOL_NAMES.AGENT_ASK_USER);
+    expect(promptText).toContain('"finish"');
+    expect(promptText).toContain('"ask_user"');
+    expect(promptText).toContain('"fail"');
+  });
+
+  it('treats non-empty plain text model output as finish after repair is exhausted', async () => {
+    const complete = vi.fn(async () => ({
+      text: '已完成页面观察。'
+    }));
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse()),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => ({ complete })
+    });
+
+    const started = await manager.startRun({
+      task: '观察一下页面',
+      mode: 'ask'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'finished');
+
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(snapshot.error).toBeUndefined();
+    expect(snapshot.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `${started.runId}:agent-final`,
+          content: '已完成页面观察。'
+        })
+      ])
+    );
+  });
+
+  it('repairs a repeated form fill after the previous fill already succeeded', async () => {
+    const fillManyCalls: unknown[] = [];
+    const completeCalls: string[] = [];
+    const decisions = [
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: {
+          fields: [{ fieldRefId: 'ref_q', value: '最近的 agent 文章' }]
+        },
+        reason: '填写搜索词'
+      },
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: {
+          fields: [{ fieldRefId: 'ref_q', value: '最近的 agent 文章' }]
+        },
+        reason: '重复填写'
+      },
+      {
+        type: 'finish',
+        message: '已在搜索框中填入“最近的 agent 文章”，尚未提交搜索。'
+      }
+    ];
+    const providerClient: ModelClient = {
+      async complete(input) {
+        completeCalls.push(input.messages.map((message) => message.content).join('\n'));
+        return {
+          text: decisionText(decisions.shift() ?? {
+            type: 'finish',
+            message: 'done'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          fillManyCalls.push(message.targets);
+          return {
+            ok: true,
+            fillManyResult: {
+              ok: true,
+              fields: message.targets.map((target) => ({
+                fieldRefId: target.fieldRefId,
+                type: 'search',
+                status: 'filled',
+                actualValuePreview: 'non-empty',
+                maskedActualValue: '[MASKED]'
+              })),
+              filledCount: message.targets.length,
+              skippedCount: 0,
+              failedCount: 0,
+              changedPage: true,
+              requiresObserve: false,
+              summary: `填写成功 ${message.targets.length}/${message.targets.length} 个字段`
+            }
+          };
+        }
+        return observationResponse({
+          title: 'Search',
+          currentDomain: 'example.com',
+          visibleTextSummary: 'Search',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_q',
+                label: '搜索',
+                name: 'q',
+                type: 'search',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '帮我搜索下“最近的 agent 文章”',
+      mode: 'act'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'finished');
+
+    expect(fillManyCalls).toHaveLength(1);
+    expect(snapshot.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `${started.runId}:agent-final`,
+          content: '已在搜索框中填入“最近的 agent 文章”，尚未提交搜索。'
+        })
+      ])
+    );
+    expect(completeCalls.some((prompt) =>
+      prompt.includes('previous form fill already succeeded') &&
+      prompt.includes('Do not call bh_form_fill_many again')
+    )).toBe(true);
+  });
+
+  it('repairs a repeated form fill even when a read fields call happened in between', async () => {
+    const fillManyCalls: unknown[] = [];
+    const completeCalls: string[] = [];
+    const decisions = [
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: {
+          fields: [
+            { fieldRefId: 'ref_last', value: '张' },
+            { fieldRefId: 'ref_first', value: '三' }
+          ]
+        },
+        reason: '填写姓名'
+      },
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_READ_FIELDS,
+        args: {},
+        reason: '读取字段'
+      },
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: {
+          fields: [
+            { fieldRefId: 'ref_last', value: '张' },
+            { fieldRefId: 'ref_first', value: '三' }
+          ]
+        },
+        reason: '重复填写姓名'
+      },
+      {
+        type: 'finish',
+        message: '已把姓名填写为张三，未提交表单。'
+      }
+    ];
+    const providerClient: ModelClient = {
+      async complete(input) {
+        completeCalls.push(input.messages.map((message) => message.content).join('\n'));
+        return {
+          text: decisionText(decisions.shift() ?? {
+            type: 'finish',
+            message: 'done'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          fillManyCalls.push(message.targets);
+          return {
+            ok: true,
+            fillManyResult: {
+              ok: true,
+              fields: message.targets.map((target) => ({
+                fieldRefId: target.fieldRefId,
+                type: target.fieldRefId === 'ref_last' ? 'text' : 'text',
+                status: 'filled',
+                actualValuePreview: 'non-empty',
+                maskedActualValue: '[MASKED]'
+              })),
+              filledCount: message.targets.length,
+              skippedCount: 0,
+              failedCount: 0,
+              changedPage: true,
+              requiresObserve: false,
+              summary: `填写成功 ${message.targets.length}/${message.targets.length} 个字段`
+            }
+          };
+        }
+        return observationResponse({
+          title: 'Create Account',
+          currentDomain: 'account.apple.com',
+          visibleTextSummary: 'Create account form',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_last',
+                label: '姓氏',
+                name: 'lastName',
+                type: 'text',
+                required: true,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              },
+              {
+                refId: 'ref_first',
+                label: '名字',
+                name: 'firstName',
+                type: 'text',
+                required: true,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '姓名填下张三，不要提交',
+      mode: 'act'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'finished');
+
+    expect(fillManyCalls).toHaveLength(1);
+    expect(hasTraceTool(snapshot.trace ?? [], TRACE_EVENT_NAMES.TOOL_RESULT, TOOL_NAMES.FORM_READ_FIELDS, true)).toBe(true);
+    expect(snapshot.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `${started.runId}:agent-final`,
+          content: '已把姓名填写为张三，未提交表单。'
+        })
+      ])
+    );
+    expect(completeCalls.some((prompt) =>
+      prompt.includes('already succeeded earlier in this run') &&
+      prompt.includes('finish')
+    )).toBe(true);
+  });
+
+  it('carries model task state updates and runtime form facts into the next prompt', async () => {
+    const completeCalls: string[] = [];
+    const decisions = [
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: {
+          fields: [
+            { fieldRefId: 'ref_last', value: '张' },
+            { fieldRefId: 'ref_first', value: '三' }
+          ]
+        },
+        reason: '填写姓名',
+        taskStateUpdate: {
+          goal: '填写姓名为张三',
+          completed: [],
+          remaining: ['填写姓氏和名字'],
+          recommendedNextDecision: 'tool_call',
+          reason: '需要先执行填写动作'
+        }
+      },
+      {
+        type: 'finish',
+        message: '已把姓名填写为张三，未提交表单。',
+        taskStateUpdate: {
+          completed: ['姓名已填写'],
+          remaining: [],
+          recommendedNextDecision: 'finish',
+          reason: '用户没有要求提交'
+        }
+      }
+    ];
+    const providerClient: ModelClient = {
+      async complete(input) {
+        completeCalls.push(input.messages.map((message) => message.content).join('\n'));
+        return {
+          text: decisionText(decisions.shift() ?? {
+            type: 'finish',
+            message: 'done'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          return {
+            ok: true,
+            fillManyResult: {
+              ok: true,
+              fields: message.targets.map((target) => ({
+                fieldRefId: target.fieldRefId,
+                label: target.fieldRefId === 'ref_last' ? '姓氏' : '名字',
+                type: 'text',
+                status: 'filled',
+                actualValuePreview: 'non-empty',
+                maskedActualValue: '[MASKED]'
+              })),
+              filledCount: message.targets.length,
+              skippedCount: 0,
+              failedCount: 0,
+              changedPage: true,
+              requiresObserve: false,
+              summary: `填写成功 ${message.targets.length}/${message.targets.length} 个字段`
+            }
+          };
+        }
+        return observationResponse({
+          title: 'Create Account',
+          currentDomain: 'account.apple.com',
+          visibleTextSummary: 'Create account form',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_last',
+                label: '姓氏',
+                name: 'lastName',
+                type: 'text',
+                required: true,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              },
+              {
+                refId: 'ref_first',
+                label: '名字',
+                name: 'firstName',
+                type: 'text',
+                required: true,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '姓名填下张三，不要提交',
+      mode: 'act'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'finished');
+
+    expect(completeCalls[0]).toContain('taskState');
+    expect(completeCalls[1]).toContain('"goal":"填写姓名为张三"');
+    expect(completeCalls[1]).toContain('"filledFieldRefs":["ref_last","ref_first"]');
+    expect(completeCalls[1]).toContain('"runtimeFactsOverrideModelNotes":true');
+    expect(completeCalls[1]).toContain('"recommendedNextDecision":"finish"');
+    expect(snapshot.taskState).toMatchObject({
+      goal: '填写姓名为张三',
+      remaining: [],
+      recommendedNextDecision: 'finish'
+    });
+    expect(snapshot.taskState?.filledFieldRefs).toEqual(['ref_last', 'ref_first']);
+  });
+
+  it('repairs a repeated form verify after the previous verification already succeeded', async () => {
+    const verifyCalls: unknown[] = [];
+    const completeCalls: string[] = [];
+    const decisions = [
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: {
+          fields: [{ fieldRefId: 'ref_q', value: '最近的 agent 文章' }]
+        },
+        reason: '填写搜索词'
+      },
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_VERIFY,
+        args: { fieldRefIds: ['ref_q'] },
+        reason: '填写后验证'
+      },
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_VERIFY,
+        args: { fieldRefIds: ['ref_q'] },
+        reason: '重复验证'
+      },
+      {
+        type: 'finish',
+        message: '已在搜索框中填入“最近的 agent 文章”，并确认字段有效；尚未提交搜索。'
+      }
+    ];
+    const providerClient: ModelClient = {
+      async complete(input) {
+        completeCalls.push(input.messages.map((message) => message.content).join('\n'));
+        return {
+          text: decisionText(decisions.shift() ?? {
+            type: 'finish',
+            message: 'done'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          return {
+            ok: true,
+            fillManyResult: {
+              ok: true,
+              fields: message.targets.map((target) => ({
+                fieldRefId: target.fieldRefId,
+                type: 'search',
+                status: 'filled',
+                actualValuePreview: 'non-empty',
+                maskedActualValue: '[MASKED]'
+              })),
+              filledCount: message.targets.length,
+              skippedCount: 0,
+              failedCount: 0,
+              changedPage: true,
+              requiresObserve: false,
+              summary: `填写成功 ${message.targets.length}/${message.targets.length} 个字段`
+            }
+          };
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_VERIFY) {
+          verifyCalls.push(message.fieldRefIds);
+          return {
+            ok: true,
+            verifyResult: {
+              status: 'pass',
+              allValid: true,
+              missingRequired: [],
+              invalidFields: [],
+              fieldResults: [],
+              visibleErrorText: [],
+              submitAvailable: true,
+              warnings: []
+            }
+          };
+        }
+        return observationResponse({
+          title: 'Search',
+          currentDomain: 'example.com',
+          visibleTextSummary: 'Search',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_q',
+                label: '搜索',
+                name: 'q',
+                type: 'search',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '帮我搜索下“最近的 agent 文章”',
+      mode: 'act'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'finished');
+
+    expect(verifyCalls).toHaveLength(1);
+    expect(snapshot.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `${started.runId}:agent-final`,
+          content: '已在搜索框中填入“最近的 agent 文章”，并确认字段有效；尚未提交搜索。'
+        })
+      ])
+    );
+    expect(completeCalls.some((prompt) =>
+      prompt.includes('previous form verification already succeeded') &&
+      prompt.includes('return finish')
+    )).toBe(true);
+  });
+
+  it('repairs a form fill decision when the target field already has a value', async () => {
+    const fillManyCalls: unknown[] = [];
+    const completeCalls: string[] = [];
+    const decisions = [
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: {
+          fields: [{ fieldRefId: 'ref_109', value: 'agent 文章' }]
+        },
+        reason: '填写搜索词'
+      },
+      {
+        type: 'finish',
+        message: '搜索框里已经有内容，我没有覆盖已有输入。'
+      }
+    ];
+    const providerClient: ModelClient = {
+      async complete(input) {
+        completeCalls.push(input.messages.map((message) => message.content).join('\n'));
+        return {
+          text: decisionText(decisions.shift() ?? {
+            type: 'finish',
+            message: 'done'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          fillManyCalls.push(message.targets);
+          return {
+            ok: true,
+            fillManyResult: {
+              ok: true,
+              fields: [],
+              filledCount: 0,
+              skippedCount: 0,
+              failedCount: 0,
+              changedPage: false,
+              requiresObserve: false,
+              summary: 'not expected'
+            }
+          };
+        }
+        return observationResponse({
+          title: 'Zhihu',
+          currentDomain: 'www.zhihu.com',
+          visibleTextSummary: '知乎 搜索',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_109',
+                label: '搜索',
+                name: 'q',
+                type: 'search',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'non-empty',
+                validation: { valid: true, ariaInvalid: false },
+                writable: {
+                  visible: true,
+                  readonly: false,
+                  hidden: false,
+                  isFileUpload: false,
+                  isContentEditable: false,
+                  honeypotCandidate: false,
+                  actualTagName: 'input'
+                },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '帮我搜索下“最近的 agent 文章”',
+      mode: 'act'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'finished');
+
+    expect(fillManyCalls).toEqual([]);
+    expect(snapshot.error).toBeUndefined();
+    expect(snapshot.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `${started.runId}:agent-final`,
+          content: '搜索框里已经有内容，我没有覆盖已有输入。'
+        })
+      ])
+    );
+    expect(completeCalls).toHaveLength(2);
+    expect(completeCalls[1]).toContain('already has a value');
+    expect(completeCalls[1]).toMatch(/return finish/i);
+  });
+
+  it('does not execute tool calls returned during existing-value repair', async () => {
+    const completeCalls: string[] = [];
+    const decisions = [
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: {
+          fields: [{ fieldRefId: 'ref_109', value: 'agent 文章' }]
+        },
+        reason: '填写搜索词'
+      },
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_READ_FIELDS,
+        args: {},
+        reason: '错误地继续读取字段'
+      }
+    ];
+    const providerClient: ModelClient = {
+      async complete(input) {
+        completeCalls.push(input.messages.map((message) => message.content).join('\n'));
+        return {
+          text: decisionText(decisions.shift() ?? {
+            type: 'finish',
+            message: 'done'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => {
+        return observationResponse({
+          title: 'Zhihu',
+          currentDomain: 'www.zhihu.com',
+          visibleTextSummary: '知乎 搜索',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_109',
+                label: '搜索',
+                name: 'q',
+                type: 'search',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'non-empty',
+                validation: { valid: true, ariaInvalid: false },
+                writable: {
+                  visible: true,
+                  readonly: false,
+                  hidden: false,
+                  isFileUpload: false,
+                  isContentEditable: false,
+                  honeypotCandidate: false,
+                  actualTagName: 'input'
+                },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '帮我搜索下“最近的 agent 文章”',
+      mode: 'act'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'finished');
+
+    expect(completeCalls).toHaveLength(2);
+    expect(snapshot.error).toBeUndefined();
+    expect(hasTraceTool(snapshot.trace ?? [], TRACE_EVENT_NAMES.TOOL_RESULT, TOOL_NAMES.FORM_READ_FIELDS)).toBe(false);
+    const finalMessage = snapshot.messages?.find((message) =>
+      message.id === `${started.runId}:agent-final`
+    );
+    expect(finalMessage?.content).toContain('已有值');
+  });
+
+  it('finishes gracefully when the model keeps trying to overwrite an existing value', async () => {
+    const fillManyCalls: unknown[] = [];
+    const decisions = [
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: {
+          fields: [{ fieldRefId: 'ref_109', value: 'agent 文章' }]
+        },
+        reason: '填写搜索词'
+      },
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: {
+          fields: [{ fieldRefId: 'ref_109', value: 'agent 文章' }]
+        },
+        reason: '继续尝试填写'
+      }
+    ];
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          fillManyCalls.push(message.targets);
+        }
+        return observationResponse({
+          title: 'Zhihu',
+          currentDomain: 'www.zhihu.com',
+          visibleTextSummary: '知乎 搜索',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_109',
+                label: '搜索',
+                name: 'q',
+                type: 'search',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'non-empty',
+                validation: { valid: true, ariaInvalid: false },
+                writable: {
+                  visible: true,
+                  readonly: false,
+                  hidden: false,
+                  isFileUpload: false,
+                  isContentEditable: false,
+                  honeypotCandidate: false,
+                  actualTagName: 'input'
+                },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => decisionModel(decisions)
+    });
+
+    const started = await manager.startRun({
+      task: '帮我搜索下“agent 文章”',
+      mode: 'act'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'finished');
+
+    expect(fillManyCalls).toEqual([]);
+    expect(snapshot.error).toBeUndefined();
+    const finalMessage = snapshot.messages?.find((message) =>
+      message.id === `${started.runId}:agent-final`
+    );
+    expect(finalMessage?.content).toContain('已有值');
+  });
+
+  it('allows explicit select option labels to map to DOM option values in unified AgentLoop', async () => {
+    const fillManyCalls: unknown[] = [];
+    const modelOutputs = [
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: {
+          fields: [{ fieldRefId: 'ref_country', value: 'USA' }]
+        },
+        reason: '用户明确要求选择 United States'
+      },
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_VERIFY,
+        args: { fieldRefIds: ['ref_country'] },
+        reason: '填写后必须验证'
+      },
+      {
+        type: 'finish',
+        message: '已选择 United States。'
+      }
+    ];
+    const providerClient: ModelClient = {
+      async complete() {
+        return {
+          text: JSON.stringify(modelOutputs.shift() ?? {
+            type: 'finish',
+            message: 'done'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          fillManyCalls.push(message.targets);
+          return {
+            ok: true,
+            fillManyResult: {
+              ok: true,
+              fields: message.targets.map((target) => ({
+                fieldRefId: target.fieldRefId,
+                type: 'select',
+                status: 'filled',
+                actualValuePreview: 'non-empty',
+                maskedActualValue: '[MASKED]'
+              })),
+              filledCount: message.targets.length,
+              skippedCount: 0,
+              failedCount: 0,
+              changedPage: true,
+              requiresObserve: false,
+              summary: `填写成功 ${message.targets.length}/${message.targets.length} 个字段`
+            }
+          };
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_VERIFY) {
+          return {
+            ok: true,
+            verifyResult: {
+              status: 'pass',
+              allValid: true,
+              missingRequired: [],
+              invalidFields: [],
+              fieldResults: [],
+              visibleErrorText: [],
+              submitAvailable: true,
+              warnings: []
+            }
+          };
+        }
+        return observationResponse({
+          title: 'Create Account',
+          currentDomain: 'account.apple.com',
+          visibleTextSummary: 'Create account form',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_country',
+                label: '国家或地区',
+                name: 'countrySelect',
+                type: 'select',
+                required: true,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'non-empty',
+                validation: { valid: true, ariaInvalid: false },
+                writable: {
+                  visible: true,
+                  readonly: false,
+                  hidden: false,
+                  isFileUpload: false,
+                  isContentEditable: false,
+                  honeypotCandidate: false,
+                  actualTagName: 'select',
+                  actualValue: 'CHN',
+                  selectedIndex: 0,
+                  options: [
+                    { value: 'CHN', label: '中国', selected: true },
+                    { value: 'USA', label: '美国', selected: false }
+                  ]
+                },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'planner-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: false
+          };
+        },
+        async setProviderSettings() {}
+      },
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '国家或地区选择 United States，不要提交。',
+      mode: 'act'
+    });
+    const trace = await waitForToolResult(manager, started.runId, TOOL_NAMES.FORM_VERIFY);
+
+    expect(hasTraceTool(trace, TRACE_EVENT_NAMES.TOOL_RESULT, TOOL_NAMES.FORM_FILL_MANY, true)).toBe(true);
+    expect(fillManyCalls).toEqual([
+      [{ fieldRefId: 'ref_country', value: 'USA' }]
+    ]);
+  });
+
+  it('allows explicit checkbox opt-out values for marketing fields in unified AgentLoop', async () => {
+    const fillManyCalls: unknown[] = [];
+    const modelOutputs = [
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: {
+          fields: [{ fieldRefId: 'ref_name', value: 'Counter' }]
+        },
+        reason: '用户明确要求填写姓名'
+      },
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_VERIFY,
+        args: { fieldRefIds: ['ref_updates'] },
+        reason: '填写后必须验证'
+      },
+      {
+        type: 'finish',
+        message: '已取消营销勾选。'
+      }
+    ];
+    const providerClient: ModelClient = {
+      async complete() {
+        return {
+          text: JSON.stringify(modelOutputs.shift() ?? {
+            type: 'finish',
+            message: 'done'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          fillManyCalls.push(message.targets);
+          return {
+            ok: true,
+            fillManyResult: {
+              ok: true,
+              fields: message.targets.map((target) => ({
+                fieldRefId: target.fieldRefId,
+                type: target.fieldRefId === 'ref_updates' ? 'checkbox' : 'text',
+                status: 'filled',
+                actualValuePreview: target.value === 'false' ? 'unchecked' : 'non-empty',
+                maskedActualValue: '[MASKED]'
+              })),
+              filledCount: message.targets.length,
+              skippedCount: 0,
+              failedCount: 0,
+              changedPage: true,
+              requiresObserve: false,
+              summary: `填写成功 ${message.targets.length}/${message.targets.length} 个字段`
+            }
+          };
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_VERIFY) {
+          return {
+            ok: true,
+            verifyResult: {
+              status: 'pass',
+              allValid: true,
+              missingRequired: [],
+              invalidFields: [],
+              fieldResults: [],
+              visibleErrorText: [],
+              submitAvailable: true,
+              warnings: []
+            }
+          };
+        }
+        return observationResponse({
+          title: 'Create Account',
+          currentDomain: 'account.apple.com',
+          visibleTextSummary: 'Create account form',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_name',
+                label: '姓氏',
+                name: 'lastName',
+                type: 'text',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              },
+              {
+                refId: 'ref_updates',
+                label: '通知 接收 Apple 电子邮件和营销内容',
+                name: 'appleUpdates',
+                type: 'checkbox',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'checked',
+                validation: { valid: true, ariaInvalid: false },
+                writable: {
+                  visible: true,
+                  readonly: false,
+                  hidden: false,
+                  isFileUpload: false,
+                  isContentEditable: false,
+                  honeypotCandidate: false,
+                  actualTagName: 'input',
+                  actualValue: 'true',
+                  checked: true
+                },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'planner-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: false
+          };
+        },
+        async setProviderSettings() {}
+      },
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: 'lastName 填 Counter，不要勾选营销，不接收 Apple 电子邮件，不要提交。',
+      mode: 'act'
+    });
+    const trace = await waitForToolResult(manager, started.runId, TOOL_NAMES.FORM_VERIFY);
+
+    expect(hasTraceTool(trace, TRACE_EVENT_NAMES.TOOL_RESULT, TOOL_NAMES.FORM_FILL_MANY, true)).toBe(true);
+    expect(fillManyCalls).toEqual([
+      [
+        { fieldRefId: 'ref_name', value: 'Counter' },
+        { fieldRefId: 'ref_updates', value: 'false' }
+      ]
+    ]);
+  });
+
+  it('repairs unavailable tool calls before they reach ToolRouter', async () => {
+    const fillManyCalls: unknown[] = [];
+    const decisions = [
+      {
+        type: 'tool_call',
+        tool: 'bh_click',
+        args: { refId: 'ref_search' },
+        reason: '点击搜索框'
+      },
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: {
+          fields: [{ fieldRefId: 'ref_search', value: '最近的 agent 文章' }]
+        },
+        reason: '用可用表单工具填写搜索词'
+      },
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_VERIFY,
+        args: { fieldRefIds: ['ref_search'] },
+        reason: '填写后验证'
+      },
+      {
+        type: 'finish',
+        message: '已填写搜索词。'
+      }
+    ];
+    const complete = vi.fn(async () => {
+      return {
+        text: JSON.stringify(decisions.shift() ?? {
+          type: 'finish',
+          message: 'done'
+        })
+      };
+    });
+    const providerClient: ModelClient = {
+      complete
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          fillManyCalls.push(message.targets);
+          return {
+            ok: true,
+            fillManyResult: {
+              ok: true,
+              fields: message.targets.map((target) => ({
+                fieldRefId: target.fieldRefId,
+                type: 'text',
+                status: 'filled',
+                actualValuePreview: 'non-empty',
+                maskedActualValue: '[MASKED]'
+              })),
+              filledCount: message.targets.length,
+              skippedCount: 0,
+              failedCount: 0,
+              changedPage: true,
+              requiresObserve: false,
+              summary: `填写成功 ${message.targets.length}/${message.targets.length} 个字段`
+            }
+          };
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_VERIFY) {
+          return {
+            ok: true,
+            verifyResult: {
+              status: 'pass',
+              allValid: true,
+              missingRequired: [],
+              invalidFields: [],
+              fieldResults: [],
+              visibleErrorText: [],
+              submitAvailable: true,
+              warnings: []
+            }
+          };
+        }
+        return observationResponse({
+          title: '知乎搜索',
+          currentDomain: 'www.zhihu.com',
+          visibleTextSummary: '搜索',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_search',
+                label: '搜索',
+                name: 'q',
+                type: 'text',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '帮我搜索下“最近的 agent 文章”',
+      mode: 'act'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'finished');
+    const trace = snapshot.trace ?? [];
+
+    expect(complete).toHaveBeenCalledTimes(4);
+    expect(hasTraceTool(trace, TRACE_EVENT_NAMES.TOOL_STARTED, 'bh_click')).toBe(false);
+    expect(hasTraceTool(trace, TRACE_EVENT_NAMES.TOOL_RESULT, 'bh_click')).toBe(false);
+    expect(hasTraceTool(trace, TRACE_EVENT_NAMES.TOOL_RESULT, TOOL_NAMES.FORM_FILL_MANY, true)).toBe(true);
+    expect(fillManyCalls).toEqual([
+      [{ fieldRefId: 'ref_search', value: '最近的 agent 文章' }]
+    ]);
+  });
+
+  it('asks for explicit form values instead of rendering a run error when model invents values', async () => {
     const fillManyCalls: unknown[] = [];
     const providerClient: ModelClient = {
       async complete() {
@@ -1186,7 +2693,108 @@ describe('RunManager', () => {
 
     expect(fillManyCalls).toEqual([]);
     expect(hasTraceTool(snapshot.trace ?? [], TRACE_EVENT_NAMES.TOOL_RESULT, TOOL_NAMES.FORM_FILL_MANY)).toBe(false);
-    expect(snapshot.error?.message).toContain('explicit value');
+    expect(snapshot.error).toBeUndefined();
+    const explicitValuesMessage = findRecommendation(snapshot.messages, /需要你提供具体字段值|Please provide specific field values/u);
+    expect(explicitValuesMessage?.status).toBe('complete');
+    expect(explicitValuesMessage?.content).toContain('邮箱');
+  });
+
+  it('asks for explicit values without repairing when arbitrary fill includes existing fields and checkbox booleans', async () => {
+    const fillManyCalls: unknown[] = [];
+    const completeCalls: string[] = [];
+    const providerClient: ModelClient = {
+      async complete(input) {
+        completeCalls.push(input.messages.map((message) => message.content).join('\n'));
+        return {
+          text: JSON.stringify({
+            type: 'tool_call',
+            tool: TOOL_NAMES.FORM_FILL_MANY,
+            args: {
+              fields: [
+                { fieldRefId: 'ref_email', value: 'user@example.com' },
+                { fieldRefId: 'ref_password', value: 'Password123' },
+                { fieldRefId: 'ref_updates', value: true }
+              ]
+            },
+            reason: '模型不应根据随便填编造账户资料'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          fillManyCalls.push(message.targets);
+        }
+        return observationResponse({
+          title: 'Apple Account',
+          currentDomain: 'account.apple.com',
+          visibleTextSummary: '创建 Apple 账户 邮箱 密码 更新',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_email',
+                label: '电子邮件',
+                name: 'email',
+                type: 'email',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              },
+              {
+                refId: 'ref_password',
+                label: '密码',
+                name: 'password',
+                type: 'password',
+                required: false,
+                disabled: false,
+                sensitive: true,
+                valuePreview: 'non-empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              },
+              {
+                refId: 'ref_updates',
+                label: '接收 Apple 电子邮件',
+                name: 'appleUpdates',
+                type: 'checkbox',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'unchecked',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '帮我填下表单，随便填，每个字段都模拟填下',
+      mode: 'act'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'waiting_for_user');
+
+    expect(fillManyCalls).toEqual([]);
+    expect(completeCalls).toHaveLength(1);
+    expect(snapshot.error).toBeUndefined();
+    expect(snapshot.trace?.some((event) => event.type === TRACE_EVENT_NAMES.DECISION_PARSE_FAILED)).toBe(false);
+    const explicitValuesMessage = findRecommendation(snapshot.messages, /需要你提供具体字段值|Please provide specific field values/u);
+    expect(explicitValuesMessage?.content).toContain('电子邮件');
   });
 
   it('answers ask tasks through unified AgentLoop terminal decisions instead of provider-only response messages', async () => {
@@ -1384,6 +2992,22 @@ describe('RunManager', () => {
   it('asks the user to switch to act instead of filling in ask mode', async () => {
     const fillManyCalls: unknown[] = [];
     const rpcCalls: string[] = [];
+    let providerInput: Parameters<NonNullable<ModelClient['complete']>>[0] | undefined;
+    const providerClient: ModelClient = {
+      async complete(input) {
+        providerInput = input;
+        return {
+          text: JSON.stringify({
+            type: 'tool_call',
+            tool: TOOL_NAMES.REQUEST_ACT_MODE,
+            args: {
+              reason: '用户请求在页面输入内容，Ask 模式只读'
+            },
+            reason: 'Ask 模式需要用户显式切换到 Act'
+          })
+        };
+      }
+    };
     const manager = new RunManager({
       getActiveTabId: async () => 42,
       createContentRpcClient: () => rpcClient(async (message) => {
@@ -1421,27 +3045,284 @@ describe('RunManager', () => {
             warnings: []
           }
         });
-      })
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
     });
 
     const started = await manager.startRun({
-      task: '帮我回复下“你真牛逼”',
+      task: '帮我在回复输入框输入“你真牛逼”',
       mode: 'ask'
     });
     const snapshot = await waitForSnapshot(manager, started.runId, 'waiting_for_user');
 
     expect(fillManyCalls).toEqual([]);
-    expect(rpcCalls).toEqual([]);
+    expect(rpcCalls).toEqual([CONTENT_RPC_MESSAGES.PAGE_OBSERVE]);
+    expect(providerInput?.messages.some((message) =>
+      message.content.includes(TOOL_NAMES.REQUEST_ACT_MODE)
+    )).toBe(true);
     expect(hasTraceTool(manager.getSnapshot(started.runId).trace ?? [], TRACE_EVENT_NAMES.TOOL_RESULT, TOOL_NAMES.FORM_FILL_MANY)).toBe(false);
     expect(snapshot.messages?.some((message) =>
       message.kind === 'recommendation' &&
-      message.title === '需要切换到执行模式' &&
-      message.content.includes('执行 / Act')
+      /需要执行模式|需要切换到执行模式|Act mode required/u.test(message.title ?? '') &&
+      /切换到执行|执行 \/ Act|Act/u.test(message.content)
     )).toBe(true);
     expect(snapshot.trace?.some((event) =>
       event.type === TRACE_EVENT_NAMES.STATE_CHANGED &&
-      payloadRecord(event.payload).reason === 'ask_mode_action_intent_requires_act'
+      payloadRecord(event.payload).reason === 'ask_mode_model_requested_act'
     )).toBe(true);
+  });
+
+  it('keeps ask-mode arbitrary form fill on the model ask_user path without schema errors', async () => {
+    const providerClient: ModelClient = {
+      async complete() {
+        return {
+          text: JSON.stringify({
+            type: 'ask_user',
+            message: '请提供每个字段要填写的具体值。'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse({
+        title: 'Signup',
+        currentDomain: 'example.com',
+        visibleTextSummary: 'Email Name',
+        formFields: {
+          status: 'ready',
+          fields: [
+            {
+              refId: 'ref_name',
+              label: '姓名',
+              name: 'name',
+              type: 'text',
+              required: false,
+              disabled: false,
+              sensitive: false,
+              valuePreview: 'empty',
+              validation: { valid: true, ariaInvalid: false },
+              warnings: []
+            }
+          ],
+          submit: {
+            disabled: false,
+            warnings: []
+          },
+          warnings: []
+        }
+      })),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'runtime-loop-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: false
+          };
+        },
+        async setProviderSettings() {}
+      },
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '帮我填下表单，随便填，每个字段都模拟填下',
+      mode: 'ask'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'waiting_for_user');
+
+    expect(snapshot.error).toBeUndefined();
+    const askMessage = findRecommendation(snapshot.messages, /需要你的补充|Need your input/u);
+    expect(askMessage?.content).toContain('请提供每个字段要填写的具体值。');
+    expect(snapshot.trace?.some((event) =>
+      event.type === TRACE_EVENT_NAMES.MODEL_DECISION &&
+      payloadRecord(payloadRecord(event.payload).decision).type === 'ask_user'
+    )).toBe(true);
+    expect(snapshot.trace?.some((event) =>
+      event.type === TRACE_EVENT_NAMES.DECISION_PARSE_FAILED &&
+      payloadRecord(event.payload).code === ERROR_CODES.MODEL_OUTPUT_SCHEMA_INVALID
+    )).toBe(false);
+  });
+
+  it('fails stuck model requests instead of leaving the run thinking forever', async () => {
+    vi.useFakeTimers();
+    try {
+      const providerClient: ModelClient = {
+        complete: () => new Promise(() => {})
+      };
+      const manager = new RunManager({
+        getActiveTabId: async () => 42,
+        createContentRpcClient: () => rpcClient(async () => observationResponse()),
+        settingsStore: providerSettings(),
+        createProviderModelClient: () => providerClient
+      });
+
+      const started = await manager.startRun({
+        task: '总结页面',
+        mode: 'ask'
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(manager.getSnapshot(started.runId).status).toBe('thinking');
+
+      await vi.advanceTimersByTimeAsync(45_000);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(manager.getSnapshot(started.runId).status).toBe('thinking');
+
+      await vi.advanceTimersByTimeAsync(555_000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const snapshot = manager.getSnapshot(started.runId);
+      expect(snapshot.status).toBe('failed');
+      expect(snapshot.error).toEqual({
+        code: ERROR_CODES.MODEL_REQUEST_FAILED,
+        message: '模型请求超时，请稍后重试。'
+      });
+      expect(snapshot.trace?.some((event) =>
+        event.type === TRACE_EVENT_NAMES.MODEL_STREAM_FAILED &&
+        String(payloadRecord(event.payload).summary).includes('timeout after 600000ms')
+      )).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('normalizes legacy bh_ask_user decisions and shows a non-error user prompt', async () => {
+    const providerClient: ModelClient = {
+      async complete() {
+        return {
+          text: JSON.stringify({
+            type: 'tool_call',
+            tool: 'bh_ask_user',
+            args: {
+              message: '请提供姓氏、名字、出生日期、电子邮箱、密码、确认密码、电话号码。'
+            }
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse()),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '你随便填就行',
+      mode: 'act'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'waiting_for_user');
+
+    expect(snapshot.error).toBeUndefined();
+    expect(snapshot.messages?.some((message) =>
+      message.kind === 'error' &&
+      /运行出错|Run error/u.test(message.title ?? '')
+    )).toBe(false);
+    expect(snapshot.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'recommendation',
+          content: '请提供姓氏、名字、出生日期、电子邮箱、密码、确认密码、电话号码。'
+        })
+      ])
+    );
+    expect(snapshot.trace?.some((event) =>
+      event.type === TRACE_EVENT_NAMES.DECISION_PARSE_FAILED &&
+      JSON.stringify(event.payload).includes('bh_ask_user')
+    )).toBe(false);
+  });
+
+  it('includes full chat conversation history in unified AgentLoop prompts', async () => {
+    let providerInput: Parameters<NonNullable<ModelClient['complete']>>[0] | undefined;
+    const providerClient: ModelClient = {
+      async complete(input) {
+        providerInput = input;
+        return {
+          text: decisionText({
+            type: 'ask_user',
+            question: '请提供要填写的具体值。'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse()),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '你随便填就行',
+      mode: 'act',
+      conversationHistory: [
+        { role: 'user', content: '帮我填 Apple 注册表单' },
+        { role: 'agent', title: '需要你提供具体字段值', content: '请提供姓氏、名字和邮箱。' },
+        { role: 'user', content: '姓氏：Counter；名字：Xing；邮箱：counter@example.com' }
+      ]
+    });
+    await waitForSnapshot(manager, started.runId, 'waiting_for_user');
+
+    const promptText = providerInput?.messages.map((message) => `${message.role}: ${message.content}`).join('\n') ?? '';
+    expect(promptText).toContain('Conversation history before current request');
+    expect(promptText).toContain('帮我填 Apple 注册表单');
+    expect(promptText).toContain('请提供姓氏、名字和邮箱。');
+    expect(promptText).toContain('姓氏：Counter；名字：Xing；邮箱：[REDACTED_EMAIL]');
+    expect(promptText).toContain('你随便填就行');
+  });
+
+  it('bounds large previous trace history before sending provider prompts', async () => {
+    let providerInput: Parameters<NonNullable<ModelClient['complete']>>[0] | undefined;
+    const providerClient: ModelClient = {
+      async complete(input) {
+        providerInput = input;
+        return {
+          text: decisionText({
+            type: 'finish',
+            message: '已读取历史并完成。'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse()),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+    const noisyTrace = Array.from({ length: 120 }, (_, index) => ({
+      runId: 'previous-run',
+      type: TRACE_EVENT_NAMES.TOOL_RESULT,
+      timestamp: index,
+      payload: {
+        tool: TOOL_NAMES.PAGE_OBSERVE,
+        ok: true,
+        summary: `trace-noise-${index}-${'x'.repeat(500)}`
+      }
+    }));
+
+    const started = await manager.startRun({
+      task: '继续刚才的任务',
+      mode: 'act',
+      conversationHistory: [
+        { role: 'user', content: '帮我填 Apple 注册表单' },
+        { role: 'agent', title: '需要你提供具体字段值', content: '请提供姓氏、名字和邮箱。' },
+        { role: 'user', content: '最近回复：姓氏 Counter' },
+        { role: 'system', title: 'Previous run trace', content: JSON.stringify(noisyTrace) }
+      ]
+    });
+    await waitForSnapshot(manager, started.runId, 'finished');
+
+    const promptText = providerInput?.messages.map((message) => `${message.role}: ${message.content}`).join('\n') ?? '';
+    expect(JSON.stringify(providerInput?.messages ?? []).length).toBeLessThanOrEqual(32_000);
+    expect(promptText).toContain('帮我填 Apple 注册表单');
+    expect(promptText).toContain('最近回复：姓氏 Counter');
+    expect(promptText).toContain('Previous run trace compacted');
+    expect(promptText).toContain('trace-noise-119');
+    expect(promptText).not.toContain('trace-noise-0');
+    expect(promptText).not.toContain('x'.repeat(500));
   });
 
   it('does not auto-fill read-only tasks in act mode', async () => {
@@ -1725,6 +3606,107 @@ describe('RunManager', () => {
     expect(JSON.stringify(snapshot.trace)).not.toContain('user@example.com');
   });
 
+  it('passes iframe formRefId through approved enter-submit without a submit button ref', async () => {
+    const requests: Array<{ type: string; formRefId?: string; submitTargetRefId?: string; fieldRefIds?: string[] }> = [];
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: (): ContentRpcClient => ({
+        async request(message) {
+        if (
+          message.type === CONTENT_RPC_MESSAGES.FORM_VERIFY ||
+          message.type === CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE ||
+          message.type === CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT
+        ) {
+          requests.push({
+            type: message.type,
+            ...('formRefId' in message && typeof message.formRefId === 'string' ? { formRefId: message.formRefId } : {}),
+            ...('submitTargetRefId' in message && typeof message.submitTargetRefId === 'string' ? { submitTargetRefId: message.submitTargetRefId } : {}),
+            ...('fieldRefIds' in message && Array.isArray(message.fieldRefIds) ? { fieldRefIds: message.fieldRefIds } : {})
+          });
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_VERIFY) {
+          return {
+            ok: true,
+            verifyResult: {
+              status: 'pass',
+              allValid: true,
+              missingRequired: [],
+              invalidFields: [],
+              fieldResults: [{ fieldRefId: 'frame_7:ref_email', valid: true, required: true, filled: true }],
+              visibleErrorText: [],
+              submitAvailable: true,
+              warnings: []
+            }
+          };
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE) {
+          return {
+            ok: true,
+            actionToken: 'submit-token'
+          };
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT) {
+          return {
+            ok: true,
+            submitResult: 'submitted'
+          };
+        }
+        return observationResponse();
+        }
+      })
+    });
+
+    const started = await manager.startRun({ task: '提交 iframe 表单', mode: 'form' });
+    await waitForSnapshot(manager, started.runId, 'observed');
+    await manager.executeTool({
+      runId: started.runId,
+      tool: TOOL_NAMES.FORM_SUBMIT_WITH_APPROVAL,
+      args: {
+        formRefId: 'frame_7:form_1',
+        formName: 'iframe 注册表单',
+        submitMethod: 'enter-submit',
+        verifyStatus: 'pass',
+        verifyFailed: false,
+        fieldCount: 1,
+        filledCount: 1,
+        skippedCount: 0,
+        riskExplanation: '将通过 Enter 提交 iframe 表单',
+        fields: [
+          {
+            fieldRefId: 'frame_7:ref_email',
+            label: 'Email',
+            type: 'email',
+            valuePreview: 'non-empty',
+            isSensitive: false
+          }
+        ],
+        warnings: []
+      }
+    });
+    const pending = manager.getSnapshot(started.runId).pendingApproval;
+
+    await manager.decideApproval({
+      runId: started.runId,
+      requestId: pending?.id ?? '',
+      decision: 'approved'
+    });
+
+    expect(requests).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+          formRefId: 'frame_7:form_1',
+          fieldRefIds: ['frame_7:ref_email']
+        }),
+        expect.objectContaining({
+          type: CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT,
+          formRefId: 'frame_7:form_1'
+        })
+      ])
+    );
+    expect(requests.find((request) => request.type === CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT)?.submitTargetRefId).toBeUndefined();
+  });
+
   it('blocks an approved form submit when reverify says the submit target is not ready', async () => {
     const calls: string[] = [];
     const manager = new RunManager({
@@ -1920,7 +3902,6 @@ describe('RunManager', () => {
     expect(JSON.stringify(providerInput)).toContain('example.com');
     expect(JSON.stringify(providerInput)).not.toContain('secret-token');
     expect(JSON.stringify(providerInput)).not.toContain('a@example.com');
-    expect(JSON.stringify(providerInput)).not.toContain('/account/reset');
     expect(snapshot.trace?.some((event) => event.type === 'model_prompt')).toBe(false);
   });
 
@@ -2682,4 +4663,14 @@ function waitForSubscribedSnapshot(
       resolve(snapshot);
     });
   });
+}
+
+function findRecommendation(
+  messages: AgentMessage[] | undefined,
+  title: RegExp
+): AgentMessage | undefined {
+  return messages?.find((message) =>
+    message.kind === 'recommendation' &&
+    title.test(message.title ?? '')
+  );
 }

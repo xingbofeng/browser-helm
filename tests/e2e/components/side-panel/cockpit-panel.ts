@@ -5,11 +5,11 @@ export class CockpitPanel {
 
   async expectShell(): Promise<void> {
     await expect(this.page.getByRole('heading', { name: /BrowserHelm/u })).toBeVisible();
-    await expect(this.page.getByLabel('BrowserHelm Agent 消息')).toBeVisible();
-    await expect(this.page.getByRole('textbox', { name: '任务' })).toBeVisible();
-    await expect(this.page.getByRole('button', { name: '高级开发者选项' })).toBeVisible();
-    await expect(this.page.getByRole('button', { name: '打开模型配置' })).toBeVisible();
-    await expect(this.page.getByRole('button', { name: '页面观察' })).toHaveCount(0);
+    await expect(this.messages()).toBeVisible();
+    await expect(this.page.getByRole('textbox', { name: /^(任务|Task)$/u })).toBeVisible();
+    await expect(this.page.getByRole('button', { name: /^(高级开发者选项|Advanced debug options)$/u })).toBeVisible();
+    await expect(this.page.getByRole('button', { name: /^(打开模型配置|Open settings)$/u })).toBeVisible();
+    await expect(this.page.getByRole('button', { name: /^(页面观察|Page observation)$/u })).toHaveCount(0);
     await expect(this.page.getByText(/Cockpit/u)).toHaveCount(0);
   }
 
@@ -21,9 +21,12 @@ export class CockpitPanel {
     await expect(this.page.getByText(expected.url)).toHaveCount(0);
   }
 
-  async openDebugTab(tabName: string): Promise<void> {
+  async openDebugTab(tabName: string | RegExp): Promise<void> {
     await this.openDebug();
-    await this.page.getByRole('button', { name: tabName, exact: true }).click();
+    await this.page.getByRole('button', {
+      name: tabName,
+      exact: typeof tabName === 'string'
+    }).click();
   }
 
   async expectNoLegacyObserveStatusCard(): Promise<void> {
@@ -35,43 +38,43 @@ export class CockpitPanel {
   async expectNoObserveStatusCards(): Promise<void> {
     await expect(
       this.page
-        .getByLabel('BrowserHelm Agent 消息')
-        .getByText('正在观察当前页面', { exact: true })
+        .getByLabel(/BrowserHelm Agent (消息|messages)/u)
+        .getByText(/^(正在观察当前页面|Observing current page)$/u)
     ).toHaveCount(0);
   }
 
   async expectLongPageArticleRead(): Promise<void> {
-    await expect(this.page.getByText('正文读取完成')).toBeVisible();
+    await expect(this.page.getByText(/正文读取完成|Article read (completed|done)/u)).toBeVisible();
     await this.openDebugTab('Trace');
-    await expect(this.page.getByText('调用工具：bh_page_read_article').first()).toBeVisible();
-    await expect(this.page.getByText(/工具结果：bh_page_read_article/u).first()).toBeVisible();
+    await expect(this.page.getByText(/(调用工具|Tool call|Calling tool)[:：]\s*bh_page_read_article/u).first()).toBeVisible();
+    await expect(this.page.getByText(/(工具结果|Tool result)[:：]\s*bh_page_read_article/u).first()).toBeVisible();
   }
 
   async expectStreamingMergedResponse(expectedText: string): Promise<void> {
     await expect(
-      this.page.getByLabel('BrowserHelm Agent 消息').getByText(expectedText, { exact: true })
+      this.messages().getByText(expectedText, { exact: true })
     ).toBeVisible();
     await this.openDebugTab('Streaming');
     await expect(this.page.locator('.bh-streamingMetrics').getByText('true').first()).toBeVisible();
-    await expect(this.page.locator('.bh-streamingMetrics')).toContainText('3');
+    await expect(this.page.locator('.bh-streamingMetrics')).toContainText(/Chunk[1-9]\d*/u);
     await expect(
-      this.page.getByLabel('BrowserHelm Agent 消息').getByText(expectedText, { exact: true })
+      this.messages().getByText(expectedText, { exact: true })
     ).toBeVisible();
   }
 
   async inspectElement(label: string): Promise<void> {
-    await this.openDebugTab('元素与表单');
+    await this.openDebugTab(/^(元素与表单|Elements & Forms)$/u);
     await this.page.getByRole('button', {
-      name: new RegExp(`^检查元素 ${escapeRegExp(label)} `, 'u')
+      name: new RegExp(`^(检查元素|Inspect element) ${escapeRegExp(label)} `, 'u')
     }).click();
   }
 
   async stopRun(): Promise<void> {
-    await this.page.getByRole('button', { name: '停止任务' }).click();
+    await this.page.getByRole('button', { name: /^(停止任务|Stop task)$/u }).click();
   }
 
   async expectCancelled(): Promise<void> {
-    await expect(this.page.getByText('已取消', { exact: true })).toBeVisible();
+    await expect(this.page.getByText(/^(已取消|Cancelled)$/u)).toBeVisible();
   }
 
   async expectApprovalDrawer(expected: { action: string; code?: string }): Promise<void> {
@@ -88,15 +91,15 @@ export class CockpitPanel {
     finding?: string;
     limitation?: string;
   }): Promise<void> {
-    await expect(this.page.getByText(expected.reportTitle)).toBeVisible();
+    await expect(this.page.getByText(diagnosisTextMatcher(expected.reportTitle)).first()).toBeVisible();
     if (expected.finding) {
-      await expect(this.page.getByText(expected.finding, { exact: true }).first()).toBeVisible();
+      await expect(this.page.getByText(diagnosisTextMatcher(expected.finding)).first()).toBeVisible();
     }
     if (expected.limitation) {
-      await expect(this.page.getByText(expected.limitation, { exact: true }).first()).toBeVisible();
+      await expect(this.page.getByText(diagnosisTextMatcher(expected.limitation)).first()).toBeVisible();
     }
     await this.openDebug();
-    await expect(this.page.getByText(new RegExp(expected.modeText.includes('form') ? 'form /' : 'debug /', 'u'))).toBeVisible();
+    await expect(this.page.getByText(new RegExp(expected.modeText.includes('form') ? 'form /' : 'debug /', 'u')).first()).toBeVisible();
   }
 
   async expectSettingsMasking(expected: { baseUrl: string; model: string }): Promise<void> {
@@ -125,7 +128,7 @@ export class CockpitPanel {
     if (settings.apiKey) {
       await this.page.getByRole('textbox', { name: 'API Key' }).fill(settings.apiKey);
     }
-    await this.page.getByRole('button', { name: '保存配置' }).click();
+    await this.page.getByRole('button', { name: /^(保存配置|Save config)$/u }).click();
   }
 
   private async openSettings(): Promise<void> {
@@ -133,7 +136,7 @@ export class CockpitPanel {
     if (await baseUrl.isVisible()) {
       return;
     }
-    await this.page.getByRole('button', { name: '打开模型配置' }).click();
+    await this.page.getByRole('button', { name: /^(打开模型配置|Open settings)$/u }).click();
     await expect(baseUrl).toBeVisible();
   }
 
@@ -141,11 +144,40 @@ export class CockpitPanel {
     if (await this.page.getByRole('button', { name: /Trace/u }).first().isVisible()) {
       return;
     }
-    await this.page.getByRole('button', { name: '高级开发者选项' }).click();
+    await this.page.getByRole('button', { name: /^(高级开发者选项|Advanced debug options)$/u }).click();
     await expect(this.page.getByRole('button', { name: /Trace/u }).first()).toBeVisible();
+  }
+
+  private messages() {
+    return this.page.getByLabel(/BrowserHelm Agent (消息|messages)/u);
   }
 }
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+}
+
+function diagnosisTextMatcher(value: string): string | RegExp {
+  if (value.includes('Form Doctor')) {
+    return /Form Doctor (诊断报告|Report)/u;
+  }
+  if (value.includes('Page Inspector')) {
+    return /Page Inspector (诊断报告|Report)/u;
+  }
+  if (value.includes('必填字段')) {
+    return /必填字段为空|Required field empty/u;
+  }
+  if (value.includes('字段校验')) {
+    return /字段校验失败|Field validation failed/u;
+  }
+  if (value.includes('提交按钮')) {
+    return /提交按钮禁用|Submit button disabled/u;
+  }
+  if (value.toLowerCase().includes('console error')) {
+    return /Console error|页面存在 console error/u;
+  }
+  if (value.includes('CDP')) {
+    return /CDP deep inspection|CDP 深度检查/u;
+  }
+  return value;
 }

@@ -16,9 +16,9 @@ if (!extensionZip) {
 rmSync(landingDir, { recursive: true, force: true });
 mkdirSync(landingDir, { recursive: true });
 
-const indexSource = join(builtExtensionDir, 'options.html');
+const indexSource = join(builtExtensionDir, 'landing.html');
 if (!readFileSync(indexSource)) {
-  throw new Error('未找到 .output/chrome-mv3/options.html，请先执行 npm run zip 后重试。');
+  throw new Error('未找到 .output/chrome-mv3/landing.html，请先执行 npm run zip 后重试。');
 }
 
 cpSync(indexSource, join(landingDir, 'index.html'));

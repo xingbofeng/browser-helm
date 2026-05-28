@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Bug, PencilLine, Settings } from 'lucide-react';
+import { Bug, Settings, Trash2 } from 'lucide-react';
 import { Button } from 'animal-island-ui';
 
 import type { RuntimeToolExecutionResult, RunSnapshot } from '../../runtime/runtime-messages';
@@ -45,7 +45,6 @@ export function CockpitApp({
   const [task, setTask] = useState('');
   const [mode, setMode] = useState<RunMode>('ask');
   const [busy, setBusy] = useState(false);
-  const [reviseBusy, setReviseBusy] = useState(false);
   const [approvalResult, setApprovalResult] = useState<RuntimeToolExecutionResult>();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
@@ -78,7 +77,6 @@ export function CockpitApp({
         messages: conversationMessages
       }
     : undefined;
-  const showReviseGoal = Boolean(snapshot?.canReviseGoal && isRunActiveForGoalRevision(snapshot.status));
 
   const applySnapshot = useCallback((
     nextSnapshot: RunSnapshot,
@@ -213,7 +211,8 @@ export function CockpitApp({
       const started = await runtime.startRun({
         task: submittedTask,
         mode,
-        tabId: targetTabId
+        tabId: targetTabId,
+        conversationHistory: conversationHistoryFromMessages(conversationMessages, snapshot)
       });
       foregroundUserRunIdRef.current = started.runId;
       setTask('');
@@ -238,6 +237,46 @@ export function CockpitApp({
     }
   };
 
+  const continueModeSwitchInAct = async () => {
+    const currentSnapshot = snapshot;
+    const submittedTask = readTaskMessageContent(currentSnapshot);
+    const continuationTabId = currentSnapshot?.targetTabId ?? targetTabId;
+    if (!submittedTask) {
+      return;
+    }
+    setBusy(true);
+    setApprovalResult(undefined);
+    userRunPendingRef.current = true;
+    setMode('act');
+    try {
+      const started = await runtime.startRun({
+        task: submittedTask,
+        mode: 'act',
+        tabId: continuationTabId,
+        conversationHistory: conversationHistoryFromMessages(conversationMessages, currentSnapshot)
+      });
+      foregroundUserRunIdRef.current = started.runId;
+      agentStore.getState().startRun({ runId: started.runId, mode: 'act' });
+      subscribeToRun(started.runId, { persistMessages: true });
+      const nextSnapshot = await runtime.getRunSnapshot(started.runId);
+      applySnapshot(nextSnapshot, { persistMessages: true });
+      setMode(nextSnapshot.mode);
+    } catch (error) {
+      setConversationMessages((messages) => [
+        ...messages,
+        localErrorMessage(
+          `local-error:${Date.now()}`,
+          t('error.sendFailed'),
+          error instanceof Error ? error.message : t('error.cantStart')
+        )
+      ]);
+      foregroundUserRunIdRef.current = currentSnapshot?.runId;
+    } finally {
+      userRunPendingRef.current = false;
+      setBusy(false);
+    }
+  };
+
   const stop = async () => {
     if (!snapshot) {
       return;
@@ -247,22 +286,27 @@ export function CockpitApp({
     applySnapshot(await runtime.getRunSnapshot(snapshot.runId), { persistMessages: true });
   };
 
-  const reviseCurrentGoal = async () => {
+  const clearSession = async () => {
     const currentSnapshot = snapshot;
-    const goal = task.trim();
-    if (!currentSnapshot || !currentSnapshot.canReviseGoal || !goal) {
-      return;
-    }
-    setReviseBusy(true);
-    try {
-      const nextSnapshot = await runtime.reviseGoal({
-        runId: currentSnapshot.runId,
-        goal
-      });
-      applySnapshot(nextSnapshot, { persistMessages: true });
-      setMode(nextSnapshot.mode);
-    } finally {
-      setReviseBusy(false);
+    unsubscribeRunRef.current?.();
+    unsubscribeRunRef.current = undefined;
+    foregroundUserRunIdRef.current = undefined;
+    userRunPendingRef.current = false;
+    setTask('');
+    setMode('ask');
+    setBusy(false);
+    setApprovalResult(undefined);
+    setConversationMessages([]);
+    agentStore.getState().reset();
+    pageDataStore.getState().clearSnapshot();
+    traceStore.getState().clear();
+    approvalStore.getState().clearPending();
+    if (currentSnapshot && isRunActiveForGoalRevision(currentSnapshot.status)) {
+      try {
+        await runtime.cancelRun(currentSnapshot.runId);
+      } catch {
+        // 清空会话是本地 UI 操作；取消旧 run 失败也不阻塞回到初始状态。
+      }
     }
   };
 
@@ -375,6 +419,15 @@ export function CockpitApp({
           <Button
             htmlType="button"
             className="bh-headerIconButton"
+            aria-label={t('header.clearSessionAria')}
+            icon={<Trash2 size={18} />}
+            onClick={() => {
+              void clearSession();
+            }}
+          />
+          <Button
+            htmlType="button"
+            className="bh-headerIconButton"
             aria-label={t('header.debugAria')}
             icon={<Bug size={18} />}
             onClick={() => {
@@ -392,25 +445,14 @@ export function CockpitApp({
         </div>
       </header>
 
-      <AgentMessageList snapshot={waterfallSnapshot} />
+      <AgentMessageList
+        snapshot={waterfallSnapshot}
+        onModeSwitchContinue={() => {
+          void continueModeSwitchInAct();
+        }}
+      />
 
       <div className="bh-agentComposerDock">
-        {showReviseGoal ? (
-          <div className="bh-reviseGoalBar">
-            <span>{t('reviseGoal.hint')}</span>
-            <Button
-              htmlType="button"
-              type="default"
-              icon={<PencilLine size={14} />}
-              disabled={reviseBusy || !task.trim()}
-              onClick={() => {
-                void reviseCurrentGoal();
-              }}
-            >
-              {t('reviseGoal.button')}
-            </Button>
-          </div>
-        ) : null}
         <ChatPanel
           task={task}
           mode={mode}
@@ -617,6 +659,40 @@ function isRunActiveForGoalRevision(status: RunSnapshot['status'] | undefined): 
     status === 'waiting_for_user' ||
     status === 'recovering' ||
     status === 'waiting_for_approval';
+}
+
+function readTaskMessageContent(snapshot: RunSnapshot | undefined): string | undefined {
+  const taskMessage = [...(snapshot?.messages ?? [])]
+    .reverse()
+    .find((message) => message.kind === 'task' && message.role === 'user');
+  const task = taskMessage?.content.trim();
+  return task ? task : undefined;
+}
+
+function conversationHistoryFromMessages(
+  messages: AgentMessage[],
+  snapshot?: RunSnapshot
+): NonNullable<Parameters<RuntimePort['startRun']>[0]['conversationHistory']> | undefined {
+  const sourceMessages = snapshot?.messages
+    ? mergeAgentMessages(messages, snapshot.messages)
+    : messages;
+  const history = sourceMessages
+    .filter((message) =>
+      message.content.trim().length > 0
+    )
+    .map((message) => ({
+      role: message.role,
+      ...(message.title ? { title: message.title } : {}),
+      content: message.content
+    }));
+  if (snapshot?.trace?.length) {
+    history.push({
+      role: 'system',
+      title: 'Previous run trace',
+      content: JSON.stringify(snapshot.trace)
+    });
+  }
+  return history.length ? history : undefined;
 }
 
 function localErrorMessage(id: string, title: string, content: string): AgentMessage {

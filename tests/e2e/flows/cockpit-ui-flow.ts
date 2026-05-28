@@ -272,17 +272,17 @@ export class CockpitUiFlow {
     await expect(approvalPage.getByText('Form Fill Success', { exact: true })).toBeVisible();
     await expect(approvalPage.getByLabel('Approval').getByText('******').first()).toBeVisible();
     await expect(approvalPage.getByText('Counter User')).toHaveCount(0);
-    await approvalPage.getByRole('button', { name: /显示字段值/u }).click();
+    await approvalPage.getByRole('button', { name: /显示字段值|Show field values/u }).click();
     await expect(approvalPage.getByText('Counter User')).toBeVisible();
-    await approvalPage.getByRole('button', { name: /隐藏字段值/u }).click();
+    await approvalPage.getByRole('button', { name: /隐藏字段值|Hide field values/u }).click();
     await expect(approvalPage.getByText('Counter User')).toHaveCount(0);
 
-    await approvalPage.getByRole('button', { name: '高级开发者选项' }).click();
-    await approvalPage.getByRole('button', { name: '表单执行' }).click();
+    await approvalPage.getByRole('button', { name: /^(高级开发者选项|Advanced debug options)$/u }).click();
+    await approvalPage.getByRole('button', { name: /^(表单执行|Form Execution)$/u }).click();
     await expect(approvalPage.getByText('field_fill_started').first()).toBeVisible();
     await expect(approvalPage.getByText('form_verify_result')).toBeVisible();
     await expect(approvalPage.getByText('submit_approval_requested')).toBeVisible();
-    await approvalPage.getByRole('button', { name: '关闭' }).click();
+    await approvalPage.getByRole('button', { name: /^(关闭|Close)$/u }).click();
 
     await approvalPage.getByRole('button', { name: 'Approve' }).click();
     await expect(approvalPage.getByText(/Form submit executed after approval/u).first()).toBeVisible();

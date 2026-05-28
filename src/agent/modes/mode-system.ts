@@ -12,6 +12,8 @@ type ResolveRunModeInput = {
 
 type ResolvedRunMode = {
   mode: RunMode;
+  productMode: 'ask' | 'act';
+  internalStrategy: RunMode;
   reason: string;
   classification: TaskClassification;
 };
@@ -22,6 +24,8 @@ export function resolveRunMode(input: ResolveRunModeInput): ResolvedRunMode {
   if (input.explicitMode) {
     return {
       mode: input.explicitMode,
+      productMode: toProductMode(input.explicitMode),
+      internalStrategy: input.explicitMode,
       reason: t('mode.reason.userSelected', locale, {
         mode: input.explicitMode,
         boundary: boundaryReason(input.explicitMode, locale),
@@ -36,9 +40,16 @@ export function resolveRunMode(input: ResolveRunModeInput): ResolvedRunMode {
 
   return {
     mode: classified.mode,
+    productMode: toProductMode(classified.mode),
+    internalStrategy: classified.mode,
     reason: `${classified.reason} ${boundaryReason(classified.mode, locale)}`,
     classification: classified
   };
+}
+
+function toProductMode(mode: RunMode): 'ask' | 'act' {
+  if (mode === 'act' || mode === 'form') return 'act';
+  return 'ask';
 }
 
 function boundaryReason(mode: RunMode, locale: Locale): string {

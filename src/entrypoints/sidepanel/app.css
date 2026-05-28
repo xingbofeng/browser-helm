@@ -358,6 +358,36 @@ body.animal-cursor--force *,
   color: #7f4700;
 }
 
+.bh-modeSwitchActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.bh-modeSwitchActions button {
+  min-height: 34px;
+  border-radius: 7px;
+  padding: 0 12px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.bh-modeSwitchPrimary {
+  border: 1px solid #c9912d;
+  background: #f1b84d;
+  color: #3f2b10;
+  box-shadow: 0 2px 0 rgba(126, 84, 10, 0.18);
+}
+
+.bh-modeSwitchSecondary {
+  border: 1px solid #e0c99e;
+  background: #fffaf0;
+  color: #6d5333;
+}
+
 .bh-agentMessage-page_summary .bh-agentMessageBody {
   border: 0;
   padding: 0;
@@ -482,6 +512,76 @@ body.animal-cursor--force *,
   font-weight: 900;
 }
 
+.bh-runFlow,
+.bh-replyStatus {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+  margin: -1px 0 -4px;
+}
+
+.bh-replyStatusIcon {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  color: #9b9894;
+}
+
+.bh-replyStatusIcon .is-spinning {
+  animation: bhSpin 0.9s linear infinite;
+}
+
+.bh-replyStatus.is-error .bh-replyStatusIcon {
+  color: #b45134;
+}
+
+.bh-replyStatusBody {
+  min-width: 0;
+  padding: 2px 2px 6px;
+}
+
+.bh-replyStatusLine {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.bh-replyStatusLine strong {
+  min-width: 0;
+  color: #9a9792;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.bh-replyStatus.is-error .bh-replyStatusLine strong {
+  color: #a64b2d;
+}
+
+.bh-replyStatusLine time {
+  flex: 0 0 auto;
+  color: #aba49d;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.bh-replyStatusBody p {
+  margin: 2px 0 0;
+  color: #7f7a74;
+  font-size: 11px;
+  font-weight: 720;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.bh-replyStatus.is-error .bh-replyStatusBody p {
+  color: #86503f;
+}
+
 .bh-runProgressCard {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -508,7 +608,7 @@ body.animal-cursor--force *,
   color: #317347;
 }
 
-.bh-runProgressSpinner svg {
+.bh-runProgressSpinner.is-spinning svg {
   animation: bhSpin 0.9s linear infinite;
 }
 
@@ -552,8 +652,7 @@ body.animal-cursor--force *,
   background: #fffaf1;
 }
 
-.bh-debugReportSummary header,
-.bh-reviseGoalBar {
+.bh-debugReportSummary header {
   display: flex;
   min-width: 0;
   align-items: center;
@@ -606,22 +705,6 @@ body.animal-cursor--force *,
   grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   padding: 0;
-}
-
-.bh-reviseGoalBar {
-  margin-bottom: 6px;
-  border: 1px solid #ead9bf;
-  border-radius: 8px;
-  padding: 7px 8px;
-  background: #fff8ee;
-  color: #6a5546;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.bh-reviseGoalBar button {
-  flex: 0 0 auto;
-  border-radius: 999px !important;
 }
 
 .bh-taskComposer {

@@ -15,6 +15,7 @@ type TraceStoreState = {
   selectedEvent?: RuntimeEvent | undefined;
   setEvents: (events: RuntimeEvent[]) => void;
   selectEvent: (id: string) => void;
+  clear: () => void;
 };
 
 const LABEL_KEYS: Record<string, string> = {
@@ -41,6 +42,13 @@ export function createTraceStore(locale: Locale) {
       store.setState((state) => ({
         selectedEvent: state.items.find((item) => item.id === id)?.event
       }));
+    },
+    clear: () => {
+      store.setState({
+        events: [],
+        items: [],
+        selectedEvent: undefined
+      });
     }
   });
   return store;

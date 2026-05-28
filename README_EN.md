@@ -1,74 +1,127 @@
 <p align="center">
-  <img src="docs/browserhelm-logo.png" alt="BrowserHelm Logo" width="128" />
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/status-v1.0-blue" alt="Status" />
-  <img src="https://img.shields.io/badge/runtime-browser_extension-2ea44f" alt="Runtime" />
-  <img src="https://img.shields.io/badge/architecture-local--first-black" alt="Architecture" />
-  <img src="https://img.shields.io/badge/agent-a11y--first-6f42c1" alt="Agent" />
-  <img src="https://img.shields.io/badge/backend-none-orange" alt="Backend" />
-  <img src="https://img.shields.io/badge/language-TypeScript-3178c6" alt="Language" />
-  <img src="https://img.shields.io/badge/UI-React-61dafb" alt="UI" />
-  <img src="https://img.shields.io/badge/memory-local--first-0969da" alt="Memory" />
-  <img src="https://img.shields.io/badge/tools-bh__prefix-black" alt="Tools" />
-  <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="License" />
+  <img src="docs/browserhelm-logo.png" alt="BrowserHelm Logo" width="96" />
 </p>
 
 <h1 align="center">BrowserHelm</h1>
+<h3 align="center">A Local-First Browser AI Agent</h3>
 
 <p align="center">
-  <strong>Understand the page first, then act safely.</strong><br />
-  A local-first AI page assistant that runs in your browser.
+  <a href="https://browser-helm.counterxing.top"><strong>🌐 browser-helm.counterxing.top</strong></a> &nbsp;·&nbsp;
+  <a href="#-quick-start"><strong>🚀 Quick Start</strong></a> &nbsp;·&nbsp;
+  <a href="docs/"><strong>📖 Docs</strong></a>
 </p>
 
 <p align="center">
-  <a href="README.md">中文</a>
+  <strong>🇺🇸 English</strong> &nbsp;|&nbsp;
+  <a href="README.md">🇨🇳 中文</a>
 </p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/status-v1.0-blue?style=flat-square" alt="Status" />
+  <img src="https://img.shields.io/badge/runtime-Chrome_Extension-2ea44f?style=flat-square" alt="Runtime" />
+  <img src="https://img.shields.io/badge/arch-local--first-black?style=flat-square" alt="Architecture" />
+  <img src="https://img.shields.io/badge/agent-a11y--first-6f42c1?style=flat-square" alt="Agent" />
+  <img src="https://img.shields.io/badge/backend-none-orange?style=flat-square" alt="Backend" />
+  <img src="https://img.shields.io/badge/lang-TypeScript-3178c6?style=flat-square" alt="Language" />
+  <img src="https://img.shields.io/badge/UI-React_+_Animal_Island-61dafb?style=flat-square" alt="UI" />
+  <img src="https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square" alt="License" />
+</p>
+
+> **Understand the page first, then act safely.** BrowserHelm is an AI page assistant that runs directly in your browser. No backend, no data uploads, no vendor lock-in — just a transparent, controllable AI middle layer between you and your browser.
 
 ---
 
-## What is BrowserHelm?
+## ✨ Why BrowserHelm?
 
-**BrowserHelm** is a local-first browser AI Agent. It runs as a Chrome extension directly in your browser — it observes pages, diagnoses issues, helps you understand why a form won't submit, and safely executes actions with your approval.
+| | BrowserHelm | Other Browser Agents |
+|---|---|---|
+| 🔒 **Privacy** | 100% local, zero third-party sharing | Usually requires cloud relay |
+| 🧠 **Model Freedom** | BYOK — use your own API key | Typically locked to specific models |
+| 👁️ **Observe-First** | Enforced observe → approve → execute | Acts directly, lacks transparency |
+| 📋 **Traceable** | Every step in structured traces | Black-box operations |
+| 🎨 **Open Source** | MIT licensed, fully transparent | Mostly proprietary |
+| 🔌 **Zero Backend** | No server, no sign-up required | Most depend on cloud backends |
 
-It's not a cloud browser, not a backend automation service, and not a generic Agent SDK with a UI wrapper. BrowserHelm's core is its own Agent Kernel: observe the page → analyze problems → request approval → execute tools → verify results → record trace — every step is transparently shown to you.
+---
 
-## Current Capabilities (v1.0)
+## 🧩 Capabilities
 
-BrowserHelm's first shippable version is positioned as a **Page Inspector + Form Doctor**.
+### 🔍 Page Understanding
 
-**Page Diagnosis** — understand page health at a glance:
-- Why is the page throwing errors?
-- What console / network anomalies exist?
-- Page state overview (title, source, interactive element count)
+Automatically observe any web page and generate structured page data — title, origin, form fields, interactive elements, accessibility snapshots, iframe relationships. Supports long-page scrolling reads and iframe content penetration. Understand page health at a glance without opening DevTools.
 
-**Form Doctor** — troubleshoot form issues:
-- Which required fields are missing?
-- Why is that button disabled?
-- Where are the validation errors?
-- What's the submit button's association state?
+### 🩺 Form Doctor
 
-**Safe Execution** — high-risk actions require your approval:
-- Submit, send, delete, publish, execute JS are blocked by default
-- Approval panel clearly shows what will happen and the risk level
-- You decide whether to execute or deny
+Complete form diagnosis + assisted fill pipeline:
 
-**Local-First** — your data stays yours:
-- Core Agent loop, memory, trace, settings all run locally
-- No backend required, no service registration needed
-- Future cloud sync is optional enhancement only
+- **Diagnose**: Auto-identify missing required fields, validation errors, and root causes of disabled submit buttons
+- **Infer**: Auto-infer fill plans from user intent and field snapshots (with source, confidence, masked preview)
+- **Execute**: Single or batch field filling with full input/change/blur event triggering
+- **Verify**: Post-fill HTML5 validity check, required fields, visible error text
+- **Submit**: High-risk submission requires explicit approval panel confirmation
 
-**Inspectable & Traceable** — every agent step is visible:
-- Message waterfall shows what the agent saw and did
-- Trace events fully record the decision process
-- Advanced developer panel provides complete diagnostics
+### 🖱️ Interactive Element Operations
 
-## Installation
+Read any element's state (visible, disabled, checked, selected), check action readiness (target validation, risk assessment, approval prediction), and perform controlled operations on page elements and iframe-contained elements.
 
-BrowserHelm is a Chrome extension. Currently available for developer mode manual loading; Chrome Web Store publishing is upcoming.
+### 🛡️ Safe Approval
 
-**Developer mode installation:**
+High-risk actions (submit, delete, execute JS) are blocked by default. The approval panel clearly shows action preview, risk level, and reasoning — you decide to execute or deny. PolicyEngine spans all tool execution paths and cannot be bypassed.
+
+### 🧠 Agent Intelligence
+
+Custom Agent Kernel drives the complete loop:
+
+> Page Observe → Context Compaction → Tool Selection → Risk Approval → Execution → Result Verification → Trace Recording
+
+- **TaskClassifier** auto-classifies user task types
+- **ToolSelector** intelligently picks from 30+ tools
+- **ContextCompactor** trims full page data into model-friendly summaries
+- **RecoveryPolicy** handles tool failures and exception recovery
+- Supports Ask (read-only diagnosis) and Act (safe execution) dual modes
+
+### 📊 Traceable & Debuggable
+
+- Message waterfall shows the full agent thought → decision → execution → result pipeline
+- Structured traces record every decision, tool call, parameter, and result
+- Advanced developer panel provides complete trace replay and diagnostic reports
+- Streaming model output visible in real time
+
+### 🔌 Model Freedom
+
+No built-in model service. Compatible with all OpenAI-compatible APIs including Ollama, vLLM, DeepSeek, Qwen, and more — local or cloud. Custom Base URL, API key stored locally encrypted.
+
+### 🏠 Local-First
+
+Agent core loop, memory, trace, and settings all run locally in the browser (IndexedDB). Zero backend dependency, no account registration needed. Your data stays on your machine from start to finish.
+
+---
+
+## 🛠️ Built-in Tools
+
+BrowserHelm ships with **30+ `bh_`-prefixed tools** covering page observation, form diagnosis, element operations, iframe penetration, accessibility snapshots, and page health diagnostics. Tools are organized by domain:
+
+| Module | Tools | Description |
+|---|---|---|
+| 🧠 Agent | `bh_agent_finish` `bh_agent_fail` `bh_agent_ask_user` | Run-level state control |
+| 📄 Page | `bh_page_observe` `bh_frame_list` | Page observation, frame discovery |
+| ♿ A11y | `bh_a11y_snapshot` `bh_a11y_find_interactive` `bh_a11y_refresh_refs` `bh_a11y_resolve_ref` | Accessibility snapshots, ref mapping |
+| 🖱️ Element | `bh_element_inspect` `bh_element_read_state` `bh_action_check_readiness` | Element inspection, action readiness |
+| 📝 Form | `bh_form_list` `bh_form_inspect` `bh_form_read_fields` `bh_form_find_missing_required` `bh_form_find_validation_errors` `bh_form_find_disabled_submit_reason` `bh_form_infer_fill_plan` `bh_form_fill_field` `bh_form_fill_many` `bh_form_verify` `bh_form_submit_with_approval` | Complete form diagnosis, fill, verify, approve pipeline |
+| 🖼️ iframe | `bh_iframe_read` `bh_iframe_click` `bh_iframe_type` | iframe penetration operations |
+| 🔧 Debug | `bh_debug_collect_page_health` | Page health diagnostics |
+
+See [src/tools/README.md](src/tools/README.md) for details.
+
+---
+
+<p align="center">
+  <img src="docs/browserhelm-hero.png" alt="BrowserHelm Screenshot" width="100%" />
+</p>
+
+## 🚀 Quick Start
+
+### Installation
 
 ```bash
 git clone https://github.com/your-org/browser-helm.git
@@ -77,72 +130,69 @@ npm install
 npm run build
 ```
 
-Then in Chrome:
+In Chrome:
 
-1. Open `chrome://extensions`
-2. Enable "Developer mode"
-3. Click "Load unpacked"
-4. Select the `.output/chrome-mv3` directory
+1. Open `chrome://extensions`, enable "Developer mode"
+2. Click "Load unpacked"
+3. Select the `.output/chrome-mv3` directory
 
-**Configure your model:**
+### Configure Your Model
 
-BrowserHelm doesn't ship with any model service. On first use:
-1. Click the gear icon in the side panel header to open model settings
-2. Fill in your existing OpenAI-compatible API details (custom Base URL supported)
-3. Click test connection to confirm
+BrowserHelm does not ship with any model. Bring your own API key:
 
-## Use Cases
+1. Click the gear icon in the side panel → Model Settings
+2. Enter your OpenAI-compatible API details (custom Base URL supported)
+3. Test connection → start using
 
-| Scenario | Description |
-|----------|-------------|
-| **Frontend Debugging** | Open a target page, let BrowserHelm observe and diagnose console / network errors |
-| **Form Troubleshooting** | Facing a complex form? Let BrowserHelm find missing required fields and disabled reasons |
-| **Page Understanding** | Quickly get a page structure overview: title, source, interactives, form fields |
-| **Safe Execution** | When you need to act on a page, safely execute high-risk actions through the approval flow |
+> Compatible with Ollama, vLLM, DeepSeek, Qwen, and all OpenAI-compatible APIs.
 
-## Tech Stack
+### Usage
 
-- **Extension Framework**: [WXT](https://wxt.dev/)
-- **UI**: React + [Animal Island UI](https://github.com/guokaigdg/animal-island-ui) (Animal Crossing visual theme)
-- **Language**: TypeScript
-- **Schema**: Zod
-- **Local Storage**: Dexie.js (IndexedDB)
-- **State Management**: Zustand
-- **Model Layer**: Custom OpenAI-compatible REST client, BYOK
+1. Open any web page → click the BrowserHelm icon in Chrome toolbar
+2. Choose "Ask mode" (read-only diagnosis) or "Act mode" (safe execution)
+3. Describe your task — the agent will observe the page and start working
 
-## Roadmap
+---
 
-- **v1.0** — Page Inspector + Form Doctor: first shippable version, read-only diagnosis + safe approval
-- **v1.1** — Assisted Form Fill + Frontend Debug
-- **v1.2** — Memory + Workflow Replay
-- **v1.3** — DevTools/CDP Deep Integration
-- **v1.4** — Vision/Screenshot Agent
-- **v1.5** — Advanced Browser Tools
-- **v1.6** — Domain Adapters
-- **v2.0** — Full Browser Agent Platform
+## 🛠️ Tech Stack
 
-## Development
+| Layer | Technology |
+|---|---|
+| Extension Framework | [WXT](https://wxt.dev/) |
+| Frontend | React + [Animal Island UI](https://github.com/guokaigdg/animal-island-ui) |
+| Language | TypeScript (strict) |
+| Validation | Zod |
+| Local Storage | Dexie.js (IndexedDB) |
+| State Management | Zustand |
+| Model Layer | Custom OpenAI-compatible REST client |
+| Testing | Vitest + Playwright |
+
+---
+
+## 🧑‍💻 Development
 
 ```bash
-# Start dev mode
-npm run dev
-
-# Type check
-npm run typecheck
-
-# Run tests
-npm test
-
-# E2E tests
-npm run test:e2e
-
-# Extension debugging
-npm run debug:extension:watch
+npm run dev          # Start dev mode
+npm run typecheck    # TypeScript type check
+npm run lint         # ESLint
+npm test             # Unit/integration tests
+npm run test:e2e     # E2E tests
+npm run debug:extension:watch  # Extension debug with auto-rebuild + restart
 ```
 
-## License
+See [AGENTS.md](AGENTS.md) for project conventions.
 
-This project is licensed under the MIT License.
+---
+
+## 🤝 Contributing
+
+Issues and PRs are welcome! Please read [AGENTS.md](AGENTS.md) for project structure and development guidelines.
+
+---
+
+## 📄 License
+
+[MIT License](LICENSE)
 
 ---
 

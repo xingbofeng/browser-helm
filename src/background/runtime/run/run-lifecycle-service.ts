@@ -15,6 +15,7 @@ import { readLocale } from '../../../i18n/locale';
 import { t } from '../../../i18n/t';
 import type { Locale } from '../../../i18n/types';
 import { GoalRevisionService } from './goal-revision-service';
+import { redactTextForModelContext } from '../../../shared/redaction';
 import { UnifiedRuntimeAgentLoop } from './unified-runtime-agent-loop';
 
 export type LifecycleStore = {
@@ -63,7 +64,11 @@ export class RunLifecycleService {
         notifySnapshotUpdated: (runId) => deps.store.notifySnapshotUpdated(runId),
         appendTrace: (record, event) => deps.store.appendTrace(record, event),
         executeTool: deps.executeTool,
-        withRunMessages: deps.withRunMessages
+        withRunMessages: deps.withRunMessages,
+        getToolContracts: (runMode) => {
+          const router = deps.createToolRouter(0); // tabId doesn't matter for contract listing
+          return router.listToolContracts(runMode);
+        }
       });
     }
   }
@@ -97,21 +102,34 @@ export class RunLifecycleService {
       includeUserTask: !observeOnly,
       includeObserveStatus: observeOnly
     });
-    const record = {
+    const record: RunRecord = {
       task: input.task,
       mode,
       trace: [] as RuntimeEvent[],
       runKind,
-      locale
+      locale,
+      taskState: {
+        goal: input.task,
+        completed: [],
+        remaining: [input.task],
+        filledFieldRefs: [],
+        verifiedFieldRefs: [],
+        runtimeCompleted: [],
+        runtimeFactsOverrideModelNotes: true as const,
+        updatedBy: 'runtime' as const,
+        updatedAt: Date.now()
+      },
+      conversationHistory: input.conversationHistory
     };
     this.deps.store.setRecord(runId, record);
     this.deps.store.appendTrace(record, {
       runId, type: TRACE_EVENT_NAMES.RUN_STARTED,
       payload: {
-        task: input.task,
+        task: redactTextForModelContext(input.task),
         mode,
-        ...(input.goal ? { goal: input.goal } : {}),
-        ...(input.successCriteria ? { successCriteria: input.successCriteria } : {})
+        ...(input.conversationHistory?.length ? { historyCount: input.conversationHistory.length } : {}),
+        ...(input.goal ? { goal: redactTextForModelContext(input.goal) } : {}),
+        ...(input.successCriteria ? { successCriteria: input.successCriteria.map(redactTextForModelContext) } : {})
       }
     });
     this.deps.store.setSnapshot(runId, {
@@ -120,37 +138,11 @@ export class RunLifecycleService {
       modeReason: resolvedMode.reason,
       goal,
       plan,
+      taskState: record.taskState,
       messages: initialRunMessages,
       streaming: this.deps.emptyStreamingState(),
       trace: record.trace
     });
-
-    if (shouldRequestActMode(input, mode, resolvedMode.classification.actionIntent)) {
-      this.deps.store.appendTrace(record, {
-        runId,
-        type: TRACE_EVENT_NAMES.STATE_CHANGED,
-        payload: {
-          status: 'waiting_for_user',
-          reason: 'ask_mode_action_intent_requires_act'
-        }
-      });
-      this.deps.store.setSnapshot(runId, {
-        runId,
-        mode,
-        status: 'waiting_for_user',
-        classification: resolvedMode.classification,
-        modeReason: resolvedMode.reason,
-        goal,
-        plan,
-        messages: [
-          ...(initialRunMessages ?? []),
-          modeSwitchRequestMessage(runId, locale)
-        ],
-        streaming: this.deps.emptyStreamingState(),
-        trace: record.trace
-      });
-      return { runId };
-    }
 
     const tabId = input.tabId ?? (await this.deps.getActiveTabId());
     if (!tabId) {
@@ -174,7 +166,7 @@ export class RunLifecycleService {
       return { runId };
     }
 
-    (record as Record<string, unknown>).tabId = tabId;
+    record.tabId = tabId;
     void this.observeInitial(runId, record as RunRecord & { tabId: number }, tabId);
     return { runId };
   }
@@ -323,34 +315,6 @@ export class RunLifecycleService {
   async reviseGoal(input: ReviseGoalInput): Promise<RunSnapshot> {
     return this.goalRevision.reviseGoal(input);
   }
-}
-
-function shouldRequestActMode(
-  input: StartRunInput,
-  mode: RunMode,
-  actionIntent: string | undefined
-): boolean {
-  return input.mode === 'ask' &&
-    mode === 'ask' &&
-    input.runKind !== 'observe_only' &&
-    Boolean(actionIntent);
-}
-
-function modeSwitchRequestMessage(
-  runId: string,
-  locale: Locale
-): NonNullable<RunSnapshot['messages']>[number] {
-  const now = Date.now();
-  return {
-    id: `${runId}:mode-switch-request`,
-    role: 'agent',
-    kind: 'recommendation',
-    status: 'complete',
-    title: t('runtime.modeSwitch.title', locale),
-    content: t('runtime.modeSwitch.askToAct', locale),
-    createdAt: now,
-    updatedAt: now
-  };
 }
 
 function resolveRunKind(input: StartRunInput, mode: RunMode): NonNullable<RunRecord['runKind']> {

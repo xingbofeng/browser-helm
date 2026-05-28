@@ -33,6 +33,7 @@ export const zh = {
   'chat.mode.debug': '高级调试',
 
   // ── Header Actions ──
+  'header.clearSessionAria': '清空会话',
   'header.settingsAria': '打开模型配置',
   'header.debugAria': '高级开发者选项',
 
@@ -91,6 +92,7 @@ export const zh = {
 
   // ── Form Action Cards ──
   'form.card.inferPlan': '推断填写方案',
+  'form.card.inferPlanNeedsValues': '请提供要填写的具体字段值。我不会编造个人信息，也不会覆盖已有输入。',
   'form.card.fillFields': '字段填写',
   'form.card.verify': '表单验证',
   'form.card.submitDenied': '提交已拒绝',
@@ -113,10 +115,6 @@ export const zh = {
   // ── Error / CockpitApp ──
   'error.sendFailed': '发送失败',
   'error.cantStart': 'BrowserHelm 未能启动当前任务。',
-
-  // ── Revise Goal Bar ──
-  'reviseGoal.hint': '当前 run 可修改目标',
-  'reviseGoal.button': '修改目标',
 
   // ── Approval Drawer ──
   'approval.aria': 'Approval',
@@ -230,7 +228,7 @@ export const zh = {
   // ── Run Progress ──
   'runProgress.label': '运行中…',
   'runProgress.observing': '观察页面中',
-  'runProgress.thinking': '正在思考下一步',
+  'runProgress.thinking': '正在准备下一步',
   'runProgress.executing': '执行工具中',
 
   // ── Trace Log ──
@@ -242,9 +240,10 @@ export const zh = {
   'trace.event.toolStarted': '调用工具：{tool}',
   'trace.event.toolResult': '工具结果：{tool}',
   'trace.event.unknownTool': '未知工具',
-  'trace.event.modelStarted': '开始生成回复',
-  'trace.event.modelDelta': '生成中',
-  'trace.event.modelFinished': '回复生成完成',
+  'trace.event.modelStarted': '正在读取模型决策',
+  'trace.event.modelDelta': '读取模型决策中',
+  'trace.event.modelFinished': '模型决策读取完成',
+  'trace.event.modelFailed': '模型请求失败',
   'trace.event.runFinished': '任务完成',
   'trace.event.runFailed': '任务失败',
   'trace.event.planUpdated': '计划更新',
@@ -256,9 +255,9 @@ export const zh = {
   'trace.summary.toolResultDone': '完成：{summary}',
   'trace.summary.toolResultFailed': '失败：{summary}',
   'trace.summary.toolReturned': '工具已返回结果',
-  'trace.summary.modelStarted': '模型 {model} 开始输出。',
-  'trace.summary.modelDelta': '已收到 {chunks} 个片段，约 {chars} 字符。',
-  'trace.summary.modelFinished': '生成完成，约 {chars} 字符。',
+  'trace.summary.modelStarted': '模型 {model} 正在输出下一步决策。',
+  'trace.summary.modelDelta': '已收到 {chunks} 个决策片段，约 {chars} 字符。',
+  'trace.summary.modelFinished': '决策读取完成，约 {chars} 字符。',
   'trace.summary.runFailed': '运行未完成。',
   'trace.summary.planUpdated': 'Agent 已更新当前目标和执行步骤。',
   'trace.summary.contextBuilt': '已构建 {count} 条上下文消息。',
@@ -325,6 +324,7 @@ export const zh = {
   'tool.description.bh_agent_ask_user': '在继续执行前请求用户补充输入。',
   'tool.description.bh_agent_fail': '用结构化错误结束当前运行。',
   'tool.description.bh_agent_finish': '用最终摘要完成当前运行。',
+  'tool.description.bh_request_act_mode': '请求用户切换到执行模式，不改变页面。',
   'tool.description.bh_debug_collect_page_health': '只读收集浅层页面健康状态摘要。',
   'tool.description.bh_element_inspect': '根据稳定引用检查页面元素详情。',
   'tool.description.bh_element_read_state': '根据稳定引用读取页面元素当前状态。',
@@ -386,13 +386,43 @@ export const zh = {
   'diagnosis.source.user': '用户输入',
 
   // ── Run Progress Detail ──
-  'runProgress.thinkingDetail': 'BrowserHelm 正在结合页面观察、历史对话和工具结果组织回复。',
+  'runProgress.thinkingDetail': 'BrowserHelm 正在同步当前页面、历史对话和运行状态。',
   'runProgress.executingDetail': '正在运行 {tool}，完成后会自动更新卡片和调试信息。',
   'runProgress.observingDetail': '正在读取标题、正文摘要、链接、表单和可交互元素。',
   'runProgress.waitingUser': '等待你的补充',
   'runProgress.waitingUserDetail': 'Agent 需要更多信息才能继续。',
   'runProgress.recovering': '正在恢复运行',
   'runProgress.recoveringDetail': '正在根据错误信息选择下一步。',
+  'runProgress.turnStarted': '正在开始下一步',
+  'runProgress.turnStartedDetail': 'BrowserHelm 正在检查当前运行状态。',
+  'runProgress.toolsSelected': '正在选择可用工具',
+  'runProgress.toolsSelectedDetail': 'BrowserHelm 正在根据当前模式收窄安全可用的工具。',
+  'runProgress.contextBuilt': '正在准备页面上下文',
+  'runProgress.contextBuiltDetail': 'BrowserHelm 正在整理页面、历史对话和最近工具结果给 AI。',
+  'runProgress.readingDecision': '正在读取 AI 决策',
+  'runProgress.readingDecisionDetail': 'BrowserHelm 正在校验模型输出，确认下一步是否可执行。',
+  'runProgress.modelStreaming': '正在读取模型决策',
+  'runProgress.modelStreamingDetail': '模型正在生成本轮下一步决策，已收到 {count} 个字符。',
+  'runProgress.preparingAction': '正在准备执行动作',
+  'runProgress.preparingActionDetail': 'BrowserHelm 正在执行运行时安全检查。',
+  'runProgress.confirmingFill': '正在确认已填写内容',
+  'runProgress.confirmingFillDetail': '字段已经填入，BrowserHelm 正在判断是否需要验证或结束本次任务。',
+  'runFlow.aria': '运行流程',
+  'runFlow.reasoningTitle': '思考',
+  'runFlow.thinkingStatus': '正在思考',
+  'runFlow.toolStatus': '正在执行动作',
+  'runFlow.modelStarted': '模型 {model} 正在准备下一步安全决策。',
+  'runFlow.modelFailed': '模型请求失败：{summary}',
+  'runFlow.fallbackTitle': '正在重试模型请求',
+  'runFlow.fallbackDetail': '流式请求失败，BrowserHelm 正在尝试备用请求。原因：{reason}',
+  'runFlow.repairTitle': '正在修正决策',
+  'runFlow.repairDetail': 'BrowserHelm 已拒绝上一轮决策，并要求模型改为更安全的下一步。',
+  'runFlow.toolStarted': 'BrowserHelm 正在运行 {tool}。',
+
+  // ── Runtime Form Fill ──
+  'runtime.formFill.explicitValuesTitle': '需要你提供具体字段值',
+  'runtime.formFill.explicitValuesContent': '出于安全规则，BrowserHelm 只能填写你明确提供的值。请告诉我这些字段要填什么：{fields}。',
+  'runtime.formFill.explicitValuesFallbackFields': '表单字段',
 
   // ── Trace Store ──
   'traceStore.runStarted': 'Run 开始',
@@ -442,8 +472,10 @@ export const zh = {
   'runtime.error.highlightUnavailable': 'Run is not available for page element inspection',
   'runtime.error.toolUnavailable': 'Run is not available for tool execution',
   'runtime.error.refNotFound': 'Could not find a deterministic replacement ref',
-  'runtime.modeSwitch.title': '需要切换到执行模式',
-  'runtime.modeSwitch.askToAct': '这个请求会改变页面内容。Ask 模式只读取和解释页面，不会输入、点击、提交或发送。请切换到"执行 / Act"后再发送一次，我会先填入低风险字段；发送、提交、删除等最终动作仍会单独向您确认。',
+  'runtime.modeSwitch.title': '需要执行模式',
+  'runtime.modeSwitch.askToAct': '这个请求会改变页面内容。Ask 模式只读取和解释页面，不会输入、点击、提交或发送。切换到执行后我会继续处理当前请求；本次只允许低风险字段填写，发送、提交、删除等最终动作仍会单独向您确认。',
+  'runtime.modeSwitch.continueAct': '切换到执行并继续',
+  'runtime.modeSwitch.keepAsk': '保持 Ask',
   'runtime.error.argsRepair': 'Tool arguments need user or model repair before retrying',
   'runtime.error.userCancelReason': 'Run was cancelled by the user',
 

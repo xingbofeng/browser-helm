@@ -5,7 +5,7 @@ import type { ToolRisk, ToolResult } from '../../shared/schemas/tool-result.sche
 import type { ToolContext } from './tool-context';
 import type { TranslationKey } from '../../i18n/types';
 
-export type ToolSpec<TArgs, TResult> = {
+export type ToolSpec<TArgs, TResult = unknown> = {
   name: string;
   title: string;
   description: string;

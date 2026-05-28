@@ -28,7 +28,7 @@ export function ModelConfigForm(props: ModelConfigFormProps) {
     props.settings?.streamingEnabled ?? true
   );
   const [allowLocalProviderEndpoints, setAllowLocalProviderEndpoints] = useState(
-    props.settings?.allowLocalProviderEndpoints ?? true
+    props.settings?.allowLocalProviderEndpoints ?? false
   );
   const [showKey, setShowKey] = useState(false);
   const [busy, setBusy] = useState(false);

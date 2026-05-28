@@ -6,9 +6,22 @@ type AppSettingsRecord = Record<string, unknown>;
  * 从浏览器 / 系统偏好推断默认 locale。
  *
  * 优先级：
- *   'zh'
+ *   1. chrome.i18n.getUILanguage() — extension-aware (real chrome runtime)
+ *   2. 'zh' — default project locale (tests / non-chrome / SSR)
+ *
+ * Note: navigator.languages is deliberately ignored because the BrowserHelm
+ * extension UI is primary Chinese; explicit locale switch is how users opt into English.
  */
 function resolveMachineLocale(): Locale {
+  try {
+    if (typeof chrome?.i18n?.getUILanguage === 'function') {
+      const uiLang = chrome.i18n.getUILanguage();
+      const normalized = normalizeLocale(uiLang);
+      return normalized;
+    }
+  } catch {
+    // chrome.i18n unavailable (non-extension context)
+  }
   return 'zh';
 }
 

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { t as translate } from './t';
 import { type Locale, type TranslationParams } from './types';
 
@@ -24,6 +24,10 @@ const staticInitialLocale = (): Locale => {
 
 export type I18nProviderProps = {
   children: ReactNode;
+  /** The resolved locale from chrome.storage.local. The provider synchronises
+   *  to this prop via useEffect so it picks up async resolution after the
+   *  initial mount. Callers may still guard with a loading state
+   *  (e.g. `if (!locale) return null`) to avoid a static-fallback flash. */
   initialLocale?: Locale | undefined;
 };
 
@@ -32,12 +36,35 @@ export function I18nProvider({ children, initialLocale }: I18nProviderProps) {
     initialLocale ?? staticInitialLocale()
   );
 
+  // Track initialLocale across renders so we can respond to async resolution
+  // without a derived-state-in-render anti-pattern.
+  const prevInitialLocale = useRef(initialLocale);
+  useEffect(() => {
+    if (initialLocale && initialLocale !== prevInitialLocale.current) {
+      prevInitialLocale.current = initialLocale;
+      setLocaleState(initialLocale);
+    }
+  }, [initialLocale]);
+
   const setLocale = useCallback((nextLocale: Locale) => {
     setLocaleState(nextLocale);
     try {
       localStorage.setItem('browserhelm.localeCache', nextLocale);
     } catch {
       // ignore
+    }
+    // Also write to chrome.storage.local as the canonical source of truth.
+    // Use globalThis.chrome to avoid ReferenceError in non-Chrome environments.
+    const g = globalThis as typeof globalThis & {
+      chrome?: { storage?: { local?: { get(k: string): Promise<Record<string, unknown>>; set(v: Record<string, unknown>): Promise<void> } } };
+    };
+    if (typeof g.chrome?.storage?.local?.set === 'function') {
+      void g.chrome.storage.local.get('appSettings').then((result) => {
+        const existing = (result?.appSettings as Record<string, unknown> | undefined) ?? {};
+        void g.chrome.storage.local.set({ appSettings: { ...existing, locale: nextLocale } });
+      }).catch(() => {
+        // ignore storage write failures
+      });
     }
   }, []);
 

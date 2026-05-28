@@ -263,8 +263,8 @@ describe('approvalRequestForTrace', () => {
     const result = approvalRequestForTrace(request);
     expect(result.id).toBe('req_1');
     const fields = (result.argsPreview as Record<string, unknown[]>).fields;
-    expect(fields![0]).toMatchObject({ fieldRefId: 'ref_1', valuePreview: '******' });
-    expect(fields![1]).toMatchObject({ fieldRefId: 'ref_2', valuePreview: '******' });
+    expect(fields![0]).toMatchObject({ fieldRefId: 'ref_1', valuePreview: '[MASKED]' });
+    expect(fields![1]).toMatchObject({ fieldRefId: 'ref_2', valuePreview: '[MASKED]' });
   });
 
   it('preserves argsPreview without fields', () => {

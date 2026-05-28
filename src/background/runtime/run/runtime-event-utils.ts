@@ -1,6 +1,6 @@
 import type { RuntimeEvent, RuntimeEventType } from '../../../runtime/runtime-messages';
 import type { ApprovalAuditRequest, ApprovalRequest } from '../../../shared/schemas/approval.schema';
-import { maskProviderSecret } from '../../../shared/redaction';
+import { maskProviderSecret, sanitizeSensitiveDetail } from '../../../shared/redaction';
 
 type NormalizableTraceEvent = {
   runId: string;
@@ -126,6 +126,7 @@ function withAgentRunId(payload: unknown, agentRunId: string): Record<string, un
 
 /**
  * Redacts `valuePreview` fields in approval args for trace recording.
+ * Also applies sanitizeSensitiveDetail for broader redaction coverage.
  */
 export function approvalRequestForTrace(request: ApprovalRequest): ApprovalAuditRequest;
 export function approvalRequestForTrace<T extends { argsPreview: unknown }>(request: T): Omit<T, 'argsPreview'> & { argsPreview: unknown };
@@ -134,7 +135,7 @@ export function approvalRequestForTrace<T extends { argsPreview: unknown }>(
 ): Omit<T, 'argsPreview'> & { argsPreview: unknown } {
   return {
     ...request,
-    argsPreview: redactApprovalArgsPreview(request.argsPreview)
+    argsPreview: sanitizeSensitiveDetail(redactApprovalArgsPreview(request.argsPreview))
   };
 }
 

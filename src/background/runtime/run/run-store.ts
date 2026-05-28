@@ -1,6 +1,11 @@
 import type { RunSnapshot, RuntimeEvent } from '../../../runtime/runtime-messages';
+import { runtimeEventSchema } from '../../../runtime/runtime-messages';
 import type { ExecuteToolInput } from '../../../runtime/runtime-messages';
 import type { RunRecord, TraceRecord } from './runtime-service-types';
+
+type RunStoreOptions = {
+  traceConsole?: ((event: RuntimeEvent) => void) | undefined;
+};
 
 /**
  * Manages per-run state: records, snapshots, trace events, listeners,
@@ -12,6 +17,8 @@ export class RunStore {
   private readonly snapshots = new Map<string, RunSnapshot>();
   private readonly listeners = new Map<string, Set<(event: RuntimeEvent) => void>>();
   private readonly pendingApprovalActions = new Map<string, ExecuteToolInput>();
+
+  constructor(private readonly options: RunStoreOptions = {}) {}
 
   createRunId(): string {
     const id = `run_${this.nextId}`;
@@ -42,9 +49,34 @@ export class RunStore {
   }
 
   appendTrace(record: TraceRecord, event: RuntimeEvent): void {
-    record.trace.push(event);
-    for (const listener of this.listeners.get(event.runId) ?? []) {
-      listener(event);
+    const eventWithTimestamp = event.timestamp === undefined
+      ? { ...event, timestamp: Date.now() }
+      : event;
+    const validated = runtimeEventSchema.safeParse(eventWithTimestamp);
+    if (validated.success) {
+      record.trace.push(validated.data);
+      this.printTrace(validated.data);
+      for (const listener of this.listeners.get(eventWithTimestamp.runId) ?? []) {
+        listener(validated.data);
+      }
+      return;
+    }
+    // In dev/test, trace corruption is surfaced via the runtime_event_invalid
+    // marker rather than throwing; this preserves event stream integrity while
+    // making schema violations observable in the trace viewer.
+    const invalidEvent: RuntimeEvent = {
+      runId: event.runId,
+      type: 'runtime_event_invalid',
+      timestamp: Date.now(),
+      payload: {
+        originalType: event.type,
+        validationErrors: validated.error.issues.map((i) => i.message)
+      }
+    };
+    record.trace.push(invalidEvent);
+    this.printTrace(invalidEvent);
+    for (const listener of this.listeners.get(eventWithTimestamp.runId) ?? []) {
+      listener(invalidEvent);
     }
   }
 
@@ -89,6 +121,18 @@ export class RunStore {
 
   deletePendingApprovalAction(requestId: string): void {
     this.pendingApprovalActions.delete(requestId);
+  }
+
+  private printTrace(event: RuntimeEvent): void {
+    try {
+      if (this.options.traceConsole) {
+        this.options.traceConsole(event);
+        return;
+      }
+      console.info('[BrowserHelm trace]', event);
+    } catch {
+      // Console output is diagnostics only; trace storage/listeners remain authoritative.
+    }
   }
 
 }

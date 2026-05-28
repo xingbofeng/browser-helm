@@ -64,15 +64,25 @@ export function setSelectOption(
   element: HTMLSelectElement,
   desiredValue: string
 ): boolean {
+  const normalizedDesired = normalizeOptionText(desiredValue);
   for (let i = 0; i < element.options.length; i++) {
     const opt = element.options[i];
-    if (opt && opt.value === desiredValue) {
+    if (
+      opt &&
+      (normalizeOptionText(opt.value) === normalizedDesired ||
+        normalizeOptionText(opt.label) === normalizedDesired ||
+        normalizeOptionText(opt.textContent ?? '') === normalizedDesired)
+    ) {
       element.selectedIndex = i;
       dispatchInputEvents(element);
       return true;
     }
   }
   return false;
+}
+
+function normalizeOptionText(value: string | null | undefined): string {
+  return (value ?? '').trim().toLowerCase();
 }
 
 export function setRadioChecked(
@@ -156,7 +166,7 @@ export function fillSingleField(
   if (isSensitiveField(el)) {
     return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, t('formFill.skip.sensitive', locale));
   }
-  if (!isVisibleElement(el)) {
+  if (!isVisibleElement(el) && !hasVisibleControlLabel(el)) {
     return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, t('formFill.skip.notVisible', locale));
   }
   if (el.getAttribute('readonly') !== null) {
@@ -212,6 +222,17 @@ export function fillSingleField(
     return mkField(target, 'failed', el, fieldType, label.label || undefined, undefined,
       err instanceof Error ? err.message : t('formFill.skip.failed', locale));
   }
+}
+
+function hasVisibleControlLabel(element: HTMLElement): boolean {
+  if (!(element instanceof HTMLInputElement)) {
+    return false;
+  }
+  const type = (element.getAttribute('type') ?? 'text').toLowerCase();
+  if (type !== 'checkbox' && type !== 'radio') {
+    return false;
+  }
+  return Array.from(element.labels ?? []).some((label) => isVisibleElement(label));
 }
 
 function mkField(
