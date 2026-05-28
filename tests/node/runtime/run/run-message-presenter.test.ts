@@ -12,10 +12,13 @@ import {
 import type { RuntimeObservationSnapshot } from '../../../../src/runtime/runtime-messages';
 import type { DebugReport } from '../../../../src/shared/schemas/diagnosis.schema';
 import type { AgentMessage } from '../../../../src/shared/schemas/agent-message.schema';
+import type { Locale } from '../../../../src/i18n/types';
+
+const locale: Locale = 'zh';
 
 describe('initialMessages', () => {
   it('creates user task message when includeUserTask is true', () => {
-    const messages = initialMessages('run_1', 'test task', { includeUserTask: true });
+    const messages = initialMessages('run_1', 'test task', locale, { includeUserTask: true });
     
     expect(messages).toHaveLength(1);
     expect(messages[0]).toMatchObject({
@@ -28,7 +31,7 @@ describe('initialMessages', () => {
   });
 
   it('creates observe status message when includeObserveStatus is true', () => {
-    const messages = initialMessages('run_1', 'test task', { includeObserveStatus: true });
+    const messages = initialMessages('run_1', 'test task', locale, { includeObserveStatus: true });
 
     expect(messages).toHaveLength(2);
     expect(messages[0]).toMatchObject({
@@ -48,7 +51,7 @@ describe('initialMessages', () => {
   });
 
   it('creates no messages when both options are false', () => {
-    const messages = initialMessages('run_1', 'test task', {
+    const messages = initialMessages('run_1', 'test task', locale, {
       includeUserTask: false,
       includeObserveStatus: false
     });
@@ -57,14 +60,14 @@ describe('initialMessages', () => {
   });
 
   it('defaults to includeUserTask when no options provided', () => {
-    const messages = initialMessages('run_1', 'test task');
+    const messages = initialMessages('run_1', 'test task', locale);
     
     expect(messages).toHaveLength(1);
     expect(messages[0]?.id).toBe('run_1:task');
   });
 
   it('sets createdAt and updatedAt timestamps', () => {
-    const messages = initialMessages('run_1', 'test task', { includeUserTask: true });
+    const messages = initialMessages('run_1', 'test task', locale, { includeUserTask: true });
     
     expect(messages[0]?.createdAt).toBeTypeOf('number');
     expect(messages[0]?.updatedAt).toBeTypeOf('number');
@@ -85,7 +88,7 @@ describe('pageSummaryMessage', () => {
       warnings: []
     };
     
-    const message = pageSummaryMessage('run_1', observation);
+    const message = pageSummaryMessage('run_1', observation, locale);
     
     expect(message).toMatchObject({
       id: 'run_1:page-summary',
@@ -110,7 +113,7 @@ describe('pageSummaryMessage', () => {
       warnings: []
     };
     
-    const message = pageSummaryMessage('run_1', observation);
+    const message = pageSummaryMessage('run_1', observation, locale);
     
     expect(message.createdAt).toBeTypeOf('number');
     expect(message.updatedAt).toBeTypeOf('number');
@@ -138,7 +141,7 @@ describe('diagnosisMessage', () => {
       recommendations: ['Fix the issues']
     };
     
-    const message = diagnosisMessage('run_1', report);
+    const message = diagnosisMessage('run_1', report, locale);
     
     expect(message).toMatchObject({
       id: 'run_1:diagnosis',
@@ -183,7 +186,7 @@ describe('diagnosisMessage', () => {
       recommendations: []
     };
     
-    const message = diagnosisMessage('run_1', report);
+    const message = diagnosisMessage('run_1', report, locale);
     
     expect(message.content).toContain('Finding 1');
     expect(message.content).toContain('Finding 2');
@@ -198,7 +201,7 @@ describe('diagnosisMessage', () => {
       recommendations: []
     };
     
-    const message = diagnosisMessage('run_1', report);
+    const message = diagnosisMessage('run_1', report, locale);
     
     expect(message.content).toBe('暂未发现高置信度问题。');
   });
@@ -221,12 +224,12 @@ describe('agentStatusMessage', () => {
 
 describe('toolStatusMessage', () => {
   it('uses human-readable titles for common page and form tools', () => {
-    expect(toolStatusMessage('run_1', 'bh_page_read_article', 'done')).toMatchObject({
+    expect(toolStatusMessage('run_1', 'bh_page_read_article', 'done', locale)).toMatchObject({
       id: 'run_1:tool-status:正文读取完成',
       title: '正文读取完成',
       content: 'done'
     });
-    expect(toolStatusMessage('run_1', 'bh_form_fill_many', 'filled')).toMatchObject({
+    expect(toolStatusMessage('run_1', 'bh_form_fill_many', 'filled', locale)).toMatchObject({
       id: 'run_1:tool-status:字段填写完成',
       title: '字段填写完成',
       content: 'filled'
@@ -234,7 +237,7 @@ describe('toolStatusMessage', () => {
   });
 
   it('falls back to the raw tool name for unknown tools', () => {
-    expect(toolStatusMessage('run_1', 'bh_custom_tool', 'done')).toMatchObject({
+    expect(toolStatusMessage('run_1', 'bh_custom_tool', 'done', locale)).toMatchObject({
       title: '工具 bh_custom_tool'
     });
   });
@@ -253,10 +256,17 @@ describe('errorMessage', () => {
       content: '工具执行出错'
     });
   });
+
+  it('sets createdAt and updatedAt timestamps', () => {
+    const message = errorMessage('run_1', 'Error', 'Something went wrong');
+    
+    expect(message.createdAt).toBeTypeOf('number');
+    expect(message.updatedAt).toBeTypeOf('number');
+  });
 });
 
 describe('upsertMessage', () => {
-  it('inserts new message', () => {
+  it('adds new message to array', () => {
     const messages: AgentMessage[] = [];
     const message: AgentMessage = {
       id: 'msg_1',

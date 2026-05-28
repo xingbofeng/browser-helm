@@ -5,6 +5,7 @@ export type ProviderConfig = {
   baseUrl: string;
   apiKey: string;
   model: string;
+  allowLocalProviderEndpoints?: boolean;
 };
 
 type ProviderEnv = {

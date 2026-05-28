@@ -150,7 +150,7 @@ type ContextSummaryPayload = {
 };
 
 type ApprovalRequiredPayload = {
-  request: ApprovalRequest;
+  request: ApprovalAuditRequest;
   summary: string;
 };
 
@@ -164,7 +164,7 @@ type StateChangedPayload = {
 ## 规则
 
 - `model_output_received.rawText` 必须保存，parser 失败也不能丢。
-- 写入 trace 前必须经过基础 masking，不能把 API key 或 obvious token 写入 trace。
+- 写入 trace 前必须经过统一 redaction；approval 事件只能包含脱敏后的 audit request，不能把 API key、obvious token 或真实表单字段值写入 trace。
 - ToolResult full data 进入 trace；模型上下文只收 ContextCompactor 摘要。
 - step/tool span 必须记录 `startedAt`、`endedAt`、`durationMs`；TraceEvent envelope 保留事件自身的 `timestamp`。
 - run metadata 必须包含 `schemaVersion`、`promptVersion`、`toolSchemaVersion`、`contextPolicyVersion`、`model`。

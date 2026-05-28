@@ -17,11 +17,9 @@ function deps(overrides = {}) {
       setRecord: vi.fn(),
       setSnapshot: vi.fn(),
       getSnapshot: vi.fn().mockReturnValue({ runId: 'run_1', mode: 'ask', status: 'created' as const }),
-      getRecord: vi.fn().mockReturnValue({ task: 'test', mode: 'ask' as RunMode, tabId: 42, trace: [] as RuntimeEvent[], skipProviderResponse: false }),
+      getRecord: vi.fn().mockReturnValue({ task: 'test', mode: 'ask' as RunMode, tabId: 42, trace: [] as RuntimeEvent[], locale: 'zh' }),
       appendTrace: vi.fn(),
-      notifySnapshotUpdated: vi.fn(),
-      hasProviderScheduled: vi.fn().mockReturnValue(false),
-      markProviderScheduled: vi.fn()
+      notifySnapshotUpdated: vi.fn()
     },
     createToolRouter: vi.fn().mockReturnValue({ execute: vi.fn().mockResolvedValue(succeedObserve), getToolContract: vi.fn() }),
     getActiveTabId: vi.fn().mockResolvedValue(42),
@@ -33,7 +31,7 @@ function deps(overrides = {}) {
     initialMessages: vi.fn().mockReturnValue([]),
     errorMessage: vi.fn().mockReturnValue({ id: 'err', role: 'agent' as const, kind: 'error' as const, status: 'error' as const, title: 'X', content: 'X', createdAt: 0, updatedAt: 0 }),
     enrichDiagnostics: vi.fn().mockResolvedValue({}),
-    scheduleProviderMessage: vi.fn(),
+    executeTool: vi.fn().mockResolvedValue(succeedObserve),
     ...overrides
   };
 }
@@ -55,11 +53,30 @@ describe('RunLifecycleService', () => {
     expect(result.runId).toBe('run_1');
   });
 
-  it('startRun with skipProviderResponse sets messages correctly', async () => {
+  it('startRun with observe-only runKind sets messages correctly', async () => {
     const d = deps();
     const svc = new RunLifecycleService(d);
-    await svc.startRun({ task: 'test', skipProviderResponse: true });
-    expect(d.initialMessages).toHaveBeenCalledWith('run_1', 'test', expect.objectContaining({ includeObserveStatus: true }));
+    await svc.startRun({ task: 'test', runKind: 'observe_only' });
+    expect(d.initialMessages).toHaveBeenCalledWith('run_1', 'test', expect.any(String), expect.objectContaining({ includeObserveStatus: true }));
+  });
+
+  it('startRun records explicit observe-only runKind', async () => {
+    const d = deps();
+    const svc = new RunLifecycleService(d);
+    await svc.startRun({ task: 'test', runKind: 'observe_only' });
+
+    expect(d.store.setRecord).toHaveBeenCalledWith(
+      'run_1',
+      expect.objectContaining({
+        runKind: 'observe_only'
+      })
+    );
+    expect(d.initialMessages).toHaveBeenCalledWith(
+      'run_1',
+      'test',
+      expect.any(String),
+      expect.objectContaining({ includeObserveStatus: true })
+    );
   });
 
   it('cancelRun updates snapshot to cancelled', () => {
@@ -70,17 +87,17 @@ describe('RunLifecycleService', () => {
     expect(d.store.setSnapshot).toHaveBeenCalled();
   });
 
-  it('reviseGoal updates snapshot with new goal', () => {
+  it('reviseGoal updates snapshot with new goal', async () => {
     const d = deps();
     const svc = new RunLifecycleService(d);
-    const snapshot = svc.reviseGoal({ runId: 'run_1', goal: 'new goal' });
+    const snapshot = await svc.reviseGoal({ runId: 'run_1', goal: 'new goal' });
     expect(snapshot.goal?.goal).toBe('new goal');
   });
 
   it('observes successfully for form mode', async () => {
     const d = deps();
     const svc = new RunLifecycleService(d);
-    await svc.observeInitial('run_1', { task: 'test', mode: 'form', tabId: 42, trace: [], skipProviderResponse: false }, 42);
+    await svc.observeInitial('run_1', { task: 'test', mode: 'form', tabId: 42, trace: [], locale: 'zh' }, 42);
     expect(d.createToolRouter).toHaveBeenCalled();
   });
 });

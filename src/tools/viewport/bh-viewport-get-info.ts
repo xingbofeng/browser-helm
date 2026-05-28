@@ -20,12 +20,27 @@ export function bhViewportGetInfo(
     name: TOOL_NAMES.VIEWPORT_GET_INFO,
     title: 'Viewport Get Info',
     description: 'Reads viewport and scroll state for page or iframe',
+    ui: {
+      titleKey: 'tool.title.bh_viewport_get_info',
+      descriptionKey: 'tool.description.bh_viewport_get_info',
+    },
     modes: ['ask', 'debug', 'form', 'act'],
     risk: 'safe',
     argsSchema,
     resultSchema: toolResultSchema,
     async execute(args) {
-      const frameId = parseIframeId(args);
+      const parsedFrameId = parseIframeId(args);
+      if (!parsedFrameId.ok) {
+        return {
+          ok: false,
+          code: ERROR_CODES.IFRAME_ID_INVALID,
+          summary: parsedFrameId.message,
+          error: { message: parsedFrameId.message },
+          changedPage: false,
+          requiresObserve: false
+        };
+      }
+      const frameId = parsedFrameId.frameId;
       const response = await rpc.request({ type: CONTENT_RPC_MESSAGES.VIEWPORT_GET_INFO, ...(frameId === undefined ? {} : { frameId }) });
       if (!response.ok || !('viewport' in response)) {
         const message = response.ok ? 'Viewport info did not return state' : response.message;
@@ -44,13 +59,15 @@ export function bhViewportGetInfo(
   };
 }
 
-export function parseIframeId(args: { target?: string | undefined; iframeId?: string | undefined }): number | undefined {
+export function parseIframeId(
+  args: { target?: string | undefined; iframeId?: string | undefined }
+): { ok: true; frameId?: number | undefined } | { ok: false; message: string } {
   if (args.target !== 'iframe') {
-    return undefined;
+    return { ok: true };
   }
   const match = /^frame_(\d+)$/u.exec(args.iframeId ?? '');
   if (!match) {
-    throw new Error('iframeId must look like frame_<number>');
+    return { ok: false, message: 'iframeId must look like frame_<number>' };
   }
-  return Number(match[1]);
+  return { ok: true, frameId: Number(match[1]) };
 }

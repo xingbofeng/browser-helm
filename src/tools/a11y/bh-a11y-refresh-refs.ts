@@ -5,30 +5,35 @@ import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 import { a11ySnapshotSchema } from '../../shared/schemas/observation.schema';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
+import { t } from '../../i18n/t';
+import type { Locale } from '../../i18n/types';
 import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({});
 
 /**
- * 刷新页面 stable ref 映射，不修改页面状态。
+ * 刷新当前页面的 stable ref 映射。
  *
- * 面向 Ask/Debug/Form 模式的安全工具，在 DOM 变化或 stale ref 错误后重建 a11y
- * 快照和 stable refs。不接受参数，永不触发 approval，返回刷新后的快照，失败时设置
- * `requiresObserve` 以提示需要新的 observation 周期。
+ * 这是 Ask/Debug/Form 模式的安全只读工具，用于在页面变化或 ref 失效后重新生成 a11y snapshot 和 ref map，不改变页面状态，也不会触发 approval。返回值语义是最新可观察元素集合及其 refs。
  */
 export function bhA11yRefreshRefs(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
   return {
     name: 'bh_a11y_refresh_refs',
-    // 页面 DOM 变化后刷新 ref map，重新建立 stable ref 到元素的映射。
+    // 刷新当前页面 stable ref 映射。
     title: 'Refresh Refs',
     description: 'Refreshes the current page ref map',
     modes: ['ask', 'debug', 'form'],
     risk: 'safe',
     argsSchema,
     resultSchema: toolResultSchema,
-    async execute() {
+    ui: {
+      titleKey: 'tool.title.bh_a11y_refresh_refs',
+      descriptionKey: 'tool.description.bh_a11y_refresh_refs',
+    },
+    async execute(_args, ctx) {
+      const locale: Locale = ctx.locale ?? 'zh';
       const response = await rpc.request({ type: CONTENT_RPC_MESSAGES.A11Y_REFRESH_REFS });
       if (!response.ok) {
         return {
@@ -48,8 +53,8 @@ export function bhA11yRefreshRefs(
         return {
           ok: false,
           code: ERROR_CODES.OBSERVATION_FAILED,
-          summary: 'Content RPC did not return a refreshed snapshot',
-          error: { message: 'Content RPC did not return a refreshed snapshot' },
+          summary: t('tool.summary.bh_a11y_refresh_refs.missing', locale),
+          error: { message: t('tool.summary.bh_a11y_refresh_refs.missing', locale) },
           changedPage: false,
           requiresObserve: true
         };
@@ -58,7 +63,7 @@ export function bhA11yRefreshRefs(
       return {
         ok: true,
         code: ERROR_CODES.OK,
-        summary: `Ref map refreshed with ${snapshot.elements.length} refs`,
+        summary: t('tool.summary.bh_a11y_refresh_refs', locale, { count: String(snapshot.elements.length) }),
         data: snapshot,
         changedPage: false,
         requiresObserve: false,

@@ -1,4 +1,5 @@
 import type { RuntimeToolResultSnapshot } from '../../runtime/runtime-messages';
+import { useT } from '../../i18n/context';
 import { formatToolResultFlags, redactPreview } from '../lib/format-tool';
 import { StructuredPayload } from './structured-payload';
 
@@ -8,6 +9,7 @@ type ToolInspectorProps = {
 };
 
 export function ToolInspector({ toolResult, argsPreview }: ToolInspectorProps) {
+  const t = useT();
   return (
     <section className="bh-toolInspector">
       {toolResult ? (
@@ -17,16 +19,16 @@ export function ToolInspector({ toolResult, argsPreview }: ToolInspectorProps) {
               <h3>{toolResult.tool}</h3>
               <p className="bh-toolCode">{toolResult.code}</p>
             </div>
-            <span className="bh-toolStatus">{toolResult.ok ? '执行成功' : '执行失败'}</span>
+            <span className="bh-toolStatus">{toolResult.ok ? t('tool.inspector.success') : t('tool.inspector.failed')}</span>
           </header>
           <p className="bh-toolSummary">{toolResult.summary}</p>
           <ul className="bh-chipList">
             {formatToolResultFlags(toolResult).map((flag) => (
-              <li key={flag}>{flag}</li>
+              <li key={flag}>{t(flag)}</li>
             ))}
           </ul>
           <details>
-            <summary>查看详情</summary>
+            <summary>{t('tool.inspector.viewDetails')}</summary>
             <StructuredPayload value={{
               argsPreview: redactPreview(argsPreview ?? {}),
               result: redactPreview(toolResult.detail ?? {})
@@ -34,7 +36,7 @@ export function ToolInspector({ toolResult, argsPreview }: ToolInspectorProps) {
           </details>
         </article>
       ) : (
-        <p className="bh-emptyState">暂无工具结果</p>
+        <p className="bh-emptyState">{t('tool.inspector.empty')}</p>
       )}
     </section>
   );

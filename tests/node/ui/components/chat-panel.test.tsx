@@ -5,6 +5,7 @@ import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatPanel } from '../../../../src/ui/components/chat-panel';
+import { I18nProvider } from '../../../../src/i18n/context';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -15,26 +16,28 @@ describe('ChatPanel', () => {
 
   it('renders task input, run mode dropdown, and swaps send for pause while streaming', () => {
     const html = renderToString(
-      <ChatPanel
-        task="观察当前页面"
-        mode="act"
-        busy={false}
-        canStop={true}
-        onTaskChange={() => undefined}
-        onModeChange={() => undefined}
-        onStart={() => undefined}
-        onStop={() => undefined}
-      />
+      <I18nProvider initialLocale="en">
+        <ChatPanel
+          task="观察当前页面"
+          mode="act"
+          busy={false}
+          canStop={true}
+          onTaskChange={() => undefined}
+          onModeChange={() => undefined}
+          onStart={() => undefined}
+          onStop={() => undefined}
+        />
+      </I18nProvider>
     );
 
     expect(html).toContain('观察当前页面');
-    expect(html).toContain('动作准备 / Act');
-    expect(html).toContain('aria-label="选择 Run Mode"');
+    expect(html).toContain('Act');
+    expect(html).toContain('aria-label="Select Run Mode"');
     expect(html).toContain('aria-haspopup="listbox"');
     expect(html).not.toContain('<select');
     expect(html).not.toContain('bh-modeSegment');
-    expect(html).toContain('aria-label="暂停回复"');
-    expect(html).not.toContain('aria-label="启动任务"');
+    expect(html).toContain('aria-label="Pause response"');
+    expect(html).not.toContain('aria-label="Start task"');
   });
 
   it('opens the styled run mode menu and selects a mode', () => {
@@ -45,16 +48,18 @@ describe('ChatPanel', () => {
 
     act(() => {
       root.render(
-        <ChatPanel
-          task="观察当前页面"
-          mode="ask"
-          busy={false}
-          canStop={true}
-          onTaskChange={() => undefined}
-          onModeChange={onModeChange}
-          onStart={() => undefined}
-          onStop={() => undefined}
-        />
+        <I18nProvider initialLocale="en">
+          <ChatPanel
+            task="观察当前页面"
+            mode="ask"
+            busy={false}
+            canStop={true}
+            onTaskChange={() => undefined}
+            onModeChange={onModeChange}
+            onStart={() => undefined}
+            onStop={() => undefined}
+          />
+        </I18nProvider>
       );
     });
 
@@ -64,20 +69,22 @@ describe('ChatPanel', () => {
 
     expect(container.querySelector('.bh-modeMenu')).not.toBeNull();
     expect(container.querySelector('.bh-modeSelectArrow')?.getAttribute('data-open')).toBe('true');
-    expect(container.textContent).toContain('调试 / Debug');
+    expect(container.textContent).toContain('Act');
+    expect(container.textContent).not.toContain('Advanced Debug');
+    expect(container.textContent).not.toContain('Execute / Form Strategy');
 
     act(() => {
-      optionButton('调试 / Debug').click();
+      optionButton('Act').click();
     });
 
-    expect(onModeChange).toHaveBeenCalledWith('debug');
+    expect(onModeChange).toHaveBeenCalledWith('act');
     expect(container.querySelector('.bh-modeMenu')).toBeNull();
     root.unmount();
   });
 });
 
 function modeButton(): HTMLButtonElement {
-  const button = document.querySelector<HTMLButtonElement>('button[aria-label="选择 Run Mode"]');
+  const button = document.querySelector<HTMLButtonElement>('button[aria-label="Select Run Mode"]');
   if (!button) {
     throw new Error('mode button not found');
   }

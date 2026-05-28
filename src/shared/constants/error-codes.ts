@@ -33,11 +33,13 @@ export const ERROR_CODE_DEFINITIONS = [
   { number: 3304, code: 'FRAME_REF_MISMATCH', description: 'iframe ref 与目标 frame 不匹配' },
   { number: 3305, code: 'PAGE_CHANGED', description: '页面结构已变更，需重新观察' },
   { number: 3306, code: 'ELEMENT_NOT_FOUND', description: '目标 DOM 元素不存在，需查找替代元素' },
+  { number: 3307, code: 'IFRAME_ID_INVALID', description: 'iframeId 格式无效' },
   { number: 3400, code: 'ELEMENT_STATE_UNREADABLE', description: '元素状态不可读' },
   { number: 3401, code: 'ELEMENT_NOT_ACTIONABLE', description: '元素不可执行目标动作' },
   { number: 3402, code: 'IFRAME_ACTION_UNAUTHORIZED', description: 'iframe 动作未通过 runtime 授权' },
   { number: 3403, code: 'ELEMENT_DISABLED', description: '元素处于禁用状态' },
   { number: 3404, code: 'ACTION_TARGET_MISMATCH', description: '动作目标类型不匹配' },
+  { number: 3405, code: 'FORM_ACTION_UNAUTHORIZED', description: '表单动作未通过 runtime 授权' },
   { number: 3500, code: 'FIELD_LABEL_MISSING', description: '字段 label 缺失' },
   { number: 3501, code: 'FORM_SUBMIT_NOT_FOUND', description: '未找到表单提交控件' },
   { number: 3502, code: 'FORM_FIELDS_UNAVAILABLE', description: '表单字段快照不可用' },
@@ -53,7 +55,9 @@ export const ERROR_CODE_DEFINITIONS = [
   { number: 3512, code: 'FIELD_NOT_WRITABLE', description: '字段不可写' },
   { number: 3513, code: 'FIELD_NOT_VISIBLE', description: '字段不可见' },
   { number: 3514, code: 'CROSS_FORM_FILL_REJECTED', description: '跨表单批量填写已拒绝' },
-  { number: 3515, code: 'SUBMIT_DISABLED', description: '提交按钮处于禁用状态' }
+  { number: 3515, code: 'SUBMIT_DISABLED', description: '提交按钮处于禁用状态' },
+  { number: 3516, code: 'APPROVAL_CONTEXT_STALE', description: '审批上下文已过期，需要重新验证' },
+  { number: 3517, code: 'SUBMIT_TARGET_NOT_READY', description: '提交目标当前不可用' }
 ] as const;
 
 export const ERROR_CODES = {
@@ -91,11 +95,13 @@ export const ERROR_CODES = {
   FRAME_REF_MISMATCH: 'FRAME_REF_MISMATCH',
   PAGE_CHANGED: 'PAGE_CHANGED',
   ELEMENT_NOT_FOUND: 'ELEMENT_NOT_FOUND',
+  IFRAME_ID_INVALID: 'IFRAME_ID_INVALID',
   ELEMENT_STATE_UNREADABLE: 'ELEMENT_STATE_UNREADABLE',
   ELEMENT_NOT_ACTIONABLE: 'ELEMENT_NOT_ACTIONABLE',
   IFRAME_ACTION_UNAUTHORIZED: 'IFRAME_ACTION_UNAUTHORIZED',
   ELEMENT_DISABLED: 'ELEMENT_DISABLED',
   ACTION_TARGET_MISMATCH: 'ACTION_TARGET_MISMATCH',
+  FORM_ACTION_UNAUTHORIZED: 'FORM_ACTION_UNAUTHORIZED',
   FIELD_LABEL_MISSING: 'FIELD_LABEL_MISSING',
   FORM_SUBMIT_NOT_FOUND: 'FORM_SUBMIT_NOT_FOUND',
   FORM_FIELDS_UNAVAILABLE: 'FORM_FIELDS_UNAVAILABLE',
@@ -112,6 +118,8 @@ export const ERROR_CODES = {
   FIELD_NOT_VISIBLE: 'FIELD_NOT_VISIBLE',
   CROSS_FORM_FILL_REJECTED: 'CROSS_FORM_FILL_REJECTED',
   SUBMIT_DISABLED: 'SUBMIT_DISABLED',
+  APPROVAL_CONTEXT_STALE: 'APPROVAL_CONTEXT_STALE',
+  SUBMIT_TARGET_NOT_READY: 'SUBMIT_TARGET_NOT_READY',
 } as const;
 
 export const ERROR_CODE_NUMBERS = Object.fromEntries(

@@ -4,250 +4,35 @@
  * 页面 DOM 层表单填写、验证、合成表单检测、提交执行原语。
  * 这些函数在 content script 上下文中运行，直接操作目标页面 DOM。
  */
-
 import { isSensitiveField } from './sensitive-field';
+import { t } from '../../i18n/t';
+import type { Locale } from '../../i18n/types';
 import { resolveFieldLabel } from './label-resolver';
 import { readFieldValidation } from './validation-reader';
+import { readWritabilityMeta } from './form-writability';
 import { isVisibleElement } from '../a11y/element-finder';
 import type { RefMap } from '../a11y/ref-map';
-import type {
-  FieldWritabilityMeta,
-  DisabledSubmitReason,
-} from '../../shared/schemas/structured-page-data.schema';
+import type { DisabledSubmitReason } from '../../shared/schemas/structured-page-data.schema';
 import type {
   FormVerifyResult,
   FieldVerifyResult,
 } from '../../shared/schemas/form-fill.schema';
+import type {
+  FillFieldResult,
+  FillFieldTarget,
+  FillManyResult,
+  SubmitResult
+} from './form-fill-types';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface FillFieldTarget {
-  fieldRefId: string;
-  value: string;
-  clear?: boolean | undefined;
-}
-
-export interface FillFieldResult {
-  fieldRefId: string;
-  label?: string | undefined;
-  name?: string | undefined;
-  type: string;
-  status: 'filled' | 'skipped' | 'failed' | 'cleared';
-  requestedValue?: string | undefined;
-  actualValuePreview?: string | undefined;
-  maskedActualValue?: string | undefined;
-  skipReason?: string | undefined;
-  error?: string | undefined;
-  retried?: boolean | undefined;
-  changedPage?: boolean | undefined;
-}
-
-export interface FillManyResult {
-  ok: boolean;
-  formRefId?: string | undefined;
-  fields: FillFieldResult[];
-  filledCount: number;
-  skippedCount: number;
-  failedCount: number;
-  changedPage: boolean;
-  requiresObserve: boolean;
-  retried?: boolean | undefined;
-  fallbackAvailable?: boolean | undefined;
-  summary: string;
-}
-
-export interface SyntheticFormGroup {
-  syntheticFormRefId: string;
-  fieldRefIds: string[];
-  submitControlRefId?: string | undefined;
-  label?: string | undefined;
-  hasNativeForm: boolean;
-}
-
-export interface SubmitResult {
-  outcome: 'success' | 'failure' | 'unknown';
-  evidence: {
-    urlChanged?: boolean | undefined;
-    urlAfter?: string | undefined;
-    successTextDetected?: string[] | undefined;
-    successToastDetected?: boolean | undefined;
-    formReset?: boolean | undefined;
-    errorsCleared?: boolean | undefined;
-    visibleErrors?: string[] | undefined;
-    pageUnchanged?: boolean | undefined;
-    currentFormErrors?: string[] | undefined;
-  };
-  summary: string;
-}
-
-// ---------------------------------------------------------------------------
-// 字段可写元数据
-// ---------------------------------------------------------------------------
-
-const HONEYPOT_PATTERNS =
-  /(?:hp_|hpot_|hpn_|honey|bait|trap|spam|bot|captcha|hidden_field|hidden_input|secret_field|internal_field|_token$|csrf$|nonce$)/i;
-
-export function readWritabilityMeta(
-  element: HTMLElement
-): FieldWritabilityMeta | undefined {
-  const tagName = element.tagName.toLowerCase();
-  const isFormElement =
-    element instanceof HTMLInputElement ||
-    element instanceof HTMLSelectElement ||
-    element instanceof HTMLTextAreaElement ||
-    element.getAttribute('contenteditable')?.toLowerCase() === 'true';
-
-  if (!isFormElement) return undefined;
-
-  const isFileUpload =
-    element instanceof HTMLInputElement &&
-    element.getAttribute('type') === 'file';
-  const isContentEditable =
-    element.getAttribute('contenteditable')?.toLowerCase() === 'true';
-  const ariaHidden = element.getAttribute('aria-hidden') === 'true';
-
-  const name = element.getAttribute('name')?.trim() ?? '';
-  const id = element.id?.trim() ?? '';
-  const className = element.className?.toString()?.trim() ?? '';
-
-  let honeypotCandidate = false;
-  if (ariaHidden) {
-    honeypotCandidate = true;
-  } else if (
-    HONEYPOT_PATTERNS.test(name) ||
-    HONEYPOT_PATTERNS.test(id) ||
-    HONEYPOT_PATTERNS.test(className)
-  ) {
-    honeypotCandidate = true;
-  }
-
-  const result: FieldWritabilityMeta = {
-    visible: isVisibleElement(element),
-    readonly: element.getAttribute('readonly') !== null,
-    hidden:
-      (element instanceof HTMLInputElement &&
-        element.getAttribute('type') === 'hidden') ||
-      ariaHidden,
-    isFileUpload,
-    isContentEditable,
-    honeypotCandidate,
-    actualTagName: tagName,
-  };
-
-  if (element instanceof HTMLInputElement) {
-    const t = (element.getAttribute('type') ?? 'text').toLowerCase();
-    if (t === 'checkbox' || t === 'radio') {
-      result.checked = element.checked;
-      result.actualValue = element.checked ? 'true' : 'false';
-    } else if (t === 'file') {
-      result.actualValue =
-        element.files && element.files.length > 0
-          ? `${element.files.length} file(s)`
-          : '';
-    } else {
-      result.actualValue = element.value;
-    }
-  } else if (element instanceof HTMLSelectElement) {
-    result.selectedIndex = element.selectedIndex;
-    result.actualValue = element.value;
-    result.options = Array.from(element.options).map((opt) => ({
-      value: opt.value,
-      label: opt.label || opt.textContent || opt.value,
-      selected: opt.selected,
-    }));
-  } else if (element instanceof HTMLTextAreaElement) {
-    result.actualValue = element.value;
-  } else if (isContentEditable) {
-    result.actualValue = element.textContent ?? '';
-  }
-
-  return result;
-}
-
-// ---------------------------------------------------------------------------
-// 合成表单检测
-// ---------------------------------------------------------------------------
-
-const FIELD_SELECTOR =
-  'input:not([type="hidden"]):not([type="submit"]):not([type="reset"]):not([type="button"]), ' +
-  'select, textarea, [contenteditable="true"]';
-
-const SUBMIT_LIKE_SELECTOR =
-  'button[type="submit"], input[type="submit"], button:not([type])';
-
-export function detectSyntheticForm(
-  document: Document,
-  refMap: RefMap
-): SyntheticFormGroup | undefined {
-  const nativeForms = document.querySelectorAll('form');
-  if (nativeForms.length > 0) return undefined;
-
-  const fields = document.querySelectorAll<HTMLElement>(FIELD_SELECTOR);
-  const visibleFields = Array.from(fields).filter(isVisibleElement);
-  if (visibleFields.length === 0) return undefined;
-
-  // 注册所有字段
-  const fieldRefIds = visibleFields.map((f) => {
-    const label = resolveFieldLabel(f);
-    return refMap.register(f, {
-      role: fieldRole(f),
-      name: label.label || undefined,
-      tagName: f.tagName.toLowerCase(),
-      visible: true,
-      disabled: false,
-    }).refId;
-  });
-
-  // 找附近的可提交控件
-  const submits = document.querySelectorAll<HTMLElement>(SUBMIT_LIKE_SELECTOR);
-  let submitControlRefId: string | undefined;
-
-  for (const s of submits) {
-    if (
-      isVisibleElement(s) &&
-      !(s instanceof HTMLButtonElement && s.disabled) &&
-      !(s instanceof HTMLInputElement && s.disabled)
-    ) {
-      const r = refMap.register(s, {
-        role: 'button',
-        name: s.textContent?.trim() || 'Submit',
-        tagName: s.tagName.toLowerCase(),
-        visible: true,
-        disabled: false,
-      });
-      submitControlRefId = r.refId;
-      break;
-    }
-  }
-
-  const r = refMap.register(document.body, {
-    role: 'form',
-    name: 'synthetic-form',
-    tagName: 'body',
-    visible: true,
-    disabled: false,
-  });
-
-  return {
-    syntheticFormRefId: r.refId,
-    fieldRefIds,
-    submitControlRefId,
-    hasNativeForm: false,
-  };
-}
-
-function fieldRole(element: HTMLElement): string {
-  if (element instanceof HTMLSelectElement) return 'combobox';
-  if (element instanceof HTMLTextAreaElement) return 'textbox';
-  if (element instanceof HTMLInputElement) {
-    const t = (element.getAttribute('type') ?? 'text').toLowerCase();
-    if (t === 'checkbox') return 'checkbox';
-    if (t === 'radio') return 'radio';
-  }
-  return 'textbox';
-}
+export type {
+  FillFieldResult,
+  FillFieldTarget,
+  FillManyResult,
+  SubmitResult,
+  SyntheticFormGroup
+} from './form-fill-types';
+export { readWritabilityMeta } from './form-writability';
+export { detectSyntheticForm } from './synthetic-form-detector';
 
 // ---------------------------------------------------------------------------
 // 字段赋值 helper
@@ -337,7 +122,8 @@ function findRadioWithValue(
 export function fillSingleField(
   document: Document,
   refMap: RefMap,
-  target: FillFieldTarget
+  target: FillFieldTarget,
+  locale: Locale = 'zh'
 ): FillFieldResult {
   const entry = refMap.resolve(target.fieldRefId);
   if (!entry) {
@@ -359,39 +145,39 @@ export function fillSingleField(
     };
   }
 
-  const label = resolveFieldLabel(el);
-  const validation = readFieldValidation(el);
+  const label = resolveFieldLabel(el, locale);
+  const validation = readFieldValidation(el, locale);
   const fieldType = elementType(el);
 
   // guard checks
   if (validation.disabled) {
-    return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, '字段已禁用');
+    return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, t('formFill.skip.disabled', locale));
   }
   if (isSensitiveField(el)) {
-    return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, '敏感字段，跳过自动填写');
+    return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, t('formFill.skip.sensitive', locale));
   }
   if (!isVisibleElement(el)) {
-    return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, '字段不可见');
+    return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, t('formFill.skip.notVisible', locale));
   }
   if (el.getAttribute('readonly') !== null) {
-    return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, '字段只读');
+    return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, t('formFill.skip.readonly', locale));
   }
 
   try {
     if (el instanceof HTMLInputElement) {
-      const t = (el.getAttribute('type') ?? 'text').toLowerCase();
-      if (t === 'file') {
-        return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, '不支持文件上传字段');
+      const inputType = (el.getAttribute('type') ?? 'text').toLowerCase();
+      if (inputType === 'file') {
+        return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, t('formFill.skip.fileUpload', locale));
       }
-      if (t === 'hidden') {
-        return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, '隐藏字段不安全');
+      if (inputType === 'hidden') {
+        return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, t('formFill.skip.hidden', locale));
       }
-      if (t === 'checkbox') {
+      if (inputType === 'checkbox') {
         const want = target.value === 'true' || target.value === 'checked' || target.value === 'on';
         setCheckboxState(el, want);
         return mkField(target, 'filled', el, fieldType, label.label || undefined, el.checked ? 'checked' : 'unchecked');
       }
-      if (t === 'radio') {
+      if (inputType === 'radio') {
         setRadioChecked(el, target.value);
         const checked = document.querySelector<HTMLInputElement>(
           `input[type="radio"][name="${CSS.escape(el.name)}"]:checked`
@@ -412,7 +198,7 @@ export function fillSingleField(
       const ok = setSelectOption(el, target.value);
       return {
         ...mkField(target, ok ? 'filled' : 'failed', el, fieldType, label.label || undefined, ok ? el.value : undefined),
-        error: ok ? undefined : `未找到匹配选项: ${target.value}`,
+        error: ok ? undefined : t('formFill.skip.noMatch', locale, { value: target.value }),
       };
     }
 
@@ -421,10 +207,10 @@ export function fillSingleField(
       return mkField(target, target.clear ? 'cleared' : 'filled', el, fieldType, label.label || undefined, el.textContent ?? '');
     }
 
-    return mkField(target, 'failed', el, fieldType, label.label || undefined, undefined, '不支持的字段类型');
+    return mkField(target, 'failed', el, fieldType, label.label || undefined, undefined, t('formFill.skip.unsupportedType', locale));
   } catch (err) {
     return mkField(target, 'failed', el, fieldType, label.label || undefined, undefined,
-      err instanceof Error ? err.message : '填写失败');
+      err instanceof Error ? err.message : t('formFill.skip.failed', locale));
   }
 }
 
@@ -438,19 +224,27 @@ function mkField(
   skipReason?: string  ,
   error?: string  ,
 ): FillFieldResult {
-  const isSensitive = isSensitiveField(el);
   return {
     fieldRefId: target.fieldRefId,
     label,
     name: el.getAttribute('name')?.trim() || undefined,
     type,
     status,
-    requestedValue: target.value || undefined,
-    actualValuePreview: actual,
-    maskedActualValue: isSensitive ? '[MASKED]' : actual,
+    actualValuePreview: valuePresence(actual),
+    maskedActualValue: actual === undefined ? undefined : '[MASKED]',
     skipReason,
     error,
   };
+}
+
+function valuePresence(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === 'checked' || value === 'unchecked') {
+    return value;
+  }
+  return value.trim() ? 'non-empty' : 'empty';
 }
 
 function elementType(el: HTMLElement): string {
@@ -468,7 +262,8 @@ function elementType(el: HTMLElement): string {
 export function fillManyFields(
   document: Document,
   refMap: RefMap,
-  targets: FillFieldTarget[]
+  targets: FillFieldTarget[],
+  locale: Locale = 'zh'
 ): FillManyResult {
   const fields: FillFieldResult[] = [];
   let filled = 0;
@@ -476,7 +271,7 @@ export function fillManyFields(
   let failed = 0;
 
   for (const t of targets) {
-    const r = fillSingleField(document, refMap, t);
+    const r = fillSingleField(document, refMap, t, locale);
     fields.push(r);
     if (r.status === 'filled' || r.status === 'cleared') filled++;
     else if (r.status === 'skipped') skipped++;
@@ -494,8 +289,8 @@ export function fillManyFields(
     fallbackAvailable: failed > 0,
     summary:
       failed === 0
-        ? `填写成功 ${filled}/${targets.length} 个字段`
-        : `部分字段失败: 已填 ${filled}, 跳过 ${skipped}, 失败 ${failed}`,
+        ? t('formFill.summary.success', locale, { filled: String(filled), total: String(targets.length) })
+        : t('formFill.summary.partial', locale, { filled: String(filled), skipped: String(skipped), failed: String(failed) }),
   };
 }
 
@@ -518,15 +313,16 @@ const ERROR_SELECTORS = [
 export function verifyForm(
   document: Document,
   fieldMap: Map<string, HTMLElement>,
-  submitRefId?: string  
+  submitRefId?: string,
+  locale: Locale = 'zh'
 ): FormVerifyResult {
   const fieldResults: FieldVerifyResult[] = [];
   const missingRequired: FieldVerifyResult[] = [];
   const invalidFields: FieldVerifyResult[] = [];
 
   for (const [refId, el] of fieldMap) {
-    const label = resolveFieldLabel(el);
-    const validation = readFieldValidation(el);
+    const label = resolveFieldLabel(el, locale);
+    const validation = readFieldValidation(el, locale);
     const writable = readWritabilityMeta(el);
 
     const filled = writable ? !!writable.actualValue?.trim() : false;
@@ -541,8 +337,8 @@ export function verifyForm(
       filled,
       validationMessage: validation.validation.message || undefined,
       ariaInvalid: validation.validation.ariaInvalid,
-      actualValuePreview: writable?.actualValue,
-      maskedActualValue: isSensitiveField(el) ? '[MASKED]' : writable?.actualValue,
+      actualValuePreview: valuePresence(writable?.actualValue),
+      maskedActualValue: writable?.actualValue === undefined ? undefined : '[MASKED]',
     };
 
     fieldResults.push(fr);
@@ -614,15 +410,26 @@ export function verifyForm(
 export function executeSubmit(
   document: Document,
   refMap: RefMap,
-  submitTargetRefId?: string  
+  submitTargetRefId?: string,
+  options: { allowDisabledSubmit?: boolean } = {}
 ): 'submitted' | 'dialog_unsupported' | 'no_submit_path' {
   // 优先使用 ref
   if (submitTargetRefId) {
     const entry = refMap.resolve(submitTargetRefId);
     const el = entry?.element;
     if (el instanceof HTMLElement && isVisibleElement(el)) {
-      el.click();
-      return 'submitted';
+      if (
+        (el instanceof HTMLButtonElement && el.disabled) ||
+        (el instanceof HTMLInputElement && el.disabled) ||
+        el.getAttribute('aria-disabled') === 'true'
+      ) {
+        if (!options.allowDisabledSubmit) {
+          return 'no_submit_path';
+        }
+      } else {
+        el.click();
+        return 'submitted';
+      }
     }
   }
 
@@ -635,10 +442,13 @@ export function executeSubmit(
       (btn instanceof HTMLButtonElement && btn.disabled) ||
       (btn instanceof HTMLInputElement && btn.disabled)
     ) {
-      return 'no_submit_path';
+      if (!options.allowDisabledSubmit) {
+        return 'no_submit_path';
+      }
+    } else {
+      btn.click();
+      return 'submitted';
     }
-    btn.click();
-    return 'submitted';
   }
 
   // Enter 回退

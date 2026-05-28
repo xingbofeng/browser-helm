@@ -1,15 +1,21 @@
+import { useT } from '../../i18n/context';
+import type { TranslationKey, TranslationParams } from '../../i18n/types';
+
 type StructuredPayloadProps = {
   value: unknown;
   maxDepth?: number;
 };
 
+type TFunc = (key: TranslationKey, params?: TranslationParams) => string;
+
 export function StructuredPayload({
   value,
   maxDepth = 4
 }: StructuredPayloadProps) {
+  const t = useT();
   return (
     <div className="bh-structuredPayload">
-      <StructuredValue value={value} depth={0} maxDepth={maxDepth} />
+      <StructuredValue value={value} depth={0} maxDepth={maxDepth} t={t} />
     </div>
   );
 }
@@ -17,11 +23,13 @@ export function StructuredPayload({
 function StructuredValue({
   value,
   depth,
-  maxDepth
+  maxDepth,
+  t,
 }: {
   value: unknown;
   depth: number;
   maxDepth: number;
+  t: TFunc;
 }) {
   if (value === null || value === undefined) {
     return <span className="bh-payloadPrimitive is-muted">{String(value)}</span>;
@@ -33,7 +41,7 @@ function StructuredValue({
     return <span className="bh-payloadPrimitive">{String(value)}</span>;
   }
   if (depth >= maxDepth) {
-    return <span className="bh-payloadPrimitive is-muted">{compactLabel(value)}</span>;
+    return <span className="bh-payloadPrimitive is-muted">{compactLabel(value, t)}</span>;
   }
   if (Array.isArray(value)) {
     const items = value as unknown[];
@@ -45,12 +53,14 @@ function StructuredValue({
         {items.slice(0, 12).map((item, index) => (
           <li key={index}>
             <span className="bh-payloadKey">[{index}]</span>
-            <StructuredValue value={item} depth={depth + 1} maxDepth={maxDepth} />
+            <StructuredValue value={item} depth={depth + 1} maxDepth={maxDepth} t={t} />
           </li>
         ))}
         {items.length > 12 ? (
           <li>
-            <span className="bh-payloadPrimitive is-muted">还有 {items.length - 12} 项</span>
+            <span className="bh-payloadPrimitive is-muted">
+              {t('payload.moreItems', { count: String(items.length - 12) })}
+            </span>
           </li>
         ) : null}
       </ol>
@@ -67,7 +77,7 @@ function StructuredValue({
           <div key={key} className="bh-payloadRow">
             <dt>{key}</dt>
             <dd>
-              <StructuredValue value={item} depth={depth + 1} maxDepth={maxDepth} />
+              <StructuredValue value={item} depth={depth + 1} maxDepth={maxDepth} t={t} />
             </dd>
           </div>
         ))}
@@ -75,7 +85,9 @@ function StructuredValue({
           <div className="bh-payloadRow">
             <dt>...</dt>
             <dd>
-              <span className="bh-payloadPrimitive is-muted">还有 {entries.length - 16} 项</span>
+              <span className="bh-payloadPrimitive is-muted">
+                {t('payload.moreItems', { count: String(entries.length - 16) })}
+              </span>
             </dd>
           </div>
         ) : null}
@@ -91,12 +103,12 @@ function StructuredValue({
   return <span className="bh-payloadPrimitive is-muted">[unserializable]</span>;
 }
 
-function compactLabel(value: unknown): string {
+function compactLabel(value: unknown, t: TFunc): string {
   if (Array.isArray(value)) {
-    return `[${value.length} 项]`;
+    return t('payload.arrayCount', { count: String(value.length) });
   }
   if (typeof value === 'object' && value !== null) {
-    return `{${Object.keys(value).length} 项}`;
+    return t('payload.objectCount', { count: String(Object.keys(value).length) });
   }
   return String(value);
 }

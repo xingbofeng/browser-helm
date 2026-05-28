@@ -24,6 +24,10 @@ export function bhFormFindDisabledSubmitReason(
     // 读取 disabled submit 的 confirmed/inferred/unknown 原因，只用于 Form 模式。
     title: 'Find Disabled Submit Reason',
     description: 'Finds the reason a submit button is disabled',
+    ui: {
+      titleKey: 'tool.title.bh_form_find_disabled_submit_reason',
+      descriptionKey: 'tool.description.bh_form_find_disabled_submit_reason',
+    },
     modes: ['form'],
     risk: 'safe',
     argsSchema,

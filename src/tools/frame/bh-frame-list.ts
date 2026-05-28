@@ -23,6 +23,10 @@ export function bhFrameList(
     // 调试跨域 iframe 与动态 widget 时列出当前页面 frame 元信息。
     title: 'Frame List',
     description: 'Lists frame ids and urls for the current page',
+    ui: {
+      titleKey: 'tool.title.bh_frame_list',
+      descriptionKey: 'tool.description.bh_frame_list',
+    },
     modes: ['debug', 'form', 'act'],
     risk: 'safe',
     argsSchema,

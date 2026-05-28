@@ -38,6 +38,7 @@ export function streamingStateFromTrace(trace: RuntimeEvent[]): StreamingState {
   );
   const startedPayload = payloadRecord(streamStarted?.payload);
   const finishedPayload = payloadRecord(streamFinished?.payload);
+  const usagePayload = payloadRecord(finishedPayload.usage);
   const fallbackPayload = payloadRecord(fallbackStarted?.payload);
   const failedPayload = payloadRecord(failed?.payload);
   const lastDeltaPayload = payloadRecord(deltaEvents.at(-1)?.payload);
@@ -47,7 +48,9 @@ export function streamingStateFromTrace(trace: RuntimeEvent[]): StreamingState {
     deltaEvents.length;
   const provider = stringPayload(startedPayload.provider);
   const model = stringPayload(startedPayload.model) ?? stringPayload(finishedPayload.model);
-  const finalText = stringPayload(finishedPayload.finalPreview);
+  const fallbackFinishedPayload = payloadRecord(fallbackFinished?.payload);
+  const finalText = stringPayload(finishedPayload.finalPreview) ??
+    stringPayload(fallbackFinishedPayload.finalPreview);
   const fallbackReason = stringPayload(fallbackPayload.reason) ?? payloadSummary(failed?.payload);
   const cancelledAfterStart = isEventAfter(cancelled, streamStarted);
   return {
@@ -59,6 +62,19 @@ export function streamingStateFromTrace(trace: RuntimeEvent[]): StreamingState {
     ...(model ? { model } : {}),
     ...(failed || fallbackStarted ? { fallbackReason } : {}),
     ...(finalText ? { finalText } : {}),
+    ...(usagePayload.inputTokensEstimate !== undefined &&
+      usagePayload.outputTokensEstimate !== undefined &&
+      usagePayload.totalTokensEstimate !== undefined
+      ? {
+          usage: {
+            inputTokensEstimate: numberPayload(usagePayload.inputTokensEstimate) ?? 0,
+            outputTokensEstimate: numberPayload(usagePayload.outputTokensEstimate) ?? 0,
+            totalTokensEstimate: numberPayload(usagePayload.totalTokensEstimate) ?? 0,
+            costUsdEstimate: numberPayload(usagePayload.costUsdEstimate) ?? null,
+            costEstimateStatus: stringPayload(usagePayload.costEstimateStatus) === 'estimated' ? 'estimated' : 'unpriced'
+          }
+        }
+      : {}),
     ...(streamStarted ? { startedAt: eventTimestamp(streamStarted) } : {}),
     ...(streamFinished ?? fallbackFinished ?? (cancelledAfterStart ? cancelled : undefined)
       ? { finishedAt: eventTimestamp((streamFinished ?? fallbackFinished ?? cancelled) as RuntimeEvent) }

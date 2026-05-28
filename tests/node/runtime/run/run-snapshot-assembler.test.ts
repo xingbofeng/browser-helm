@@ -307,7 +307,7 @@ describe('fallbackSnapshotFields', () => {
         }
       }
     };
-    const fields = fallbackSnapshotFields('form', observeResult);
+    const fields = fallbackSnapshotFields('form', observeResult, 'zh');
     expect(fields.classification).toBeDefined();
     expect(fields.capabilities).toBeDefined();
     expect(fields.goal).toBeDefined();
@@ -340,7 +340,7 @@ describe('fallbackSnapshotFields', () => {
         }
       }
     };
-    const fields = fallbackSnapshotFields('debug', observeResult);
+    const fields = fallbackSnapshotFields('debug', observeResult, 'zh');
     expect(fields.debugReport?.title).toContain('Page Inspector');
   });
 
@@ -352,7 +352,7 @@ describe('fallbackSnapshotFields', () => {
       changedPage: false,
       requiresObserve: false
     };
-    const fields = fallbackSnapshotFields('debug', observeResult);
+    const fields = fallbackSnapshotFields('debug', observeResult, 'zh');
     expect(fields.classification).toBeDefined();
     expect(fields.goal).toBeDefined();
   });

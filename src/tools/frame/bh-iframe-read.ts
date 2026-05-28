@@ -40,13 +40,21 @@ export function bhIframeRead(
     // 读取 iframe 文档或 iframe 内 stable ref 的只读摘要。
     title: 'Read Iframe Target',
     description: 'Reads an iframe document by iframeId or a target by composite stable ref_id',
+    ui: {
+      titleKey: 'tool.title.bh_iframe_read',
+      descriptionKey: 'tool.description.bh_iframe_read',
+    },
     modes: ['ask', 'debug', 'form', 'act'],
     risk: 'safe',
     argsSchema,
     resultSchema: toolResultSchema,
     async execute(args) {
       if ('iframeId' in args) {
-        const frameId = parseIframeId(args.iframeId);
+        const parsedIframeId = parseIframeId(args.iframeId);
+        if (!parsedIframeId.ok) {
+          return failure(ERROR_CODES.IFRAME_ID_INVALID, parsedIframeId.message, false);
+        }
+        const frameId = parsedIframeId.frameId;
         const type = args.mode === 'article'
           ? CONTENT_RPC_MESSAGES.PAGE_READ_ARTICLE
           : CONTENT_RPC_MESSAGES.PAGE_READ_VISIBLE_TEXT;
@@ -124,12 +132,12 @@ export function bhIframeRead(
   };
 }
 
-function parseIframeId(iframeId: string): number {
+function parseIframeId(iframeId: string): { ok: true; frameId: number } | { ok: false; message: string } {
   const match = /^frame_(\d+)$/u.exec(iframeId);
   if (!match) {
-    throw new Error('iframeId must look like frame_<number>');
+    return { ok: false, message: 'iframeId must look like frame_<number>' };
   }
-  return Number(match[1]);
+  return { ok: true, frameId: Number(match[1]) };
 }
 
 function failure(

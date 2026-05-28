@@ -6,6 +6,11 @@ import { promisify } from 'node:util';
 
 import { chromium, type BrowserContext } from '@playwright/test';
 
+import {
+  readDotEnvFile,
+  resolveProviderConfigWithDotEnvFallback,
+  type ProviderConfig
+} from '../src/agent/model/provider-config';
 import { getExtensionId } from '../tests/e2e/helpers/extension-id';
 import { startFixtureServer, type FixtureServer } from '../tests/e2e/helpers/fixture-server';
 
@@ -18,6 +23,7 @@ type DebugConfig = {
   openDevTools: boolean;
   openSidePanelPage: boolean;
   profileDir: string;
+  providerConfig: ProviderConfig | undefined;
   targetUrl: string | undefined;
   exitAfterReady: boolean;
   watch: boolean;
@@ -94,10 +100,21 @@ function readConfig(): DebugConfig {
     profileDir:
       process.env.BROWSER_HELM_DEBUG_PROFILE ??
       mkdtempSync(join(tmpdir(), 'browser-helm-debug-')),
+    providerConfig: resolveDebugProviderConfig(),
     targetUrl: process.env.BROWSER_HELM_DEBUG_URL,
     exitAfterReady: process.env.BROWSER_HELM_DEBUG_EXIT_AFTER_READY === '1',
     watch: process.env.BROWSER_HELM_DEBUG_WATCH === '1'
   };
+}
+
+function resolveDebugProviderConfig(): ProviderConfig | undefined {
+  if (process.env.BROWSER_HELM_DEBUG_SEED_PROVIDER === '0') {
+    return undefined;
+  }
+
+  const dotEnvPath = process.env.BROWSER_HELM_PROVIDER_ENV ?? '.env.development';
+  const dotEnvText = readDotEnvFile(dotEnvPath) || readDotEnvFile('.env');
+  return resolveProviderConfigWithDotEnvFallback(process.env, dotEnvText);
 }
 
 async function launchDebugContext(config: DebugConfig): Promise<BrowserContext> {
@@ -119,6 +136,7 @@ async function openDebugSession(
 ): Promise<DebugSession> {
   const context = await launchDebugContext(config);
   const extensionId = await getExtensionId(context);
+  await seedProviderSettings(context, config.providerConfig);
   const page = await context.newPage();
   await page.goto(targetUrl);
   const tabId = await activeTabId(context);
@@ -137,6 +155,30 @@ async function openDebugSession(
     sidePanelUrl,
     targetUrl
   };
+}
+
+async function seedProviderSettings(
+  context: BrowserContext,
+  providerConfig: ProviderConfig | undefined
+): Promise<void> {
+  if (!providerConfig) {
+    return;
+  }
+
+  const worker =
+    context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
+  await worker.evaluate(async (settings) => {
+    await chrome.storage.local.set({
+      providerSettings: settings
+    });
+  }, {
+    baseUrl: providerConfig.baseUrl,
+    model: providerConfig.model,
+    apiKey: providerConfig.apiKey,
+    ...(typeof providerConfig.allowLocalProviderEndpoints === 'boolean'
+      ? { allowLocalProviderEndpoints: providerConfig.allowLocalProviderEndpoints }
+      : {})
+  });
 }
 
 async function activeTabId(context: BrowserContext): Promise<number> {

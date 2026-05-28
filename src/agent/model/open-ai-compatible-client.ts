@@ -47,6 +47,7 @@ export class OpenAICompatibleClient implements ModelClient {
     const response = await this.fetchImpl(this.completionsUrl(), {
       method: 'POST',
       headers: this.headers(),
+      ...(input.signal ? { signal: input.signal } : {}),
       body: JSON.stringify({
         model: this.config.model,
         messages: input.messages,
@@ -88,6 +89,7 @@ export class OpenAICompatibleClient implements ModelClient {
       const response = await this.fetchImpl(this.completionsUrl(), {
         method: 'POST',
         headers: this.headers(),
+        ...(input.signal ? { signal: input.signal } : {}),
         body: JSON.stringify({
           model: this.config.model,
           messages: input.messages,
@@ -178,11 +180,12 @@ export class OpenAICompatibleClient implements ModelClient {
           }
         ]
       });
+      const supportsStreaming = await this.probeStreamingSupport();
       return {
         ok: true,
         code: ERROR_CODES.OK,
         message: '连接正常',
-        supportsStreaming: true,
+        supportsStreaming,
         model: this.config.model
       };
     } catch (error) {
@@ -228,6 +231,25 @@ export class OpenAICompatibleClient implements ModelClient {
       'content-type': 'application/json',
       authorization: `Bearer ${this.config.apiKey}`
     };
+  }
+
+  private async probeStreamingSupport(): Promise<boolean> {
+    try {
+      await this.streamComplete({
+        runId: 'provider_stream_test',
+        stepIndex: 0,
+        responseFormat: 'text',
+        messages: [
+          {
+            role: 'user',
+            content: 'Reply with the JSON string {"ok":true}.'
+          }
+        ]
+      });
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 

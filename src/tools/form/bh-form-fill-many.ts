@@ -36,14 +36,28 @@ export function bhFormFillMany(
     // 批量填写一个表单的多个字段。
     title: 'Batch Fill Many Fields',
     description: 'Batch-fills multiple form fields with partial-success results.',
+    ui: {
+      titleKey: 'tool.title.bh_form_fill_many',
+      descriptionKey: 'tool.description.bh_form_fill_many',
+    },
     modes: ['form'],
     risk: 'medium',
     argsSchema,
     resultSchema: toolResultSchema,
     async execute(args) {
+      const grant = await rpc.request({
+        type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+        action: 'fill',
+        fieldRefIds: args.fields.map((field) => field.fieldRefId)
+      });
+      if (!grant.ok || !('actionToken' in grant)) {
+        const message = grant.ok ? 'form fill authorization failed' : grant.message;
+        return { ok: false, code: grant.ok ? ERROR_CODES.FORM_ACTION_UNAUTHORIZED : grant.code, summary: message, error: { message }, changedPage: false, requiresObserve: false };
+      }
       const resp = await rpc.request({
         type: CONTENT_RPC_MESSAGES.FORM_FILL_MANY,
         targets: args.fields,
+        actionToken: grant.actionToken,
       });
 
       if (!resp.ok) {

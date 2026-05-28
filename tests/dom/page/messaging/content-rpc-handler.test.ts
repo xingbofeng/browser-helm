@@ -7,6 +7,28 @@ import { CONTENT_RPC_MESSAGES } from '../../../../src/shared/constants/event-nam
 import { ERROR_CODES } from '../../../../src/shared/constants/error-codes';
 
 describe('content-rpc-handler iframe actions', () => {
+  it('waits for a quiet DOM window before reporting page stability', async () => {
+    document.body.innerHTML = '<div id="root"></div>';
+    const handler = new ContentRpcHandler(document);
+    const root = document.getElementById('root')!;
+    setTimeout(() => {
+      root.textContent = 'changed';
+    }, 0);
+
+    const response = await handler.handle({
+      type: CONTENT_RPC_MESSAGES.PAGE_WAIT_UNTIL_STABLE,
+      quietMs: 20
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      stable: true,
+      layoutStableFrames: 2,
+      networkIdle: 'unavailable'
+    });
+    expect('waitedMs' in response && response.waitedMs).toBeGreaterThanOrEqual(20);
+  });
+
   it('resolves submit ref when verifying a filled form', () => {
     document.body.innerHTML = `
       <form>
@@ -22,10 +44,10 @@ describe('content-rpc-handler iframe actions', () => {
     }
     const fieldRefId = snapshot.snapshot.elements.find(
       (element) => element.tagName === 'input'
-    )?.refId;
+    )?.refId ?? '';
     const submitRefId = snapshot.snapshot.elements.find(
       (element) => element.tagName === 'button'
-    )?.refId;
+    )?.refId ?? '';
 
     expect(
       handler.handle({
@@ -39,6 +61,55 @@ describe('content-rpc-handler iframe actions', () => {
         status: 'pass',
         submitAvailable: true
       }
+    });
+  });
+
+  it('requires a one-time form action token for form fill mutations', () => {
+    document.body.innerHTML = '<input id="name" name="name" type="text" />';
+    const handler = new ContentRpcHandler(document);
+    const snapshot = handler.handle({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
+    if (!snapshot.ok || !('snapshot' in snapshot)) {
+      throw new Error('expected snapshot');
+    }
+    const fieldRefId = snapshot.snapshot.elements.find(
+      (element) => element.tagName === 'input'
+    )?.refId ?? '';
+
+    expect(handler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
+      fieldRefId,
+      value: 'Alice'
+    })).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED
+    });
+
+    const grant = handler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+      action: 'fill',
+      fieldRefIds: [fieldRefId]
+    });
+    if (!grant.ok || !('actionToken' in grant)) {
+      throw new Error('expected form action token');
+    }
+
+    expect(handler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
+      fieldRefId,
+      value: 'Alice',
+      actionToken: grant.actionToken
+    })).toMatchObject({
+      ok: true
+    });
+    expect((document.getElementById('name') as HTMLInputElement).value).toBe('Alice');
+    expect(handler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
+      fieldRefId,
+      value: 'Bob',
+      actionToken: grant.actionToken
+    })).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED
     });
   });
 
@@ -59,10 +130,10 @@ describe('content-rpc-handler iframe actions', () => {
     }
     const buttonRef = snapshot.snapshot.elements.find(
       (element) => element.name === '展开详情'
-    )?.refId;
+    )?.refId ?? '';
     const inputRef = snapshot.snapshot.elements.find(
       (element) => element.tagName === 'input'
-    )?.refId;
+    )?.refId ?? '';
 
     expect(
       handler.handle({
@@ -146,7 +217,7 @@ describe('content-rpc-handler iframe actions', () => {
     }
     const buttonRef = snapshot.snapshot.elements.find(
       (element) => element.name === '定位我'
-    )?.refId;
+    )?.refId ?? '';
 
     expect(
       handler.handle({
@@ -186,10 +257,10 @@ describe('content-rpc-handler iframe actions', () => {
     }
     const buttonRef = snapshot.snapshot.elements.find(
       (element) => element.name === '展开详情'
-    )?.refId;
+    )?.refId ?? '';
     const inputRef = snapshot.snapshot.elements.find(
       (element) => element.tagName === 'input'
-    )?.refId;
+    )?.refId ?? '';
 
     expect(
       handler.handle({
@@ -237,10 +308,10 @@ describe('content-rpc-handler iframe actions', () => {
     }
     const buttonRef = snapshot.snapshot.elements.find(
       (element) => element.name === '展开详情'
-    )?.refId;
+    )?.refId ?? '';
     const inputRef = snapshot.snapshot.elements.find(
       (element) => element.tagName === 'input'
-    )?.refId;
+    )?.refId ?? '';
     const grant = handler.handle({
       type: CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE,
       frameId: 4,
@@ -309,7 +380,7 @@ describe('content-rpc-handler iframe actions', () => {
     }
     const buttonRef = snapshot.snapshot.elements.find(
       (element) => element.name === '删除账号'
-    )?.refId;
+    )?.refId ?? '';
     const grant = handler.handle({
       type: CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE,
       frameId: 4,
@@ -345,7 +416,7 @@ describe('content-rpc-handler iframe actions', () => {
     }
     const passwordRef = snapshot.snapshot.elements.find(
       (element) => element.tagName === 'input'
-    )?.refId;
+    )?.refId ?? '';
     const grant = handler.handle({
       type: CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE,
       frameId: 4,

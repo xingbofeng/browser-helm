@@ -6,11 +6,13 @@ import { readPageHealthSummary } from '../dom/page-health-reader';
 import { readPageMetadata } from './page-metadata';
 import { readPageState } from './page-state';
 import { readVisibleText } from './visible-text';
+import type { Locale } from '../../i18n/types';
 
 export type BuildObservationOptions = {
   refMap?: RefMap;
   documentId?: string;
   maxVisibleTextChars?: number;
+  locale?: Locale;
 };
 
 export function buildObservation(
@@ -31,8 +33,9 @@ export function buildObservation(
   const visibleText = readVisibleText(document, visibleTextOptions);
   const pageState = readPageState(document);
   const snapshot = buildA11ySnapshot(document, refMap);
-  const formFields = readFormFields(document, refMap);
-  const pageHealth = readPageHealthSummary(document);
+  const locale = options.locale ?? 'zh';
+  const formFields = readFormFields(document, refMap, locale);
+  const pageHealth = readPageHealthSummary(document, locale);
 
   return {
     url: metadata.url,

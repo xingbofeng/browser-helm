@@ -37,17 +37,18 @@ import {
   snapshotToolResult
 } from './run/run-snapshot-assembler';
 import { RunStore } from './run/run-store';
-import type { RunManagerDeps } from './run/runtime-service-types';
+import type { RunManagerDeps, RunRecord } from './run/runtime-service-types';
 import { approvalRequestForTrace } from './run/runtime-event-utils';
 import { emptyStreamingState, streamingStateFromTrace } from './run/streaming-state';
-import { enrichSnapshotWithDiagnostics } from './run/diagnostics/diagnostic-service';
-import { ProviderResponseService } from './run/provider/provider-response-service';
 import { ToolRuntimePolicy } from './run/tools/tool-runtime-policy';
 import { ToolExecutionService } from './run/tools/tool-execution-service';
 import { DefaultToolRuntimeAdapter } from './run/tools/adapters/default-tool-runtime-adapter';
 import { FormToolRuntimeAdapter } from './run/tools/adapters/form-tool-runtime-adapter';
 import { ToolApprovalFlowRegistry } from './run/tools/approval/tool-approval-flow-registry';
 import { ApprovalService } from './run/tools/approval/approval-service';
+import type { Locale } from '../../i18n/types';
+import { t } from '../../i18n/t';
+import { createProviderClient } from './provider-client-factory';
 
 export class RunManager {
   private readonly store = new RunStore();
@@ -55,7 +56,6 @@ export class RunManager {
   private readonly lifecycle: RunLifecycleService;
   private readonly tools: ToolExecutionService;
   private readonly approvals: ApprovalService;
-  private readonly provider: ProviderResponseService;
 
   constructor(private readonly deps: RunManagerDeps = {}) {
     this.settingsStore = deps.settingsStore ?? new ChromeSettingsStore();
@@ -63,21 +63,8 @@ export class RunManager {
     const approvalManager = new ApprovalManager();
     const withRunMessages = (
       snapshot: RunSnapshot,
-      record: { task: string; trace: RuntimeEvent[]; skipProviderResponse?: boolean }
+      record: { task: string; trace: RuntimeEvent[]; runKind?: RunRecord['runKind']; locale?: Locale }
     ) => this.withRunMessages(snapshot, record);
-
-    this.provider = new ProviderResponseService({
-      settingsStore: this.settingsStore,
-      createProviderModelClient: deps.createProviderModelClient,
-      hasProviderScheduled: (runId) => this.store.hasProviderScheduled(runId),
-      markProviderScheduled: (runId) => this.store.markProviderScheduled(runId),
-      getSnapshot: (runId) => this.store.getSnapshot(runId),
-      setSnapshot: (runId, snapshot) => this.store.setSnapshot(runId, snapshot),
-      appendTrace: (record, event) => this.store.appendTrace(record, event),
-      notifySnapshotUpdated: (runId) => this.store.notifySnapshotUpdated(runId),
-      withRunMessages
-    });
-
     this.lifecycle = new RunLifecycleService({
       store: this.store,
       createToolRouter: (tabId) => this.createToolRouter(tabId),
@@ -87,19 +74,11 @@ export class RunManager {
       fallbackSnapshotFields,
       streamingStateFromTrace,
       emptyStreamingState,
+      settingsStore: this.settingsStore,
+      createProviderModelClient: deps.createProviderModelClient,
       initialMessages,
       errorMessage,
-      enrichDiagnostics: (runId, record, tabId, observeResult, snapshot) =>
-        enrichSnapshotWithDiagnostics({
-          runId,
-          record,
-          tabId,
-          observeResult,
-          snapshot,
-          createContentRpcClient: (targetTabId) => this.createContentRpcClient(targetTabId)
-        }),
-      scheduleProviderMessage: (runId, record, snapshot) =>
-        this.provider.schedule(runId, record, snapshot)
+      executeTool: async (input) => await this.tools.execute(input)
     });
 
     this.tools = new ToolExecutionService({
@@ -120,7 +99,6 @@ export class RunManager {
       approvalRequestForTrace,
       approvalRequiredResultFn: approvalRequiredResult
     });
-
     const flowRegistry = new ToolApprovalFlowRegistry({
       getRecord: (runId) => this.store.getRecord(runId),
       getPendingAction: (requestId) => this.store.getPendingApprovalAction(requestId),
@@ -217,11 +195,13 @@ export class RunManager {
   }
 
   testProviderSettings(input: TestProviderSettingsInput): Promise<RuntimeProviderTestResult> {
-    return this.provider.testProviderSettings({
+    const client = createProviderClient({
       baseUrl: input.baseUrl,
       model: input.model,
-      ...(input.apiKey === undefined ? {} : { apiKey: input.apiKey })
+      apiKey: input.apiKey ?? '',
+      ...(input.allowLocalProviderEndpoints === undefined ? {} : { allowLocalProviderEndpoints: input.allowLocalProviderEndpoints })
     });
+    return client.testConnection();
   }
 
   private createToolRouter(tabId: number): ToolRouter {
@@ -248,23 +228,24 @@ export class RunManager {
 
   private withRunMessages(
     snapshot: RunSnapshot,
-    record: { task: string; trace: RuntimeEvent[]; skipProviderResponse?: boolean }
+    record: { task: string; trace: RuntimeEvent[]; runKind?: RunRecord['runKind']; locale?: Locale }
   ): RunSnapshot {
-    const observeOnly = record.skipProviderResponse === true;
-    const existing = snapshot.messages ?? initialMessages(snapshot.runId, record.task, {
+    const observeOnly = record.runKind === 'observe_only';
+    const locale = record.locale ?? 'zh';
+    const existing = snapshot.messages ?? initialMessages(snapshot.runId, record.task, locale, {
       includeUserTask: !observeOnly,
       includeObserveStatus: observeOnly
     });
     const messages = [...existing];
     completeObserveStatusMessage(messages);
     if (snapshot.observation && observeOnly) {
-      upsertMessage(messages, pageSummaryMessage(snapshot.runId, snapshot.observation));
+      upsertMessage(messages, pageSummaryMessage(snapshot.runId, snapshot.observation, locale));
     }
     if (snapshot.debugReport) {
-      upsertMessage(messages, diagnosisMessage(snapshot.runId, snapshot.debugReport));
+      upsertMessage(messages, diagnosisMessage(snapshot.runId, snapshot.debugReport, locale));
     }
     if (snapshot.error) {
-      upsertMessage(messages, errorMessage(snapshot.runId, '运行出错', snapshot.error.message));
+      upsertMessage(messages, errorMessage(snapshot.runId, t('runtime.error.runError', locale), snapshot.error.message));
     }
     if (snapshot.toolResult && snapshot.toolResult.tool !== TOOL_NAMES.PAGE_OBSERVE) {
       upsertMessage(
@@ -272,7 +253,8 @@ export class RunManager {
         toolStatusMessage(
           snapshot.runId,
           snapshot.toolResult.tool,
-          snapshot.toolResult.summary
+          snapshot.toolResult.summary,
+          locale
         )
       );
     }
@@ -283,7 +265,9 @@ export class RunManager {
     return {
       ...snapshot,
       messages: displayMessages,
-      streaming: streamingStateFromTrace(record.trace)
+      streaming: record.trace.some((event) => event.type.startsWith('model_stream_'))
+        ? streamingStateFromTrace(record.trace)
+        : snapshot.streaming
     };
   }
 }

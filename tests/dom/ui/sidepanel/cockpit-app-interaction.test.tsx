@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeRuntimePort } from '../../../../src/runtime/fake-runtime-port';
 import type { StructuredPageData } from '../../../../src/shared/schemas/structured-page-data.schema';
 import { AdvancedDebugDrawer } from '../../../../src/ui/components/advanced-debug-drawer';
+import { I18nProvider } from '../../../../src/i18n/context';
 import { CockpitApp } from '../../../../src/ui/sidepanel/cockpit-app';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -38,7 +39,7 @@ describe('CockpitApp interaction', () => {
       ]
     });
     await act(async () => {
-      root.render(<CockpitApp runtime={runtime} />);
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} /></I18nProvider>);
       await Promise.resolve();
     });
     await act(async () => {
@@ -91,7 +92,7 @@ describe('CockpitApp interaction', () => {
     const startRun = vi.spyOn(runtime, 'startRun');
 
     await act(async () => {
-      root.render(<CockpitApp runtime={runtime} />);
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} /></I18nProvider>);
       await Promise.resolve();
     });
 
@@ -127,7 +128,7 @@ describe('CockpitApp interaction', () => {
     const runtime = new FakeRuntimePort();
 
     await act(async () => {
-      root.render(<CockpitApp runtime={runtime} />);
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} /></I18nProvider>);
       await Promise.resolve();
     });
 
@@ -174,7 +175,7 @@ describe('CockpitApp interaction', () => {
       ]
     });
     await act(async () => {
-      root.render(<CockpitApp runtime={runtime} targetTabId={123} />);
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} targetTabId={123} /></I18nProvider>);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -227,7 +228,7 @@ describe('CockpitApp interaction', () => {
       ]
     });
     await act(async () => {
-      root.render(<CockpitApp runtime={runtime} initialRunId="run_without_page_message" />);
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} initialRunId="run_without_page_message" /></I18nProvider>);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -276,7 +277,7 @@ describe('CockpitApp interaction', () => {
     });
 
     await act(async () => {
-      root.render(<CockpitApp runtime={runtime} initialRunId="run_executing_tool" />);
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} initialRunId="run_executing_tool" /></I18nProvider>);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -351,7 +352,7 @@ describe('CockpitApp interaction', () => {
     };
 
     await act(async () => {
-      root.render(<CockpitApp runtime={runtime} targetTabId={123} />);
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} targetTabId={123} /></I18nProvider>);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -372,7 +373,7 @@ describe('CockpitApp interaction', () => {
     expect(container.querySelectorAll('[data-message-kind="page_summary"]')).toHaveLength(1);
     expect(startInputs).toHaveLength(2);
     expect(startInputs).toEqual([
-      expect.objectContaining({ task: '观察当前页面', skipProviderResponse: true }),
+      expect.objectContaining({ task: '观察当前页面', runKind: 'observe_only' }),
       expect.objectContaining({ task: 'hello' })
     ]);
     expect(container.textContent).not.toContain('GitHub');
@@ -394,7 +395,7 @@ describe('CockpitApp interaction', () => {
     });
 
     await act(async () => {
-      root.render(<CockpitApp runtime={runtime} />);
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} /></I18nProvider>);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -415,7 +416,8 @@ describe('CockpitApp interaction', () => {
       baseUrl: 'https://api.new.example/v1',
       model: 'gpt-new',
       apiKey: 'sk-new-secret',
-      streamingEnabled: true
+      streamingEnabled: true,
+      allowLocalProviderEndpoints: true
     });
     expect(container.textContent).not.toContain('sk-new-secret');
     root.unmount();
@@ -435,7 +437,7 @@ describe('CockpitApp interaction', () => {
     });
 
     await act(async () => {
-      root.render(<CockpitApp runtime={runtime} />);
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} /></I18nProvider>);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -455,7 +457,8 @@ describe('CockpitApp interaction', () => {
       baseUrl: 'https://api.next.example/v1',
       model: 'gpt-next',
       apiKey: 'sk-existing-secret',
-      streamingEnabled: true
+      streamingEnabled: true,
+      allowLocalProviderEndpoints: true
     });
     expect(container.textContent).not.toContain('sk-existing-secret');
     root.unmount();
@@ -518,7 +521,7 @@ describe('CockpitApp interaction', () => {
     });
 
     await act(async () => {
-      root.render(<CockpitApp runtime={runtime} />);
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} /></I18nProvider>);
       await Promise.resolve();
     });
     await act(async () => {
@@ -579,6 +582,7 @@ describe('CockpitApp interaction', () => {
 
     await act(async () => {
       root.render(
+        <I18nProvider initialLocale="zh">
         <AdvancedDebugDrawer
           structuredPageData={structuredData({
             interactive: [
@@ -595,6 +599,7 @@ describe('CockpitApp interaction', () => {
           })}
           onInspectElement={onInspectElement}
         />
+        </I18nProvider>
       );
       await Promise.resolve();
     });
@@ -634,7 +639,7 @@ describe('CockpitApp interaction', () => {
     });
 
     await act(async () => {
-      root.render(<CockpitApp runtime={runtime} targetTabId={99} />);
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} targetTabId={99} /></I18nProvider>);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -671,7 +676,7 @@ describe('CockpitApp interaction', () => {
     };
 
     await act(async () => {
-      root.render(<CockpitApp runtime={runtime} targetTabId={99} />);
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} targetTabId={99} /></I18nProvider>);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -717,7 +722,7 @@ describe('CockpitApp interaction', () => {
     });
 
     await act(async () => {
-      root.render(<CockpitApp runtime={runtime} />);
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} /></I18nProvider>);
       await Promise.resolve();
     });
     await act(async () => {
@@ -772,7 +777,7 @@ describe('CockpitApp interaction', () => {
     });
 
     await act(async () => {
-      root.render(<CockpitApp runtime={runtime} initialRunId="run_existing" />);
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} initialRunId="run_existing" /></I18nProvider>);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -832,7 +837,7 @@ describe('CockpitApp interaction', () => {
     const executeTool = vi.spyOn(runtime, 'executeTool');
 
     await act(async () => {
-      root.render(<CockpitApp runtime={runtime} initialRunId="run_form_approval" />);
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} initialRunId="run_form_approval" /></I18nProvider>);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -904,11 +909,13 @@ describe('CockpitApp interaction', () => {
 
     await act(async () => {
       root.render(
+        <I18nProvider initialLocale="zh">
         <CockpitApp
           runtime={runtime}
           initialRunId="run_existing"
           targetTabId={99}
         />
+        </I18nProvider>
       );
       await Promise.resolve();
       await Promise.resolve();
@@ -938,7 +945,7 @@ describe('CockpitApp interaction', () => {
     const reviseGoal = vi.spyOn(runtime, 'reviseGoal');
 
     await act(async () => {
-      root.render(<CockpitApp runtime={runtime} initialRunId="run_existing" />);
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} initialRunId="run_existing" /></I18nProvider>);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -976,7 +983,7 @@ describe('CockpitApp interaction', () => {
     });
 
     await act(async () => {
-      root.render(<CockpitApp runtime={runtime} initialRunId="run_complete" />);
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} initialRunId="run_complete" /></I18nProvider>);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -1002,7 +1009,7 @@ describe('CockpitApp interaction', () => {
     });
 
     await act(async () => {
-      root.render(<CockpitApp runtime={runtime} initialRunId="run_executing" />);
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} initialRunId="run_executing" /></I18nProvider>);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -1057,7 +1064,13 @@ function chip(name: string): HTMLButtonElement {
 
 async function expectProviderSettings(
   runtime: FakeRuntimePort,
-  expected: { baseUrl: string; model: string; apiKey: string; streamingEnabled?: boolean }
+  expected: {
+    baseUrl: string;
+    model: string;
+    apiKey: string;
+    streamingEnabled?: boolean;
+    allowLocalProviderEndpoints?: boolean;
+  }
 ): Promise<void> {
   await expect(runtime.getProviderSettings()).resolves.toEqual(expected);
 }

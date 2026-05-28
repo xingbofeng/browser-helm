@@ -1,8 +1,11 @@
 import type { RunMode } from '../../shared/schemas/tool.schema';
+import type { Locale } from '../../i18n/types';
 import type { TaskClassification } from '../../shared/schemas/mode-system.schema';
+import { t } from '../../i18n/t';
 import { classifyTask } from '../task/task-classifier';
 
 type ResolveRunModeInput = {
+  locale?: Locale;
   task: string;
   explicitMode?: RunMode;
 };
@@ -14,11 +17,15 @@ type ResolvedRunMode = {
 };
 
 export function resolveRunMode(input: ResolveRunModeInput): ResolvedRunMode {
-  const classified = classifyTask(input.task);
+  const locale = input.locale ?? 'zh';
+  const classified = classifyTask(input.task, locale);
   if (input.explicitMode) {
     return {
       mode: input.explicitMode,
-      reason: `用户显式选择 ${input.explicitMode} mode；${boundaryReason(input.explicitMode)}`,
+      reason: t('mode.reason.userSelected', locale, {
+        mode: input.explicitMode,
+        boundary: boundaryReason(input.explicitMode, locale),
+      }),
       classification: {
         ...classified,
         taskType: input.explicitMode,
@@ -29,14 +36,14 @@ export function resolveRunMode(input: ResolveRunModeInput): ResolvedRunMode {
 
   return {
     mode: classified.mode,
-    reason: `${classified.reason} ${boundaryReason(classified.mode)}`,
+    reason: `${classified.reason} ${boundaryReason(classified.mode, locale)}`,
     classification: classified
   };
 }
 
-function boundaryReason(mode: RunMode): string {
+function boundaryReason(mode: RunMode, locale: Locale): string {
   if (mode === 'act') {
-    return 'Act 仅用于动作准备和审批边界，不自动执行填写或提交。';
+    return t('mode.boundary.act', locale);
   }
-  return '默认先诊断，再行动。';
+  return t('mode.boundary.default', locale);
 }

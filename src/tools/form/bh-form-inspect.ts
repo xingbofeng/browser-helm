@@ -26,6 +26,10 @@ export function bhFormInspect(
     // 检查当前表单字段和 submit 摘要，不执行填写或提交。
     title: 'Inspect Form',
     description: 'Inspects form fields and submit state',
+    ui: {
+      titleKey: 'tool.title.bh_form_inspect',
+      descriptionKey: 'tool.description.bh_form_inspect',
+    },
     modes: ['debug', 'form'],
     risk: 'safe',
     argsSchema,

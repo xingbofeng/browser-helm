@@ -4,6 +4,8 @@ import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
+import { t } from '../../i18n/t';
+import type { Locale } from '../../i18n/types';
 import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({
@@ -11,25 +13,28 @@ const argsSchema = z.object({
 });
 
 /**
- * 将单个 stable `refId` 解析为当前元素摘要。
+ * 解析 stable ref 对应的当前页面元素。
  *
- * 面向 Ask/Debug/Form 模式的安全只读工具，用于在对特定元素进行检查或诊断之前确认
- * ref 是否仍然有效。`refId` 参数指定要解析的 stable ref；工具永不修改页面、永不
- * 触发 approval，返回当前 ref 摘要或结构化 stale/unavailable 错误。
+ * 这是 Ask/Debug/Form 模式的安全只读工具，用于把 agent 已持有的 refId 重新解析为当前 DOM 元素摘要，不改变页面状态，也不会触发 approval。主要参数是 refId；当 ref 过期时返回需要重新观察的失败结果。
  */
 export function bhA11yResolveRef(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
   return {
     name: 'bh_a11y_resolve_ref',
-    // 将已有 ref_id 解析回当前页面元素摘要，用于确认 ref 是否仍然有效。
+    // 解析 stable ref 对应的页面元素。
     title: 'Resolve Ref',
     description: 'Resolves a stable ref_id to the current page element summary',
     modes: ['ask', 'debug', 'form'],
     risk: 'safe',
     argsSchema,
     resultSchema: toolResultSchema,
-    async execute(args) {
+    ui: {
+      titleKey: 'tool.title.bh_a11y_resolve_ref',
+      descriptionKey: 'tool.description.bh_a11y_resolve_ref',
+    },
+    async execute(args, ctx) {
+      const locale: Locale = ctx.locale ?? 'zh';
       const response = await rpc.request({
         type: CONTENT_RPC_MESSAGES.A11Y_RESOLVE_REF,
         refId: args.refId
@@ -52,8 +57,8 @@ export function bhA11yResolveRef(
         return {
           ok: false,
           code: ERROR_CODES.OBSERVATION_FAILED,
-          summary: 'Content RPC did not return a resolved ref',
-          error: { message: 'Content RPC did not return a resolved ref' },
+          summary: t('tool.summary.bh_a11y_resolve_ref.missing', locale),
+          error: { message: t('tool.summary.bh_a11y_resolve_ref.missing', locale) },
           changedPage: false,
           requiresObserve: true
         };
@@ -61,7 +66,7 @@ export function bhA11yResolveRef(
       return {
         ok: true,
         code: ERROR_CODES.OK,
-        summary: `Resolved ${args.refId}`,
+        summary: t('tool.summary.bh_a11y_resolve_ref', locale, { refId: args.refId }),
         data: response.ref,
         changedPage: false,
         requiresObserve: false,

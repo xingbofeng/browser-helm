@@ -9,30 +9,35 @@ import {
 } from '../../shared/schemas/structured-page-data.schema';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
+import { t } from '../../i18n/t';
+import type { Locale } from '../../i18n/types';
 import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({});
 
 /**
- * 返回当前页面可交互元素的只读列表。
+ * 查找当前页面可交互元素。
  *
- * 面向 Debug/Form 模式的安全工具，供 Agent 在 observation 后获取 ref、role、name、
- * visibility、disabled、selection 等状态，用于动作规划或表单诊断。不接受参数，不修改
- * 页面状态，永不触发 approval，返回交互元素载荷及紧凑上下文摘要。
+ * 这是 Debug/Form 模式的安全只读工具，用于从当前页面读取带 stable ref 的交互元素、状态和警告，不改变页面内容，也不会触发 approval。典型使用时机是 agent 需要重新定位可点击、可输入或可提交元素。
  */
 export function bhA11yFindInteractive(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
   return {
     name: 'bh_a11y_find_interactive',
-    // 读取当前页面可交互元素列表，供 Debug/Form 模式诊断页面结构。
+    // 查找当前页面可交互元素。
     title: 'Find Interactive Elements',
     description: 'Returns read-only interactive elements with refs and state',
     modes: ['debug', 'form'],
     risk: 'safe',
     argsSchema,
     resultSchema: toolResultSchema,
-    async execute() {
+    ui: {
+      titleKey: 'tool.title.bh_a11y_find_interactive',
+      descriptionKey: 'tool.description.bh_a11y_find_interactive',
+    },
+    async execute(_args, ctx) {
+      const locale: Locale = ctx.locale ?? 'zh';
       const response = await rpc.request({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
       if (!response.ok) {
         return failure(response.code, response.message, response.detail, true);
@@ -40,7 +45,7 @@ export function bhA11yFindInteractive(
       if (!('snapshot' in response)) {
         return failure(
           ERROR_CODES.OBSERVATION_FAILED,
-          'Content RPC did not return an a11y snapshot',
+          t('tool.summary.bh_a11y_snapshot.missing', locale),
           undefined,
           true
         );
@@ -58,8 +63,8 @@ export function bhA11yFindInteractive(
         code: ERROR_CODES.OK,
         summary:
           elements.length > 0
-            ? `Found ${elements.length} interactive elements`
-            : 'No interactive elements found',
+            ? t('tool.summary.bh_a11y_find_interactive.found', locale, { count: String(elements.length) })
+            : t('tool.summary.bh_a11y_find_interactive.empty', locale),
         data: payload,
         changedPage: false,
         requiresObserve: false,

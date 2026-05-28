@@ -5,6 +5,7 @@ import {
   type ExecuteToolInput,
   type HighlightRefInput,
   type RuntimeEvent,
+  runtimeEventSchema,
   type RuntimeProviderSettings,
   type RuntimeProviderTestResult,
   type RuntimeResponse,
@@ -16,6 +17,7 @@ import {
 } from './runtime-messages';
 import { ERROR_CODES } from '../shared/constants/error-codes';
 import { RUNTIME_MESSAGES } from '../shared/constants/event-names';
+import type { BrowserHelmDomainPolicy } from '../shared/domain-policy';
 import { ChromeSettingsStore } from '../storage/chrome/chrome-settings-store';
 
 export class ExtensionRuntimePort implements RuntimePort {
@@ -146,6 +148,14 @@ export class ExtensionRuntimePort implements RuntimePort {
     return this.settingsStore.setProviderSettings(settings);
   }
 
+  getDomainPolicy(): Promise<BrowserHelmDomainPolicy | undefined> {
+    return this.settingsStore.getDomainPolicy();
+  }
+
+  setDomainPolicy(policy: BrowserHelmDomainPolicy): Promise<void> {
+    return this.settingsStore.setDomainPolicy(policy);
+  }
+
   async testProviderSettings(
     input: TestProviderSettingsInput
   ): Promise<RuntimeProviderTestResult> {
@@ -196,7 +206,7 @@ function isToolResult(value: unknown): value is RuntimeToolExecutionResult {
 }
 
 function isRuntimeEvent(value: unknown): value is RuntimeEvent {
-  return isRecord(value) && typeof value.runId === 'string' && typeof value.type === 'string';
+  return runtimeEventSchema.safeParse(value).success;
 }
 
 function isProviderTestResult(value: unknown): value is RuntimeProviderTestResult {

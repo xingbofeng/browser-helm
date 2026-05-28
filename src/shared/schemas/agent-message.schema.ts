@@ -50,6 +50,13 @@ export const streamingStateSchema = z.object({
   fallbackUsed: z.boolean().default(false),
   fallbackReason: safeTextSchema.min(1).optional(),
   finalText: safeTextSchema.optional(),
+  usage: z.object({
+    inputTokensEstimate: z.number().int().nonnegative(),
+    outputTokensEstimate: z.number().int().nonnegative(),
+    totalTokensEstimate: z.number().int().nonnegative(),
+    costUsdEstimate: z.number().nonnegative().nullable(),
+    costEstimateStatus: z.enum(['estimated', 'unpriced'])
+  }).optional(),
   startedAt: z.number().int().nonnegative().optional(),
   finishedAt: z.number().int().nonnegative().optional()
 });

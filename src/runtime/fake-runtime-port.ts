@@ -15,31 +15,39 @@ import type {
 } from './runtime-messages';
 import type { RuntimePort } from './runtime-port';
 import { initializeGoalState } from '../agent/goal/goal-state';
+import { readLocale } from '../i18n/locale';
+import { t } from '../i18n/t';
 import { buildPlanState } from '../agent/planning/plan-builder';
+import type { BrowserHelmDomainPolicy } from '../shared/domain-policy';
+import type { Locale } from '../i18n/types';
 
 type FakeRuntimePortInput = {
   snapshots?: RunSnapshot[] | undefined;
   providerSettings?: RuntimeProviderSettings | undefined;
+  domainPolicy?: BrowserHelmDomainPolicy | undefined;
 };
 
 export class FakeRuntimePort implements RuntimePort {
   private nextRunId = 1;
   private providerSettings: RuntimeProviderSettings | undefined;
+  private domainPolicy: BrowserHelmDomainPolicy | undefined;
   private readonly listeners = new Map<string, Set<(event: RuntimeEvent) => void>>();
   private readonly snapshots = new Map<string, RunSnapshot>();
   private readonly seedSnapshots: RunSnapshot[] = [];
 
   constructor(input: FakeRuntimePortInput = {}) {
     this.providerSettings = input.providerSettings;
+    this.domainPolicy = input.domainPolicy;
     for (const snapshot of input.snapshots ?? []) {
       this.snapshots.set(snapshot.runId, snapshot);
       this.seedSnapshots.push(snapshot);
     }
   }
 
-  startRun(input: StartRunInput): Promise<{ runId: string }> {
+  async startRun(input: StartRunInput): Promise<{ runId: string }> {
     const runId = `fake_run_${this.nextRunId}`;
     this.nextRunId += 1;
+    const locale = await readLocale();
     const seed = this.seedSnapshots[this.nextRunId - 2];
     this.snapshots.set(runId, {
       ...(seed ?? {
@@ -52,7 +60,8 @@ export class FakeRuntimePort implements RuntimePort {
       messages: seed?.messages ?? fakeInitialMessages(
         runId,
         input.task,
-        input.skipProviderResponse === true,
+        input.runKind === 'observe_only',
+        locale,
         seed
       ),
       streaming: seed?.streaming ?? {
@@ -74,13 +83,14 @@ export class FakeRuntimePort implements RuntimePort {
 
   async cancelRun(runId: string): Promise<void> {
     const snapshot = await this.getRunSnapshot(runId);
+    const locale = await readLocale();
     this.snapshots.set(runId, {
       ...snapshot,
       status: 'cancelled',
       pendingApproval: undefined,
       messages: [
-        ...(snapshot.messages ?? fakeInitialMessages(runId, runId)),
-        fakeErrorMessage(runId, '运行已取消', '用户已取消当前 BrowserHelm run。')
+        ...(snapshot.messages ?? fakeInitialMessages(runId, runId, false, locale)),
+        fakeErrorMessage(runId, t('runtime.error.runCancelled', locale), t('runtime.error.userCancelled', locale))
       ]
     });
     this.emit(runId, {
@@ -98,7 +108,9 @@ export class FakeRuntimePort implements RuntimePort {
 
   async reviseGoal(input: ReviseGoalInput): Promise<RunSnapshot> {
     const snapshot = await this.getRunSnapshot(input.runId);
+    const locale = await readLocale();
     const goal = initializeGoalState({
+      locale,
       task: input.goal,
       mode: snapshot.mode,
       goal: input.goal,
@@ -108,7 +120,8 @@ export class FakeRuntimePort implements RuntimePort {
       id: `plan_${input.runId}_revised`,
       mode: snapshot.mode,
       task: input.goal,
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      locale
     });
     const event = {
       runId: input.runId,
@@ -269,11 +282,21 @@ export class FakeRuntimePort implements RuntimePort {
     return Promise.resolve();
   }
 
-  testProviderSettings(input: TestProviderSettingsInput): Promise<RuntimeProviderTestResult> {
+  getDomainPolicy(): Promise<BrowserHelmDomainPolicy | undefined> {
+    return Promise.resolve(this.domainPolicy ? { ...this.domainPolicy } : undefined);
+  }
+
+  setDomainPolicy(policy: BrowserHelmDomainPolicy): Promise<void> {
+    this.domainPolicy = { ...policy };
+    return Promise.resolve();
+  }
+
+  async testProviderSettings(input: TestProviderSettingsInput): Promise<RuntimeProviderTestResult> {
+    const locale = await readLocale();
     return Promise.resolve({
       ok: Boolean(input.apiKey),
       code: input.apiKey ? ERROR_CODES.OK : ERROR_CODES.PROVIDER_NOT_CONFIGURED,
-      message: input.apiKey ? '连接正常' : 'Provider API Key is not configured',
+      message: input.apiKey ? t('provider.test.connected', locale) : t('runtime.error.providerApiKeyMissing', locale),
       supportsStreaming: input.streamingEnabled ?? true,
       model: input.model
     });
@@ -290,21 +313,24 @@ function fakeInitialMessages(
   runId: string,
   task: string,
   observeOnly = false,
+  locale: Locale = 'zh',
   seed?: RunSnapshot
 ) {
   const now = Date.now();
   if (observeOnly) {
-    const item = seed?.structuredPageData?.observation.items[0];
+    const item = seed?.structuredPageData?.observation?.items?.[0];
     return [
       {
         id: `${runId}:page-summary`,
         role: 'agent' as const,
         kind: 'page_summary' as const,
         status: 'complete' as const,
-        title: '页面摘要',
+        title: t('page.observation.summary', locale),
         content: item
-          ? `当前页面看起来是“${item.title}”。\n来源：${item.currentDomain}。\n${item.pageStateSummary}`
-          : '当前页面已完成只读观察。',
+          ? t('page.summary.pageLooksLike', locale, { title: item.title }) + '\n' +
+            t('page.summary.source', locale, { domain: item.currentDomain }) + '\n' +
+            item.pageStateSummary
+          : t('page.observation.readonlyDone', locale),
         createdAt: now,
         updatedAt: now
       }

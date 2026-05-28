@@ -3,6 +3,8 @@ import type {
   InteractiveElement,
   StructuredPageData
 } from '../../shared/schemas/structured-page-data.schema';
+import { t } from '../../i18n/t';
+import type { Locale } from '../../i18n/types';
 
 const sensitiveFieldPattern = /api.?key|password|passcode|token|secret|otp|one.?time|captcha|verification.?code|图中的字符|验证码|密码|密钥|令牌/u;
 
@@ -19,27 +21,31 @@ export type ElementsFormsRow = {
   required?: boolean | undefined;
   validationMessage?: string | undefined;
   submitReason?: string | undefined;
+  /** true when the field/button/interactive has a validation error, submit block, or is sensitive. */
+  hasValidationIssue?: boolean | undefined;
 };
 
-export function mergeElementsAndForms(data: StructuredPageData): ElementsFormsRow[] {
+export function mergeElementsAndForms(data: StructuredPageData, locale: Locale = 'zh'): ElementsFormsRow[] {
   const rows = new Map<string, ElementsFormsRow>();
 
   for (const ref of data.refs.items) {
     rows.set(ref.refId, {
       id: ref.refId,
       type: ref.role === 'button' ? 'button' : 'ref',
-      label: safeElementLabel(ref.name ?? '-'),
+      label: safeElementLabel(ref.name ?? '-', locale),
       roleTag: `${ref.role ?? '-'} / ${ref.tagName}`,
-      state: stateText(ref.visible, ref.disabled ?? false),
+      state: stateText(ref.visible, ref.disabled ?? false, locale),
       validation: '-',
       refId: ref.refId,
       visible: ref.visible,
-      disabled: ref.disabled ?? false
+      disabled: ref.disabled ?? false,
+      hasValidationIssue: false
     });
   }
 
   for (const element of data.interactive.items) {
     const existing = rows.get(element.refId);
+    const hasIssue = !element.visible || element.disabled;
     rows.set(element.refId, {
       ...(existing ?? {
         id: element.refId,
@@ -47,11 +53,12 @@ export function mergeElementsAndForms(data: StructuredPageData): ElementsFormsRo
         refId: element.refId
       }),
       type: elementType(element),
-      label: safeElementLabel(element.name ?? existing?.label ?? '-'),
+      label: safeElementLabel(element.name ?? existing?.label ?? '-', locale),
       roleTag: `${element.role ?? '-'} / ${element.tagName}`,
-      state: stateText(element.visible, element.disabled),
+      state: stateText(element.visible, element.disabled, locale),
       visible: element.visible,
-      disabled: element.disabled
+      disabled: element.disabled,
+      hasValidationIssue: existing?.hasValidationIssue ?? hasIssue
     });
   }
 
@@ -62,6 +69,7 @@ export function mergeElementsAndForms(data: StructuredPageData): ElementsFormsRo
       sensitiveFieldIndex += 1;
     }
     const rowRefId = sensitive ? sensitiveRefId(sensitiveFieldIndex) : field.refId;
+    const hasValidationIssue = sensitive || !field.validation.valid || !!field.submit?.disabled;
     rows.set(field.refId, {
       ...(rows.get(field.refId) ?? {
         id: rowRefId,
@@ -69,17 +77,18 @@ export function mergeElementsAndForms(data: StructuredPageData): ElementsFormsRo
       }),
       id: rowRefId,
       type: 'form-field',
-      label: sensitive ? '敏感字段' : field.label ?? field.name ?? '-',
+      label: sensitive ? t('elements.sensitiveField', locale) : field.label ?? field.name ?? '-',
       roleTag: `input / ${sensitive ? 'sensitive' : field.type}`,
-      state: stateText(true, field.disabled),
-      validation: sensitive ? sensitiveValidationText(field) : formValidationText(field),
+      state: stateText(true, field.disabled, locale),
+      validation: sensitive ? sensitiveValidationText(field, locale) : formValidationText(field, locale),
       refId: rowRefId,
       visible: true,
       disabled: field.disabled,
       required: field.required,
-      validationMessage: sensitive ? sensitiveValidationText(field) : field.validation.message,
+      hasValidationIssue,
+      validationMessage: sensitive ? sensitiveValidationText(field, locale) : field.validation.message,
       submitReason: sensitive && field.submit?.reason?.message
-        ? '敏感字段阻止提交'
+        ? t('elements.sensitiveBlockSubmit', locale)
         : field.submit?.reason?.message
     });
   }
@@ -102,22 +111,22 @@ function isSensitiveFieldRow(field: FormFieldSnapshot): boolean {
     ].filter(Boolean).join(' '));
 }
 
-function safeElementLabel(label: string): string {
-  return isSensitiveText(label) ? '敏感元素' : label;
+function safeElementLabel(label: string, locale: Locale): string {
+  return isSensitiveText(label) ? t('elements.sensitiveElement', locale) : label;
 }
 
 function isSensitiveText(value: string): boolean {
   return sensitiveFieldPattern.test(value);
 }
 
-function sensitiveValidationText(field: FormFieldSnapshot): string {
+function sensitiveValidationText(field: FormFieldSnapshot, locale: Locale): string {
   if (!field.validation.valid) {
-    return '敏感字段校验异常';
+    return t('elements.sensitiveValidationError', locale);
   }
   if (field.submit?.disabled) {
-    return '敏感字段阻止提交';
+    return t('elements.sensitiveBlockSubmit', locale);
   }
-  return field.required ? '敏感字段必填已通过' : '敏感字段已通过';
+  return field.required ? t('elements.sensitivePassedRequired', locale) : t('elements.sensitivePassed', locale);
 }
 
 function elementType(element: InteractiveElement): ElementsFormsRow['type'] {
@@ -126,17 +135,18 @@ function elementType(element: InteractiveElement): ElementsFormsRow['type'] {
     : 'interactive';
 }
 
-function stateText(visible: boolean, disabled: boolean): string {
-  const visibility = visible ? '可见' : '隐藏';
-  return disabled ? `${visibility} / 禁用` : `${visibility} / 可用`;
+function stateText(visible: boolean, disabled: boolean, locale: Locale): string {
+  const visibility = visible ? t('elements.visible', locale) : t('elements.hidden', locale);
+  const state = disabled ? t('elements.disabled', locale) : t('elements.enabled', locale);
+  return t('elements.stateText', locale, { visibility, state });
 }
 
-function formValidationText(field: FormFieldSnapshot): string {
+function formValidationText(field: FormFieldSnapshot, locale: Locale): string {
   if (!field.validation.valid) {
-    return field.validation.message ?? '校验异常';
+    return field.validation.message ?? t('elements.validationError', locale);
   }
   if (field.submit?.disabled) {
-    return field.submit.reason?.message ?? '阻止提交';
+    return field.submit.reason?.message ?? t('elements.blockSubmit', locale);
   }
-  return field.required ? '必填已通过' : '通过';
+  return field.required ? t('elements.requiredPassed', locale) : t('elements.passed', locale);
 }

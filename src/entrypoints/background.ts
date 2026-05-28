@@ -1,20 +1,29 @@
 import { BackgroundRuntimeHost } from '../background/runtime/background-runtime-host';
 import {
+  isFloatingPanelOpenNativeMessage,
   isFloatingPanelUrlMessage,
   parseRunSubscription
 } from '../background/runtime/background-message-guards';
 import {
   bindSidePanelToActiveTab,
   bindSidePanelToTab,
+  floatingPanelPathForTab,
   notifySidePanelsActiveTab,
   notifySidePanelsTargetTabChanged,
-  sidePanelPathForTab
+  sidePanelSurfaceFromSender,
+  sidePanelTargetTabIdFromUrl,
+  type SidePanelSurface
 } from '../background/runtime/side-panel-target';
 import { RUNTIME_MESSAGES, SIDE_PANEL_MESSAGES } from '../shared/constants/event-names';
 
 export default defineBackground(() => {
   const host = new BackgroundRuntimeHost();
   const sidePanelPorts = new Set<chrome.runtime.Port>();
+  const sidePanelPortTargets = new Map<chrome.runtime.Port, {
+    surface: SidePanelSurface;
+    targetTabId?: number | undefined;
+  }>();
+  const nativeSidePanelTabIds = new Set<number>();
   // 先绑定 side panel path 到 active tab，再开启 click-to-open
   // 否则用户点击扩展图标时 sidePanel.open() 可能因 path 未绑定而报错
   bindSidePanelToActiveTab()
@@ -46,9 +55,27 @@ export default defineBackground(() => {
     if (port.name !== SIDE_PANEL_MESSAGES.TARGET_PORT) {
       return;
     }
+    const surface = sidePanelSurfaceFromSender({
+      url: port.sender?.url,
+      hasSenderTab: Boolean(port.sender?.tab?.id)
+    });
+    sidePanelPortTargets.set(port, { surface });
+    if (surface === 'native') {
+      const targetTabId = sidePanelTargetTabIdFromUrl(port.sender?.url);
+      if (targetTabId) {
+        registerNativeSidePanelPort(port, targetTabId);
+      } else {
+        void readActiveTabId().then((tabId) => {
+          if (tabId && sidePanelPorts.has(port)) {
+            registerNativeSidePanelPort(port, tabId);
+          }
+        });
+      }
+    }
     sidePanelPorts.add(port);
     port.onDisconnect.addListener(() => {
       sidePanelPorts.delete(port);
+      unregisterSidePanelPort(port);
     });
     void notifySidePanelsActiveTab(sidePanelPorts);
   });
@@ -86,12 +113,94 @@ export default defineBackground(() => {
       const tabId = sender.tab?.id;
       sendResponse({
         ok: Boolean(tabId),
-        ...(tabId ? { url: chrome.runtime.getURL(sidePanelPathForTab(tabId)) } : {})
+        ...(tabId
+          ? {
+              tabId,
+              nativeOpen: nativeSidePanelTabIds.has(tabId),
+              url: chrome.runtime.getURL(floatingPanelPathForTab(tabId))
+            }
+          : {})
       });
       return false;
+    }
+    if (isFloatingPanelOpenNativeMessage(message)) {
+      const tabId = sender.tab?.id;
+      if (!tabId) {
+        sendResponse({ ok: false, opened: false, reason: 'missing_sender_tab' });
+        return false;
+      }
+      if (nativeSidePanelTabIds.has(tabId)) {
+        sendResponse({ ok: true, opened: true, alreadyOpen: true });
+        return false;
+      }
+      void openNativeSidePanel(tabId).then(sendResponse);
+      return true;
     }
     void host.handleMessage(message).then(sendResponse);
     return true;
   });
-});
 
+  function registerNativeSidePanelPort(port: chrome.runtime.Port, tabId: number): void {
+    sidePanelPortTargets.set(port, {
+      surface: 'native',
+      targetTabId: tabId
+    });
+    nativeSidePanelTabIds.add(tabId);
+    void closeFloatingPanel(tabId);
+  }
+
+  function unregisterSidePanelPort(port: chrome.runtime.Port): void {
+    const target = sidePanelPortTargets.get(port);
+    sidePanelPortTargets.delete(port);
+    if (target?.surface !== 'native' || !target.targetTabId) {
+      return;
+    }
+    if (!hasNativeSidePanelPortForTab(target.targetTabId)) {
+      nativeSidePanelTabIds.delete(target.targetTabId);
+    }
+  }
+
+  function hasNativeSidePanelPortForTab(tabId: number): boolean {
+    for (const target of sidePanelPortTargets.values()) {
+      if (target.surface === 'native' && target.targetTabId === tabId) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async function openNativeSidePanel(tabId: number): Promise<{
+    ok: boolean;
+    opened: boolean;
+    reason?: string | undefined;
+  }> {
+    if (!globalThis.chrome?.sidePanel?.open) {
+      return { ok: false, opened: false, reason: 'side_panel_open_unavailable' };
+    }
+    try {
+      await bindSidePanelToTab(tabId);
+      await chrome.sidePanel.open({ tabId });
+      return { ok: true, opened: true };
+    } catch (error) {
+      return {
+        ok: false,
+        opened: false,
+        reason: error instanceof Error ? error.message : 'side_panel_open_failed'
+      };
+    }
+  }
+
+  async function readActiveTabId(): Promise<number | undefined> {
+    if (!globalThis.chrome?.tabs?.query) {
+      return undefined;
+    }
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    return tab?.id;
+  }
+
+  async function closeFloatingPanel(tabId: number): Promise<void> {
+    await chrome.tabs.sendMessage(tabId, {
+      type: SIDE_PANEL_MESSAGES.FLOATING_PANEL_CLOSE
+    }).catch(() => undefined);
+  }
+});

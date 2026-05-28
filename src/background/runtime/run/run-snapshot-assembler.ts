@@ -11,6 +11,8 @@ import { resolveRunMode } from '../../../agent/modes/mode-system';
 import { resolveRuntimeCapabilities } from '../../../runtime/capabilities/runtime-capabilities';
 import { initializeGoalState } from '../../../agent/goal/goal-state';
 import { buildPlanState } from '../../../agent/planning/plan-builder';
+import { t } from '../../../i18n/t';
+import type { Locale } from '../../../i18n/types';
 import {
   buildDebugReport,
   buildFormDoctorFindings,
@@ -135,7 +137,8 @@ export function extractSnapshotFields(trace: TraceEvent[]): Pick<
  */
 export function fallbackSnapshotFields(
   mode: RunMode,
-  observeResult: ToolResult
+  observeResult: ToolResult,
+  locale: Locale,
 ): Pick<
   RunSnapshot,
   | 'classification'
@@ -147,8 +150,9 @@ export function fallbackSnapshotFields(
   | 'findings'
   | 'debugReport'
 > {
-  const task = mode === 'form' ? '诊断当前表单状态' : '检查当前页面健康状态';
+  const task = mode === 'form' ? t('diagnosis.task.diagnoseForm', locale) : t('diagnosis.task.inspectPage', locale);
   const resolvedMode = resolveRunMode({
+    locale,
     task,
     explicitMode: mode
   });
@@ -157,6 +161,7 @@ export function fallbackSnapshotFields(
     shallowDebugAvailable: true
   });
   const goal = initializeGoalState({
+    locale,
     task,
     mode
   });
@@ -164,7 +169,8 @@ export function fallbackSnapshotFields(
     id: `plan_fallback_${Date.now().toString(36)}`,
     mode,
     task,
-    updatedAt: Date.now()
+    updatedAt: Date.now(),
+    locale
   });
 
   const fields: Pick<
@@ -189,23 +195,23 @@ export function fallbackSnapshotFields(
   if (mode === 'form' && observeResult.ok) {
     const observation = observeResult.data as Observation;
     const formData = readFormDataFromObservation(observation);
-    const findings = buildFormDoctorFindings(formData);
+    const findings = buildFormDoctorFindings(formData, locale);
     fields.findings = findings;
     fields.debugReport = buildDebugReport({
-      title: 'Form Doctor 诊断报告',
+      title: t('diagnosis.title.formDoctor', locale),
       findings,
-      recommendations: findings.length > 0 ? ['根据 finding 的 evidence 逐项处理。'] : []
+      recommendations: findings.length > 0 ? [t('diagnosis.recommendation.handleFindings', locale)] : []
     });
   }
   if (mode === 'debug') {
     const observation = observeResult.ok ? observeResult.data as Observation : undefined;
     const pageHealth = observation?.pageHealth;
-    const findings = pageHealth ? buildPageHealthFindings(pageHealth) : [];
+    const findings = pageHealth ? buildPageHealthFindings(pageHealth, locale) : [];
     fields.debugReport = buildDebugReport({
-      title: 'Page Inspector 诊断报告',
+      title: t('diagnosis.title.pageInspector', locale),
       findings,
-      recommendations: findings.length > 0 ? ['根据 finding 的 evidence 逐项处理。'] : [],
-      limitations: pageHealth?.limitations ?? ['暂未收集到可汇总的浅层 debug finding']
+      recommendations: findings.length > 0 ? [t('diagnosis.recommendation.handleFindings', locale)] : [],
+      limitations: pageHealth?.limitations ?? [t('diagnosis.noDebugSignal', locale)]
     });
     fields.findings = findings;
   }

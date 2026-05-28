@@ -28,6 +28,10 @@ export function bhPageObserve(
     // 读取当前页面的 bounded observation，并派生 structured context summary。
     title: 'Page Observe',
     description: 'Observes the current page and returns a bounded summary',
+    ui: {
+      titleKey: 'tool.title.bh_page_observe',
+      descriptionKey: 'tool.description.bh_page_observe',
+    },
     modes: ['ask', 'debug', 'form'],
     risk: 'safe',
     argsSchema,

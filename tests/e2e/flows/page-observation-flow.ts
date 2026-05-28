@@ -62,7 +62,8 @@ export class PageObservationFlow {
     const snapshot = await this.flowContext.sidePanel().runOnTab({
       tabId,
       task: '观察 iframe 表单',
-      mode: 'form'
+      mode: 'form',
+      runKind: 'observe_only'
     });
 
     expect(snapshot).toMatchObject({

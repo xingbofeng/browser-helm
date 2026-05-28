@@ -1,23 +1,24 @@
 import type { RuntimeToolResultSnapshot } from '../../runtime/runtime-messages';
+import type { TranslationKey } from '../../i18n/types';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 
 const sensitiveKeyPattern = /api.?key|password|token|secret|otp|one.?time/i;
 
 export function formatToolResultFlags(
   toolResult: RuntimeToolResultSnapshot | undefined
-): string[] {
+): TranslationKey[] {
   if (!toolResult) {
     return [];
   }
-  const flags: string[] = [];
+  const flags: TranslationKey[] = [];
   if (toolResult.requiresApproval || toolResult.code === ERROR_CODES.APPROVAL_REQUIRED) {
-    flags.push('需要用户确认');
+    flags.push('tool.flag.approvalRequired');
   }
   if (toolResult.requiresObserve) {
-    flags.push('需要重新观察');
+    flags.push('tool.flag.reobserveRequired');
   }
   if (toolResult.changedPage === false) {
-    flags.push('页面未修改');
+    flags.push('tool.flag.pageUnchanged');
   }
   return flags;
 }

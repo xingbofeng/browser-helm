@@ -2,8 +2,12 @@ import { z } from 'zod';
 
 import type { StructuredPageData } from '../shared/schemas/structured-page-data.schema';
 import { runModeSchema, type RunMode } from '../shared/schemas/tool.schema';
-import { RUNTIME_MESSAGES } from '../shared/constants/event-names';
-import type { ApprovalRequest } from '../shared/schemas/approval.schema';
+import {
+  APPROVAL_EVENT_NAMES,
+  RUNTIME_MESSAGES,
+  TRACE_EVENT_NAMES
+} from '../shared/constants/event-names';
+import type { ApprovalUiState } from '../shared/schemas/approval.schema';
 import type { AgentFinding, DebugReport } from '../shared/schemas/diagnosis.schema';
 import type {
   GoalState,
@@ -22,9 +26,11 @@ import type {
 
 export const startRunInputSchema = z.object({
   task: z.string().min(1),
+  goal: z.string().min(1).optional(),
+  successCriteria: z.array(z.string().min(1)).optional(),
+  runKind: z.enum(['observe_only', 'diagnose', 'answer', 'form_assist']).optional(),
   mode: runModeSchema.optional(),
-  tabId: z.number().int().positive().optional(),
-  skipProviderResponse: z.boolean().optional()
+  tabId: z.number().int().positive().optional()
 });
 
 export const executeToolInputSchema = z.object({
@@ -55,7 +61,8 @@ export const providerSettingsInputSchema = z.object({
   baseUrl: z.string().min(1),
   model: z.string().min(1),
   apiKey: z.string().min(1).optional(),
-  streamingEnabled: z.boolean().optional()
+  streamingEnabled: z.boolean().optional(),
+  allowLocalProviderEndpoints: z.boolean().optional()
 });
 
 export const runtimeRequestSchema = z.discriminatedUnion('type', [
@@ -106,6 +113,7 @@ export const runtimeResponseSchema = z.discriminatedUnion('ok', [
 ]);
 
 export type StartRunInput = z.input<typeof startRunInputSchema>;
+export type RunKind = NonNullable<z.infer<typeof startRunInputSchema>['runKind']>;
 export type ExecuteToolInput = z.infer<typeof executeToolInputSchema>;
 export type DecideApprovalInput = z.infer<typeof decideApprovalInputSchema>;
 export type ReviseGoalInput = z.infer<typeof reviseGoalInputSchema>;
@@ -178,7 +186,7 @@ export type RunSnapshot = {
   canInterrupt?: boolean;
   canReviseGoal?: boolean;
   toolResult?: RuntimeToolResultSnapshot;
-  pendingApproval?: ApprovalRequest | undefined;
+  pendingApproval?: ApprovalUiState | undefined;
   messages?: AgentMessage[] | undefined;
   streaming?: StreamingState | undefined;
   trace?: RuntimeEvent[] | undefined;
@@ -192,9 +200,73 @@ export type RuntimeToolExecutionResult = ToolResult;
 export type RuntimeProviderSettings = ProviderSettings;
 export type RuntimeProviderTestResult = ProviderTestResult;
 
+const runtimeEventBaseSchema = z.object({
+  runId: z.string().min(1),
+  timestamp: z.number().int().nonnegative().optional()
+});
+
+const runtimeEventPayloadSchema = z.record(z.string(), z.unknown());
+
+function runtimeEventWithPayload<TType extends string>(type: TType) {
+  return runtimeEventBaseSchema.extend({
+    type: z.literal(type),
+    payload: runtimeEventPayloadSchema.optional()
+  });
+}
+
+export const runtimeEventSchema = z.discriminatedUnion('type', [
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.RUN_STARTED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.RUN_FINISHED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.RUN_FAILED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.RUN_CANCELLED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.TURN_STARTED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.TURN_FINISHED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.MODEL_OUTPUT_RECEIVED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.MODEL_DECISION),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.DECISION_PARSE_FAILED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.TOOL_STARTED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.TOOL_RESULT),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.TOOL_FAILED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.CONTEXT_BUILT),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.CONTEXT_COMPACTED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.CONTEXT_SUMMARY),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.APPROVAL_REQUIRED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.STATE_CHANGED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.TASK_CLASSIFIED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.TOOLS_SELECTED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.CAPABILITIES_RESOLVED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.PLAN_UPDATED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.RECOVERY_ACTION),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.FINDINGS_REPORTED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.DEBUG_REPORT_CREATED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.MODEL_STREAM_STARTED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.MODEL_STREAM_DELTA),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.MODEL_STREAM_FINISHED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.MODEL_STREAM_FAILED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_STARTED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_FINISHED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.PROVIDER_TEST_STARTED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.PROVIDER_TEST_FINISHED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.PROVIDER_TEST_FAILED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.FILL_PLAN_CREATED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.FIELD_FILL_STARTED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.FIELD_FILL_RESULT),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.FORM_VERIFY_RESULT),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.SUBMIT_APPROVAL_REQUESTED),
+  runtimeEventWithPayload(TRACE_EVENT_NAMES.FORM_SUBMIT_RESULT),
+  runtimeEventWithPayload(APPROVAL_EVENT_NAMES.APPROVED),
+  runtimeEventWithPayload(APPROVAL_EVENT_NAMES.DENIED),
+  runtimeEventWithPayload(APPROVAL_EVENT_NAMES.EXPIRED),
+  runtimeEventWithPayload('model_prompt'),
+  runtimeEventBaseSchema.extend({
+    type: z.literal('snapshot_updated')
+  })
+]);
+
+export type RuntimeEventType = z.infer<typeof runtimeEventSchema>['type'];
 export type RuntimeEvent = {
   runId: string;
-  type: string;
-  timestamp?: number;
-  payload?: unknown;
+  type: RuntimeEventType | (string & {});
+  timestamp?: number | undefined;
+  payload?: Record<string, unknown> | undefined;
 };

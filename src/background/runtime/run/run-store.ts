@@ -12,7 +12,6 @@ export class RunStore {
   private readonly snapshots = new Map<string, RunSnapshot>();
   private readonly listeners = new Map<string, Set<(event: RuntimeEvent) => void>>();
   private readonly pendingApprovalActions = new Map<string, ExecuteToolInput>();
-  private readonly providerMessageRunIds = new Set<string>();
 
   createRunId(): string {
     const id = `run_${this.nextId}`;
@@ -92,11 +91,4 @@ export class RunStore {
     this.pendingApprovalActions.delete(requestId);
   }
 
-  hasProviderScheduled(runId: string): boolean {
-    return this.providerMessageRunIds.has(runId);
-  }
-
-  markProviderScheduled(runId: string): void {
-    this.providerMessageRunIds.add(runId);
-  }
 }

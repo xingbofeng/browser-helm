@@ -41,6 +41,7 @@ export class SidePanelPage {
     tabId: number;
     task: string;
     mode: RunMode;
+    runKind?: 'observe_only' | 'diagnose' | 'answer' | 'form_assist';
   }): Promise<RunSnapshot> {
     const page = await this.open(input.tabId);
     return await page.evaluate(async ({ runtimeMessages, ...runInput }) => {
@@ -77,7 +78,9 @@ export class SidePanelPage {
           throw new Error(failureMessage(nextSnapshot, 'Unable to read run snapshot'));
         }
         snapshot = nextSnapshot;
-        if (!['created', 'observing', 'thinking', 'executing_tool'].includes(snapshot.data.status)) {
+        const stillRunning = ['created', 'observing', 'thinking', 'executing_tool'].includes(snapshot.data.status) ||
+          (snapshot.data.status === 'observed' && runInput.runKind !== 'observe_only');
+        if (!stillRunning) {
           break;
         }
         await new Promise((resolve) => setTimeout(resolve, 50));

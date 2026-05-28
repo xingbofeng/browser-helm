@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  preflight:
+    name: Commit preflight checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run preflight checks
+        run: npm run preflight
+
+      - name: Package extension for landing download
+        run: npm run build:landing
+
+      - name: Upload landing artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-helm-landing
+          path: dist/landing/browser-helm-latest.zip
+          retention-days: 14

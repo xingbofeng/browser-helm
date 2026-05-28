@@ -10,7 +10,7 @@ import type { ToolRouter } from '../../../../../tools/core/tool-router';
 import type { RunMode } from '../../../../../shared/schemas/tool.schema';
 
 export type FlowDeps = {
-  getRecord: (runId: string) => { task: string; mode: RunMode; tabId?: number | undefined; trace: RuntimeEvent[]; skipProviderResponse?: boolean | undefined } | undefined;
+  getRecord: (runId: string) => { task: string; mode: RunMode; tabId?: number | undefined; trace: RuntimeEvent[] } | undefined;
   getPendingAction: (requestId: string) => ExecuteToolInput | undefined;
   deletePendingAction: (requestId: string) => void;
   createContentRpcClient: (tabId: number) => ContentRpcClient;

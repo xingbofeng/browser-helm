@@ -11,6 +11,7 @@ import type {
   StartRunInput,
   TestProviderSettingsInput
 } from './runtime-messages';
+import type { BrowserHelmDomainPolicy } from '../shared/domain-policy';
 
 export interface RuntimePort {
   startRun(input: StartRunInput): Promise<{ runId: string }>;
@@ -24,5 +25,7 @@ export interface RuntimePort {
   decideApproval(input: DecideApprovalInput): Promise<RuntimeToolExecutionResult>;
   getProviderSettings(): Promise<RuntimeProviderSettings | undefined>;
   setProviderSettings(settings: RuntimeProviderSettings): Promise<void>;
+  getDomainPolicy(): Promise<BrowserHelmDomainPolicy | undefined>;
+  setDomainPolicy(policy: BrowserHelmDomainPolicy): Promise<void>;
   testProviderSettings(input: TestProviderSettingsInput): Promise<RuntimeProviderTestResult>;
 }

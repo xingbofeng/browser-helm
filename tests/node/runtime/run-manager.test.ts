@@ -50,7 +50,7 @@ describe('RunManager', () => {
       }
     });
 
-    const started = await manager.startRun({ task: '观察页面', mode: 'form' });
+    const started = await manager.startRun({ task: '观察页面', mode: 'form', runKind: 'observe_only' });
     const snapshot = await waitForSnapshot(manager, started.runId, 'observed');
 
     expect(snapshot).toMatchObject({
@@ -98,11 +98,6 @@ describe('RunManager', () => {
     expect(snapshot.trace?.slice(0, 3).every((event) => event.runId === started.runId)).toBe(true);
     expect(snapshot.messages?.some((message) =>
       message.role === 'user' && message.kind === 'task' && message.content === '观察页面'
-    )).toBe(true);
-    expect(snapshot.messages?.some((message) =>
-      message.role === 'agent' &&
-      message.kind === 'page_summary' &&
-      message.content.includes('欢迎注册 - 示例网站')
     )).toBe(false);
     expect(payloadRecord(snapshot.trace?.[0]?.payload)).toMatchObject({
       task: '观察页面',
@@ -188,7 +183,9 @@ describe('RunManager', () => {
           },
           changedPage: true
         };
-      })
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => decisionModel(formFillDecisions('ref_reply', '你真牛逼'))
     });
 
     const started = await manager.startRun({ task: '点击 iframe', mode: 'act' });
@@ -241,7 +238,20 @@ describe('RunManager', () => {
       createContentRpcClient: () => rpcClient(async (message) => {
         expect(message.type).toBe(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
         return observationResponse();
-      })
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => decisionModel([
+        {
+          type: 'tool_call',
+          tool: TOOL_NAMES.DEBUG_COLLECT_PAGE_HEALTH,
+          args: {},
+          reason: '收集页面健康摘要'
+        },
+        {
+          type: 'finish',
+          message: '诊断完成'
+        }
+      ])
     });
 
     const started = await manager.startRun({ task: '观察页面', mode: 'act' });
@@ -275,7 +285,9 @@ describe('RunManager', () => {
       createContentRpcClient: () => rpcClient(async (message) => {
         expect(message.type).toBe(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
         return observationResponse();
-      })
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => decisionModel(formFillDecisions('ref_reply', '你真牛逼'))
     });
 
     const started = await manager.startRun({ task: '诊断表单', mode: 'form' });
@@ -319,7 +331,9 @@ describe('RunManager', () => {
             limitations: ['CDP deep inspection is not used']
           }
         });
-      })
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => decisionModel(formFillDecisions('ref_reply', '你真牛逼'))
     });
 
     const started = await manager.startRun({ task: '检查这个页面有什么错误' });
@@ -345,7 +359,20 @@ describe('RunManager', () => {
       createContentRpcClient: () => rpcClient(async (message) => {
         expect(message.type).toBe(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
         return observationResponse();
-      })
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => decisionModel([
+        {
+          type: 'tool_call',
+          tool: TOOL_NAMES.DEBUG_COLLECT_PAGE_HEALTH,
+          args: {},
+          reason: '收集页面健康摘要'
+        },
+        {
+          type: 'finish',
+          message: '诊断完成'
+        }
+      ])
     });
 
     const started = await manager.startRun({ task: '检查页面错误', mode: 'debug' });
@@ -395,7 +422,9 @@ describe('RunManager', () => {
           },
           changedPage: message.type === CONTENT_RPC_MESSAGES.IFRAME_CLICK
         };
-      })
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => decisionModel(formFillDecisions('ref_reply', '你真牛逼'))
     });
 
     const started = await manager.startRun({ task: '删除账号', mode: 'act' });
@@ -642,6 +671,12 @@ describe('RunManager', () => {
     const manager = new RunManager({
       getActiveTabId: async () => 42,
       createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE) {
+          return {
+            ok: true,
+            actionToken: 'form-fill-token'
+          };
+        }
         if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
           fillManyCalls.push(message.targets);
           return {
@@ -663,6 +698,698 @@ describe('RunManager', () => {
               summary: `填写成功 ${message.targets.length}/${message.targets.length} 个字段`
             }
           };
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_VERIFY) {
+          return {
+            ok: true,
+            verifyResult: {
+              status: 'pass',
+              allValid: true,
+              missingRequired: [],
+              invalidFields: [],
+              fieldResults: [],
+              visibleErrorText: [],
+              submitAvailable: true,
+              warnings: []
+            }
+          };
+        }
+        return observationResponse({
+          title: 'X reply composer',
+          currentDomain: 'x.com',
+          visibleTextSummary: 'Reply Post',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_reply',
+                label: '回复',
+                name: 'reply',
+                type: 'text',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: {
+                  valid: true,
+                  ariaInvalid: false
+                },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => decisionModel(formFillDecisions('ref_reply', '你真牛逼'))
+    });
+
+    const started = await manager.startRun({
+      task: '帮我回复下“你真牛逼”',
+      mode: 'form'
+    });
+    const trace = await waitForToolResult(manager, started.runId, TOOL_NAMES.FORM_VERIFY);
+
+    expect(hasTraceTool(trace, TRACE_EVENT_NAMES.TOOL_STARTED, TOOL_NAMES.FORM_INFER_FILL_PLAN)).toBe(true);
+    expect(hasTraceTool(trace, TRACE_EVENT_NAMES.TOOL_RESULT, TOOL_NAMES.FORM_FILL_MANY, true)).toBe(true);
+    expect(hasTraceTool(trace, TRACE_EVENT_NAMES.TOOL_RESULT, TOOL_NAMES.FORM_VERIFY, true)).toBe(true);
+    expect(fillManyCalls).toEqual([
+      [{ fieldRefId: 'ref_reply', value: '你真牛逼' }]
+    ]);
+  });
+
+  it('auto-fills reply text tasks in act mode through the unified AgentLoop', async () => {
+    const fillManyCalls: unknown[] = [];
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE) {
+          return {
+            ok: true,
+            actionToken: 'form-fill-token'
+          };
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          fillManyCalls.push(message.targets);
+          return {
+            ok: true,
+            fillManyResult: {
+              ok: true,
+              fields: message.targets.map((target) => ({
+                fieldRefId: target.fieldRefId,
+                type: 'text',
+                status: 'filled',
+                actualValuePreview: target.value,
+                maskedActualValue: target.value
+              })),
+              filledCount: message.targets.length,
+              skippedCount: 0,
+              failedCount: 0,
+              changedPage: true,
+              requiresObserve: false,
+              summary: `填写成功 ${message.targets.length}/${message.targets.length} 个字段`
+            }
+          };
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_VERIFY) {
+          return {
+            ok: true,
+            verifyResult: {
+              status: 'pass',
+              allValid: true,
+              missingRequired: [],
+              invalidFields: [],
+              fieldResults: [],
+              visibleErrorText: [],
+              submitAvailable: true,
+              warnings: []
+            }
+          };
+        }
+        return observationResponse({
+          title: 'X reply composer',
+          currentDomain: 'x.com',
+          visibleTextSummary: 'Reply Post',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_reply',
+                label: '回复',
+                name: 'reply',
+                type: 'text',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: {
+                  valid: true,
+                  ariaInvalid: false
+                },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => decisionModel(formFillDecisions('ref_reply', '你真牛逼'))
+    });
+
+    const started = await manager.startRun({
+      task: '帮我回复下“你真牛逼”',
+      mode: 'act'
+    });
+    const trace = await waitForToolResult(manager, started.runId, TOOL_NAMES.FORM_VERIFY);
+
+    expect(hasTraceTool(trace, TRACE_EVENT_NAMES.TOOL_STARTED, TOOL_NAMES.FORM_INFER_FILL_PLAN)).toBe(true);
+    expect(hasTraceTool(trace, TRACE_EVENT_NAMES.TOOL_RESULT, TOOL_NAMES.FORM_FILL_MANY, true)).toBe(true);
+    expect(hasTraceTool(trace, TRACE_EVENT_NAMES.TOOL_RESULT, TOOL_NAMES.FORM_VERIFY, true)).toBe(true);
+    expect(manager.getSnapshot(started.runId).mode).toBe('act');
+    expect(fillManyCalls).toEqual([
+      [{ fieldRefId: 'ref_reply', value: '你真牛逼' }]
+    ]);
+  });
+
+  it('auto-fills the GitHub dashboard ask textarea for Chinese type-into tasks', async () => {
+    const fillManyCalls: unknown[] = [];
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE) {
+          return {
+            ok: true,
+            actionToken: 'form-fill-token'
+          };
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          fillManyCalls.push(message.targets);
+          return {
+            ok: true,
+            fillManyResult: {
+              ok: true,
+              fields: message.targets.map((target) => ({
+                fieldRefId: target.fieldRefId,
+                type: 'textarea',
+                status: 'filled',
+                actualValuePreview: 'non-empty',
+                maskedActualValue: '[MASKED]'
+              })),
+              filledCount: message.targets.length,
+              skippedCount: 0,
+              failedCount: 0,
+              changedPage: true,
+              requiresObserve: false,
+              summary: `填写成功 ${message.targets.length}/${message.targets.length} 个字段`
+            }
+          };
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_VERIFY) {
+          return {
+            ok: true,
+            verifyResult: {
+              status: 'pass',
+              allValid: true,
+              missingRequired: [],
+              invalidFields: [],
+              fieldResults: [],
+              visibleErrorText: [],
+              submitAvailable: true,
+              warnings: []
+            }
+          };
+        }
+        return observationResponse({
+          title: 'GitHub',
+          currentDomain: 'github.com',
+          visibleTextSummary: 'Home Ask anything',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_150',
+                label: 'Find a repository…',
+                type: 'text',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              },
+              {
+                refId: 'ref_166',
+                label: 'Ask anything or type @ to add context',
+                type: 'textarea',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => decisionModel(formFillDecisions('ref_166', '这是什么'))
+    });
+
+    const started = await manager.startRun({
+      task: '帮我给页面的home 下面那个输入框输入一个“这是什么”',
+      mode: 'act'
+    });
+    await waitForToolResult(manager, started.runId, TOOL_NAMES.FORM_VERIFY);
+
+    expect(fillManyCalls).toEqual([
+      [{ fieldRefId: 'ref_166', value: '这是什么' }]
+    ]);
+  });
+
+  it('fills Google search query tasks through unified AgentLoop tool calls in act mode', async () => {
+    const fillManyCalls: unknown[] = [];
+    const modelOutputs = [
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_INFER_FILL_PLAN,
+        args: {
+          userTask: '帮我搜索 “美国”',
+          formSummary: '检测到 1 个字段',
+          fields: [
+            {
+              refId: 'ref_q',
+              label: '搜索',
+              name: 'q',
+              type: 'search',
+              required: false,
+              disabled: false,
+              sensitive: false,
+              valuePreview: 'empty'
+            }
+          ]
+        },
+        reason: '先读取表单填写计划'
+      },
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: {
+          fields: [{ fieldRefId: 'ref_q', value: '美国' }]
+        },
+        reason: '用户明确提供了搜索词，美国 是任务原文子串'
+      },
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_VERIFY,
+        args: { fieldRefIds: ['ref_q'] },
+        reason: '填写后必须验证'
+      },
+      {
+        type: 'finish',
+        message: '已在 Google 搜索框中填入“美国”，并完成验证。'
+      }
+    ];
+    const providerClient: ModelClient = {
+      async complete() {
+        return {
+          text: JSON.stringify(modelOutputs.shift() ?? {
+            type: 'finish',
+            message: 'done'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          fillManyCalls.push(message.targets);
+          return {
+            ok: true,
+            fillManyResult: {
+              ok: true,
+              fields: message.targets.map((target) => ({
+                fieldRefId: target.fieldRefId,
+                type: 'search',
+                status: 'filled',
+                actualValuePreview: 'non-empty',
+                maskedActualValue: '[MASKED]'
+              })),
+              filledCount: message.targets.length,
+              skippedCount: 0,
+              failedCount: 0,
+              changedPage: true,
+              requiresObserve: false,
+              summary: `填写成功 ${message.targets.length}/${message.targets.length} 个字段`
+            }
+          };
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_VERIFY) {
+          return {
+            ok: true,
+            verifyResult: {
+              status: 'pass',
+              allValid: true,
+              missingRequired: [],
+              invalidFields: [],
+              fieldResults: [],
+              visibleErrorText: [],
+              submitAvailable: true,
+              warnings: []
+            }
+          };
+        }
+        return observationResponse({
+          title: 'Google',
+          currentDomain: 'www.google.com',
+          visibleTextSummary: 'Google Search',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_q',
+                label: '搜索',
+                name: 'q',
+                type: 'search',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'planner-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: false
+          };
+        },
+        async setProviderSettings() {}
+      },
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '帮我搜索 “美国”',
+      mode: 'act'
+    });
+    const trace = await waitForToolResult(manager, started.runId, TOOL_NAMES.FORM_VERIFY);
+
+    expect(hasTraceTool(trace, TRACE_EVENT_NAMES.TOOL_STARTED, TOOL_NAMES.FORM_INFER_FILL_PLAN)).toBe(true);
+    expect(hasTraceTool(trace, TRACE_EVENT_NAMES.TOOL_RESULT, TOOL_NAMES.FORM_FILL_MANY, true)).toBe(true);
+    expect(hasTraceTool(trace, TRACE_EVENT_NAMES.TOOL_RESULT, TOOL_NAMES.FORM_VERIFY, true)).toBe(true);
+    expect(trace.some((event) => event.type === TRACE_EVENT_NAMES.MODEL_DECISION)).toBe(true);
+    expect(JSON.stringify(trace)).not.toContain('form_fill_planner');
+    expect(JSON.stringify(trace)).not.toContain('provider_plan_');
+    expect(fillManyCalls).toEqual([
+      [{ fieldRefId: 'ref_q', value: '美国' }]
+    ]);
+  });
+
+  it('rejects unified AgentLoop form fill values that are not explicit user task substrings', async () => {
+    const fillManyCalls: unknown[] = [];
+    const providerClient: ModelClient = {
+      async complete() {
+        return {
+          text: JSON.stringify({
+            type: 'tool_call',
+            tool: TOOL_NAMES.FORM_FILL_MANY,
+            args: {
+              fields: [{ fieldRefId: 'ref_email', value: 'user@example.com' }]
+            },
+            reason: '模型不能编造邮箱'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          fillManyCalls.push(message.targets);
+        }
+        return observationResponse({
+          title: 'Signup',
+          currentDomain: 'example.com',
+          visibleTextSummary: 'Email',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_email',
+                label: '邮箱',
+                name: 'email',
+                type: 'email',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'runtime-loop-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: false
+          };
+        },
+        async setProviderSettings() {}
+      },
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '帮我填一下表单',
+      mode: 'act'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'waiting_for_user');
+
+    expect(fillManyCalls).toEqual([]);
+    expect(hasTraceTool(snapshot.trace ?? [], TRACE_EVENT_NAMES.TOOL_RESULT, TOOL_NAMES.FORM_FILL_MANY)).toBe(false);
+    expect(snapshot.error?.message).toContain('explicit value');
+  });
+
+  it('answers ask tasks through unified AgentLoop terminal decisions instead of provider-only response messages', async () => {
+    const providerClient: ModelClient = {
+      async complete() {
+        return {
+          text: JSON.stringify({
+            type: 'finish',
+            message: '这是统一 AgentLoop 生成的页面总结。'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse({
+        title: 'Example',
+        currentDomain: 'example.com',
+        visibleTextSummary: 'Example content'
+      })),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'runtime-loop-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: false
+          };
+        },
+        async setProviderSettings() {}
+      },
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '总结这个页面',
+      mode: 'ask'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'finished');
+
+    expect(snapshot.trace?.some((event) => event.type === TRACE_EVENT_NAMES.MODEL_DECISION)).toBe(true);
+    expect(snapshot.trace?.some((event) => event.type === TRACE_EVENT_NAMES.RUN_FINISHED)).toBe(true);
+    expect(snapshot.messages?.some((message) => message.id === `${started.runId}:provider-response`)).toBe(false);
+    expect(snapshot.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `${started.runId}:agent-final`,
+          content: '这是统一 AgentLoop 生成的页面总结。'
+        })
+      ])
+    );
+  });
+
+  it('uses unified AgentLoop tool calls to choose the field when form fill candidates are ambiguous', async () => {
+    const fillManyCalls: unknown[] = [];
+    const completeCalls: string[] = [];
+    const modelOutputs = [
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: {
+          fields: [{ fieldRefId: 'ref_166', value: '这是什么' }]
+        },
+        reason: '用户指定 Home 下方输入框，ref_166 的 textarea 更匹配'
+      },
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_VERIFY,
+        args: { fieldRefIds: ['ref_166'] },
+        reason: '填写后验证'
+      },
+      {
+        type: 'finish',
+        message: '已填写并验证。'
+      }
+    ];
+    const providerClient: ModelClient = {
+      async complete(input) {
+        completeCalls.push(input.messages.map((message) => message.content).join('\n'));
+        return {
+          text: JSON.stringify(modelOutputs.shift() ?? {
+            type: 'finish',
+            message: 'done'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          fillManyCalls.push(message.targets);
+          return {
+            ok: true,
+            fillManyResult: {
+              ok: true,
+              fields: message.targets.map((target) => ({
+                fieldRefId: target.fieldRefId,
+                type: 'textarea',
+                status: 'filled',
+                actualValuePreview: 'non-empty',
+                maskedActualValue: '[MASKED]'
+              })),
+              filledCount: message.targets.length,
+              skippedCount: 0,
+              failedCount: 0,
+              changedPage: true,
+              requiresObserve: false,
+              summary: `填写成功 ${message.targets.length}/${message.targets.length} 个字段`
+            }
+          };
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_VERIFY) {
+          return {
+            ok: true,
+            verifyResult: {
+              status: 'pass',
+              allValid: true,
+              missingRequired: [],
+              invalidFields: [],
+              fieldResults: [],
+              visibleErrorText: [],
+              submitAvailable: true,
+              warnings: []
+            }
+          };
+        }
+        return observationResponse({
+          title: 'GitHub',
+          currentDomain: 'github.com',
+          visibleTextSummary: 'Home Ask anything',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_150',
+                label: 'Find a repository…',
+                type: 'text',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              },
+              {
+                refId: 'ref_166',
+                label: 'Ask anything or type @ to add context',
+                type: 'textarea',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'planner-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: false
+          };
+        },
+        async setProviderSettings() {}
+      },
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '帮我给页面的home 下面那个输入框输入一个“这是什么”',
+      mode: 'act'
+    });
+    const trace = await waitForToolResult(manager, started.runId, TOOL_NAMES.FORM_VERIFY);
+
+    expect(fillManyCalls).toEqual([
+      [{ fieldRefId: 'ref_166', value: '这是什么' }]
+    ]);
+    expect(completeCalls.length).toBeGreaterThan(0);
+    expect(trace.some((event) => event.type === TRACE_EVENT_NAMES.MODEL_DECISION)).toBe(true);
+    expect(JSON.stringify(trace)).not.toContain('form_fill_planner');
+    expect(JSON.stringify(trace)).not.toContain('sk-test-secret');
+  });
+
+  it('asks the user to switch to act instead of filling in ask mode', async () => {
+    const fillManyCalls: unknown[] = [];
+    const rpcCalls: string[] = [];
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        rpcCalls.push(message.type);
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          fillManyCalls.push(message.targets);
         }
         return observationResponse({
           title: 'X reply composer',
@@ -699,25 +1426,139 @@ describe('RunManager', () => {
 
     const started = await manager.startRun({
       task: '帮我回复下“你真牛逼”',
-      mode: 'form'
+      mode: 'ask'
     });
-    const trace = await waitForToolResult(manager, started.runId, TOOL_NAMES.FORM_FILL_MANY);
+    const snapshot = await waitForSnapshot(manager, started.runId, 'waiting_for_user');
 
-    expect(trace).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: TRACE_EVENT_NAMES.TOOL_STARTED,
-          payload: expect.objectContaining({ tool: TOOL_NAMES.FORM_INFER_FILL_PLAN })
-        }),
-        expect.objectContaining({
-          type: TRACE_EVENT_NAMES.TOOL_RESULT,
-          payload: expect.objectContaining({ tool: TOOL_NAMES.FORM_FILL_MANY, ok: true })
-        })
-      ])
-    );
-    expect(fillManyCalls).toEqual([
-      [{ fieldRefId: 'ref_reply', value: '你真牛逼' }]
-    ]);
+    expect(fillManyCalls).toEqual([]);
+    expect(rpcCalls).toEqual([]);
+    expect(hasTraceTool(manager.getSnapshot(started.runId).trace ?? [], TRACE_EVENT_NAMES.TOOL_RESULT, TOOL_NAMES.FORM_FILL_MANY)).toBe(false);
+    expect(snapshot.messages?.some((message) =>
+      message.kind === 'recommendation' &&
+      message.title === '需要切换到执行模式' &&
+      message.content.includes('执行 / Act')
+    )).toBe(true);
+    expect(snapshot.trace?.some((event) =>
+      event.type === TRACE_EVENT_NAMES.STATE_CHANGED &&
+      payloadRecord(event.payload).reason === 'ask_mode_action_intent_requires_act'
+    )).toBe(true);
+  });
+
+  it('does not auto-fill read-only tasks in act mode', async () => {
+    const fillManyCalls: unknown[] = [];
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          fillManyCalls.push(message.targets);
+        }
+        return observationResponse({
+          title: 'Search page',
+          currentDomain: 'example.com',
+          visibleTextSummary: 'Search',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_search',
+                label: '搜索',
+                name: 'q',
+                type: 'text',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: {
+                  valid: true,
+                  ariaInvalid: false
+                },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      })
+    });
+
+    const started = await manager.startRun({
+      task: '总结一下这个页面',
+      mode: 'act'
+    });
+    await waitForSnapshot(manager, started.runId, 'observed');
+
+    expect(fillManyCalls).toEqual([]);
+    expect(hasTraceTool(manager.getSnapshot(started.runId).trace ?? [], TRACE_EVENT_NAMES.TOOL_RESULT, TOOL_NAMES.FORM_FILL_MANY)).toBe(false);
+  });
+
+  it('does not auto-fill sensitive or non-empty fields in act mode', async () => {
+    const fillManyCalls: unknown[] = [];
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          fillManyCalls.push(message.targets);
+        }
+        return observationResponse({
+          title: 'Account settings',
+          currentDomain: 'example.com',
+          visibleTextSummary: 'Settings',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_email',
+                label: '邮箱',
+                name: 'email',
+                type: 'email',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: {
+                  valid: true,
+                  ariaInvalid: false
+                },
+                warnings: []
+              },
+              {
+                refId: 'ref_reply_existing',
+                label: '回复',
+                name: 'reply',
+                type: 'text',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: '已有草稿',
+                validation: {
+                  valid: true,
+                  ariaInvalid: false
+                },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      })
+    });
+
+    const started = await manager.startRun({
+      task: '帮我回复下“收到”',
+      mode: 'act'
+    });
+    await waitForSnapshot(manager, started.runId, 'observed');
+
+    expect(fillManyCalls).toEqual([]);
+    expect(hasTraceTool(manager.getSnapshot(started.runId).trace ?? [], TRACE_EVENT_NAMES.TOOL_RESULT, TOOL_NAMES.FORM_FILL_MANY)).toBe(false);
   });
 
   it('approves pending approval by recording the decision without executing the action', async () => {
@@ -792,6 +1633,21 @@ describe('RunManager', () => {
       getActiveTabId: async () => 42,
       createContentRpcClient: () => rpcClient(async (message) => {
         calls.push(message.type);
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_VERIFY) {
+          return {
+            ok: true,
+            verifyResult: {
+              status: 'pass',
+              allValid: true,
+              missingRequired: [],
+              invalidFields: [],
+              fieldResults: [{ fieldRefId: 'ref_email', valid: true, required: true, filled: true }],
+              visibleErrorText: [],
+              submitAvailable: true,
+              warnings: []
+            }
+          };
+        }
         if (message.type === CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT) {
           return {
             ok: true,
@@ -869,6 +1725,88 @@ describe('RunManager', () => {
     expect(JSON.stringify(snapshot.trace)).not.toContain('user@example.com');
   });
 
+  it('blocks an approved form submit when reverify says the submit target is not ready', async () => {
+    const calls: string[] = [];
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        calls.push(message.type);
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_VERIFY) {
+          return {
+            ok: true,
+            verifyResult: {
+              status: 'fail',
+              allValid: false,
+              missingRequired: [],
+              invalidFields: [],
+              fieldResults: [{ fieldRefId: 'ref_email', valid: true, required: true, filled: true }],
+              visibleErrorText: [],
+              submitAvailable: false,
+              disabledSubmitReason: { kind: 'confirmed', message: '提交按钮已禁用' },
+              warnings: []
+            }
+          };
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT) {
+          return {
+            ok: true,
+            submitResult: 'submitted'
+          };
+        }
+        return observationResponse();
+      })
+    });
+
+    const started = await manager.startRun({ task: '提交表单', mode: 'form' });
+    await waitForSnapshot(manager, started.runId, 'observed');
+    await manager.executeTool({
+      runId: started.runId,
+      tool: TOOL_NAMES.FORM_SUBMIT_WITH_APPROVAL,
+      args: {
+        formName: '注册表单',
+        submitMethod: 'button-click',
+        submitTargetRefId: 'ref_submit',
+        verifyStatus: 'pass',
+        verifyFailed: false,
+        fieldCount: 1,
+        filledCount: 1,
+        skippedCount: 0,
+        riskExplanation: '将提交注册表单',
+        fields: [
+          {
+            fieldRefId: 'ref_email',
+            label: 'Email',
+            type: 'email',
+            valuePreview: 'non-empty',
+            isSensitive: false
+          }
+        ],
+        warnings: []
+      }
+    });
+    const pending = manager.getSnapshot(started.runId).pendingApproval;
+
+    const approved = await manager.decideApproval({
+      runId: started.runId,
+      requestId: pending?.id ?? '',
+      decision: 'approved'
+    });
+
+    expect(approved).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.SUBMIT_TARGET_NOT_READY
+    });
+    expect(calls).toContain(CONTENT_RPC_MESSAGES.FORM_VERIFY);
+    expect(calls).not.toContain(CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT);
+    expect(manager.getSnapshot(started.runId)).toMatchObject({
+      status: 'error',
+      pendingApproval: undefined,
+      error: {
+        code: ERROR_CODES.SUBMIT_TARGET_NOT_READY
+      }
+    });
+  });
+
   it('cancels a run and prevents later tool execution', async () => {
     const manager = new RunManager({
       getActiveTabId: async () => 42,
@@ -928,7 +1866,7 @@ describe('RunManager', () => {
         providerInput = input;
         callbacks?.onDelta?.('页面已经读取完成，');
         callbacks?.onDelta?.('可以继续检查表单。');
-        return { text: '页面已经读取完成，可以继续检查表单。' };
+        return { text: decisionText({ type: 'finish', message: '页面已经读取完成，可以继续检查表单。' }) };
       }
     };
     const manager = new RunManager({
@@ -962,7 +1900,7 @@ describe('RunManager', () => {
     expect(snapshot.messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: `${started.runId}:provider-response`,
+          id: `${started.runId}:agent-final`,
           status: 'complete',
           content: '页面已经读取完成，可以继续检查表单。'
         })
@@ -975,14 +1913,15 @@ describe('RunManager', () => {
       model: 'demo-model',
       chunkCount: 2,
       fallbackUsed: false,
-      finalText: '页面已经读取完成，可以继续检查表单。'
+      finalText: decisionText({ type: 'finish', message: '页面已经读取完成，可以继续检查表单。' })
     });
     expect(complete).not.toHaveBeenCalled();
     expect(JSON.stringify(snapshot)).not.toContain('sk-test-secret');
-    expect(JSON.stringify(providerInput)).toContain('来源：example.com');
+    expect(JSON.stringify(providerInput)).toContain('example.com');
     expect(JSON.stringify(providerInput)).not.toContain('secret-token');
     expect(JSON.stringify(providerInput)).not.toContain('a@example.com');
     expect(JSON.stringify(providerInput)).not.toContain('/account/reset');
+    expect(snapshot.trace?.some((event) => event.type === 'model_prompt')).toBe(false);
   });
 
   it('reads article text before provider response when initial observation is truncated', async () => {
@@ -991,7 +1930,17 @@ describe('RunManager', () => {
     const providerClient: ModelClient = {
       async complete(input) {
         providerInput = input;
-        return { text: '长页面总结完成' };
+        if (!JSON.stringify(input).includes('完整正文片段')) {
+          return {
+            text: decisionText({
+              type: 'tool_call',
+              tool: TOOL_NAMES.PAGE_READ_ARTICLE,
+              args: { maxChars: 12000 },
+              reason: '初始观察被截断，需要读取正文'
+            })
+          };
+        }
+        return { text: decisionText({ type: 'finish', message: '长页面总结完成' }) };
       }
     };
     const manager = new RunManager({
@@ -1064,7 +2013,7 @@ describe('RunManager', () => {
       ok: true
     });
     expect(JSON.stringify(providerInput)).toContain('完整正文片段');
-    expect(JSON.stringify(providerInput)).toContain('tasks, trials, graders');
+      expect(JSON.stringify(providerInput)).toContain('tasks, trials, graders');
   });
 
   it('keeps non-sensitive text fields in tool result detail while masking real secrets', async () => {
@@ -1093,7 +2042,7 @@ describe('RunManager', () => {
     const streamComplete = vi.fn();
     const providerClient: ModelClient = {
       async complete() {
-        return { text: '非流式回答' };
+        return { text: decisionText({ type: 'finish', message: '非流式回答' }) };
       },
       streamComplete
     };
@@ -1124,7 +2073,7 @@ describe('RunManager', () => {
     expect(snapshot.messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: `${started.runId}:provider-response`,
+          id: `${started.runId}:agent-final`,
           status: 'complete',
           content: '非流式回答'
         })
@@ -1134,7 +2083,7 @@ describe('RunManager', () => {
       enabled: false,
       fallbackUsed: true,
       fallbackReason: 'streaming_disabled',
-      finalText: '非流式回答'
+      finalText: decisionText({ type: 'finish', message: '非流式回答' })
     });
     expect(streamComplete).not.toHaveBeenCalled();
   });
@@ -1142,7 +2091,7 @@ describe('RunManager', () => {
   it('notifies subscribers after non-streaming provider messages are written', async () => {
     const providerClient: ModelClient = {
       async complete() {
-        return { text: '非流式订阅回答' };
+        return { text: decisionText({ type: 'finish', message: '非流式订阅回答' }) };
       }
     };
     const manager = new RunManager({
@@ -1165,7 +2114,7 @@ describe('RunManager', () => {
     const started = await manager.startRun({ task: '检查页面' });
     const snapshot = await waitForSubscribedSnapshot(manager, started.runId, (nextSnapshot) =>
       nextSnapshot.messages?.some((message) =>
-        message.id === `${started.runId}:provider-response` &&
+        message.id === `${started.runId}:agent-final` &&
         message.status === 'complete' &&
         message.content === '非流式订阅回答'
       ) === true
@@ -1174,7 +2123,7 @@ describe('RunManager', () => {
     expect(snapshot.messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: `${started.runId}:provider-response`,
+          id: `${started.runId}:agent-final`,
           status: 'complete',
           content: '非流式订阅回答'
         })
@@ -1183,7 +2132,7 @@ describe('RunManager', () => {
   });
 
   it('falls back to complete when provider streaming fails', async () => {
-    const complete = vi.fn(async () => ({ text: 'fallback 完成回答' }));
+    const complete = vi.fn(async () => ({ text: decisionText({ type: 'finish', message: 'fallback 完成回答' }) }));
     const providerClient: ModelClient = {
       complete,
       async streamComplete(_input, callbacks) {
@@ -1219,7 +2168,7 @@ describe('RunManager', () => {
     expect(snapshot.messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: `${started.runId}:provider-response`,
+          id: `${started.runId}:agent-final`,
           status: 'complete',
           content: 'fallback 完成回答'
         })
@@ -1228,7 +2177,7 @@ describe('RunManager', () => {
     expect(snapshot.streaming).toMatchObject({
       fallbackUsed: true,
       fallbackReason: 'stream_failed: stream broke [MASKED]',
-      finalText: 'fallback 完成回答'
+      finalText: decisionText({ type: 'finish', message: 'fallback 完成回答' })
     });
     expect(JSON.stringify(snapshot)).not.toContain('sk-test-secret');
   });
@@ -1242,7 +2191,7 @@ describe('RunManager', () => {
         await new Promise<void>((resolve) => {
           finishStream = resolve;
         });
-        return { text: '生成中完成' };
+        return { text: decisionText({ type: 'finish', message: '生成中完成' }) };
       }
     };
     const manager = new RunManager({
@@ -1275,7 +2224,44 @@ describe('RunManager', () => {
       started.runId,
       TRACE_EVENT_NAMES.MODEL_STREAM_FINISHED
     );
-    expect(finishedSnapshot.status).toBe('observed');
+    expect(finishedSnapshot.status).toBe('finished');
+  });
+
+  it('aborts the active provider stream when a run is cancelled', async () => {
+    let providerSignal: AbortSignal | undefined;
+    const providerClient: ModelClient = {
+      complete: vi.fn(),
+      async streamComplete(input) {
+        providerSignal = input.signal;
+        await new Promise<ModelClient>((_resolve, reject) => {
+          input.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+        });
+        return { text: 'unreachable' };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse()),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'demo-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: true
+          };
+        },
+        async setProviderSettings() {}
+      },
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({ task: '检查页面' });
+    await waitForSnapshot(manager, started.runId, 'thinking');
+
+    await manager.cancelRun(started.runId);
+
+    expect(providerSignal?.aborted).toBe(true);
   });
 
   it('guides users to configure a model when provider settings are missing', async () => {
@@ -1291,19 +2277,18 @@ describe('RunManager', () => {
     });
 
     const started = await manager.startRun({ task: '检查页面' });
-    const snapshot = await waitForMessage(
+    const snapshot = await waitForSnapshot(
       manager,
       started.runId,
-      `${started.runId}:provider-config-guide`
+      'waiting_for_user'
     );
 
     expect(snapshot.messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: `${started.runId}:provider-config-guide`,
-          kind: 'recommendation',
-          title: '请配置模型',
-          content: '请先在右上角模型配置中填写 Base URL、API Key 和 Model。'
+          kind: 'error',
+          title: '运行出错',
+          content: 'Provider settings are required for the unified agent loop'
         })
       ])
     );
@@ -1328,15 +2313,16 @@ describe('RunManager', () => {
     const started = await manager.startRun({ task: '检查页面' });
     const snapshot = await waitForSubscribedSnapshot(manager, started.runId, (nextSnapshot) =>
       nextSnapshot.messages?.some((message) =>
-        message.id === `${started.runId}:provider-config-guide`
+        message.kind === 'error' &&
+        message.content === 'Provider settings are required for the unified agent loop'
       ) === true
     );
 
     expect(snapshot.messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: `${started.runId}:provider-config-guide`,
-          kind: 'recommendation'
+          kind: 'error',
+          content: 'Provider settings are required for the unified agent loop'
         })
       ])
     );
@@ -1368,7 +2354,7 @@ describe('RunManager', () => {
     const started = await manager.startRun({
       task: '观察当前页面',
       mode: 'ask',
-      skipProviderResponse: true
+      runKind: 'observe_only'
     });
     const snapshot = await waitForSnapshot(manager, started.runId, 'observed');
 
@@ -1392,7 +2378,7 @@ describe('RunManager', () => {
   it('still calls the configured provider when async debug diagnostics fail', async () => {
     const providerClient: ModelClient = {
       async complete() {
-        return { text: '页面诊断已完成，可以查看调试摘要。' };
+        return { text: decisionText({ type: 'finish', message: '页面诊断已完成，可以查看调试摘要。' }) };
       }
     };
     const manager = new RunManager({
@@ -1428,7 +2414,7 @@ describe('RunManager', () => {
     expect(snapshot.messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: `${started.runId}:provider-response`,
+          id: `${started.runId}:agent-final`,
           status: 'complete',
           content: '页面诊断已完成，可以查看调试摘要。'
         })
@@ -1437,7 +2423,7 @@ describe('RunManager', () => {
     expect(snapshot.streaming).toMatchObject({
       fallbackUsed: true,
       fallbackReason: 'streaming_disabled',
-      finalText: '页面诊断已完成，可以查看调试摘要。'
+      finalText: decisionText({ type: 'finish', message: '页面诊断已完成，可以查看调试摘要。' })
     });
     expect(JSON.stringify(snapshot)).not.toContain('sk-test-secret');
   });
@@ -1445,7 +2431,15 @@ describe('RunManager', () => {
 
 function rpcClient(handler: ContentRpcClient['request']): ContentRpcClient {
   return {
-    request: handler
+    async request(message) {
+      if (message.type === CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE) {
+        return {
+          ok: true,
+          actionToken: 'test-form-action-token'
+        };
+      }
+      return handler(message);
+    }
   };
 }
 
@@ -1533,6 +2527,88 @@ function payloadRecord(payload: unknown): Record<string, unknown> {
     : {};
 }
 
+function hasTraceTool(
+  trace: NonNullable<ReturnType<RunManager['getSnapshot']>['trace']>,
+  type: string,
+  tool: string,
+  ok?: boolean
+) {
+  return trace.some((event) => {
+    if (event.type !== type) {
+      return false;
+    }
+    const payload = payloadRecord(event.payload);
+    if (payload.tool !== tool) {
+      return false;
+    }
+    return ok === undefined || payload.ok === ok;
+  });
+}
+
+function providerSettings() {
+  return {
+    async getProviderSettings() {
+      return {
+        baseUrl: 'https://api.example.com/v1',
+        model: 'demo-model',
+        apiKey: 'sk-test-secret',
+        streamingEnabled: false
+      };
+    },
+    async setProviderSettings() {}
+  };
+}
+
+function decisionText(decision: Record<string, unknown>): string {
+  return JSON.stringify(decision);
+}
+
+function decisionModel(decisions: Array<Record<string, unknown>>): ModelClient {
+  return {
+    async complete() {
+      return {
+        text: decisionText(decisions.shift() ?? {
+          type: 'finish',
+          message: 'done'
+        })
+      };
+    }
+  };
+}
+
+function formFillDecisions(fieldRefId: string, value: string): Array<Record<string, unknown>> {
+  return [
+    {
+      type: 'tool_call',
+      tool: TOOL_NAMES.FORM_INFER_FILL_PLAN,
+      args: {
+        userTask: value,
+        formSummary: '检测到 1 个字段',
+        fields: []
+      },
+      reason: '读取表单填写计划'
+    },
+    {
+      type: 'tool_call',
+      tool: TOOL_NAMES.FORM_FILL_MANY,
+      args: {
+        fields: [{ fieldRefId, value }]
+      },
+      reason: '用户任务中明确提供了该值'
+    },
+    {
+      type: 'tool_call',
+      tool: TOOL_NAMES.FORM_VERIFY,
+      args: { fieldRefIds: [fieldRefId] },
+      reason: '填写后验证'
+    },
+    {
+      type: 'finish',
+      message: '填写完成'
+    }
+  ];
+}
+
 async function waitForSnapshot(
   manager: RunManager,
   runId: string,
@@ -1579,21 +2655,6 @@ async function waitForToolResult(
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   return manager.getSnapshot(runId).trace ?? [];
-}
-
-async function waitForMessage(
-  manager: RunManager,
-  runId: string,
-  messageId: string
-) {
-  for (let index = 0; index < 30; index += 1) {
-    const snapshot = manager.getSnapshot(runId);
-    if (snapshot.messages?.some((message) => message.id === messageId)) {
-      return snapshot;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-  return manager.getSnapshot(runId);
 }
 
 function waitForSubscribedSnapshot(

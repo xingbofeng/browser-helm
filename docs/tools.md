@@ -185,7 +185,7 @@ bh_element_click
 bh_element_type_text
 ```
 
-`bh_iframe_click` 和 `bh_iframe_type` 不保留 deprecated 工具；iframe 内元素动作统一迁移到 `bh_element_click` 和 `bh_element_type_text`，由 stable ref / resolver 处理元素所在 iframe 上下文。
+`bh_iframe_click` 和 `bh_iframe_type` 已删除，不保留兼容工具；iframe 内元素动作统一迁移到 `bh_element_click` 和 `bh_element_type_text`，由 stable ref / resolver 处理元素所在 iframe 上下文。
 
 #### Navigation
 

@@ -1,23 +1,26 @@
 import type { RunDisplayState } from '../stores/agent-store';
-
-const stateLabels: Record<RunDisplayState, string> = {
-  idle: '空闲',
-  starting: '启动中',
-  observing: '观察中',
-  thinking: '思考中',
-  executing_tool: '执行工具',
-  waiting_for_approval: '等待审批',
-  waiting_for_user: '等待用户',
-  recovering: '恢复中',
-  finished: '已完成',
-  failed: '失败',
-  cancelled: '已取消'
-};
+import type { TranslationKey } from '../../i18n/types';
+import { useT } from '../../i18n/context';
 
 type RunStateBadgeProps = {
   state: RunDisplayState;
 };
 
+const RUN_STATE_KEY = {
+  idle: 'runState.idle',
+  starting: 'runState.starting',
+  observing: 'runState.observing',
+  thinking: 'runState.thinking',
+  executing_tool: 'runState.executingTool',
+  waiting_for_approval: 'runState.waitingApproval',
+  waiting_for_user: 'runState.waitingUser',
+  recovering: 'runState.recovering',
+  finished: 'runState.finished',
+  failed: 'runState.failed',
+  cancelled: 'runState.cancelled',
+} as const satisfies Record<RunDisplayState, TranslationKey>;
+
 export function RunStateBadge({ state }: RunStateBadgeProps) {
-  return <span className={`bh-runState bh-runState-${state}`}>{stateLabels[state]}</span>;
+  const t = useT();
+  return <span className={`bh-runState bh-runState-${state}`}>{t(RUN_STATE_KEY[state])}</span>;
 }

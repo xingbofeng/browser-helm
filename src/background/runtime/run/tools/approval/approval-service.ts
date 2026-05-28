@@ -8,7 +8,7 @@ import type { ToolApprovalFlowRegistry } from './tool-approval-flow-registry';
 
 export type ApprovalServiceDeps = {
   approvalManager: ApprovalManager;
-  getRecord: (runId: string) => { task: string; mode: RunMode; tabId?: number | undefined; trace: RuntimeEvent[]; skipProviderResponse?: boolean | undefined } | undefined;
+  getRecord: (runId: string) => { task: string; mode: RunMode; tabId?: number | undefined; trace: RuntimeEvent[] } | undefined;
   getSnapshot: (runId: string) => RunSnapshot;
   setSnapshot: (runId: string, snapshot: RunSnapshot) => void;
   appendTrace: (record: { trace: RuntimeEvent[] }, event: RuntimeEvent) => void;

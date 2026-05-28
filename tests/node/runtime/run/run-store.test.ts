@@ -161,22 +161,6 @@ describe('RunStore', () => {
     expect(store.getPendingApprovalAction('req_1')).toBeUndefined();
   });
 
-  it('tracks provider scheduled state per run', () => {
-    const store = new RunStore();
-    
-    expect(store.hasProviderScheduled('run_1')).toBe(false);
-    
-    store.markProviderScheduled('run_1');
-    expect(store.hasProviderScheduled('run_1')).toBe(true);
-    
-    // Marking again should be idempotent
-    store.markProviderScheduled('run_1');
-    expect(store.hasProviderScheduled('run_1')).toBe(true);
-    
-    // Different run should not be marked
-    expect(store.hasProviderScheduled('run_2')).toBe(false);
-  });
-
   it('isolates data between different runs', () => {
     const store = new RunStore();
     

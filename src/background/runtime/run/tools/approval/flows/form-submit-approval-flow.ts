@@ -8,13 +8,14 @@ import { snapshotToolResult, snapshotFromObserveResult } from '../../../run-snap
 import type { ToolApprovalFlow } from './tool-approval-flow';
 import type { ToolRouter } from '../../../../../../tools/core/tool-router';
 import type { RunMode } from '../../../../../../shared/schemas/tool.schema';
+import type { Locale } from '../../../../../../i18n/types';
 
 export class FormSubmitApprovalFlow implements ToolApprovalFlow {
   readonly handlesApprovedSideEffects = true;
 
   constructor(
     private readonly deps: {
-      getRecord: (runId: string) => { task: string; mode: RunMode; tabId?: number | undefined; trace: RuntimeEvent[]; skipProviderResponse?: boolean | undefined } | undefined;
+      getRecord: (runId: string) => { task: string; mode: RunMode; tabId?: number | undefined; trace: RuntimeEvent[]; skipProviderResponse?: boolean | undefined; locale?: Locale } | undefined;
       getPendingAction: (requestId: string) => ExecuteToolInput | undefined;
       deletePendingAction: (requestId: string) => void;
       createContentRpcClient: (tabId: number) => ContentRpcClient;
@@ -51,7 +52,7 @@ export class FormSubmitApprovalFlow implements ToolApprovalFlow {
 
   private async executeSubmit(
     input: { runId: string; requestId: string; tool: string },
-    record: { task: string; mode: RunMode; tabId: number; trace: RuntimeEvent[] }
+    record: { task: string; mode: RunMode; tabId: number; trace: RuntimeEvent[]; locale?: Locale }
   ): Promise<ToolResult> {
     const pendingAction = this.deps.getPendingAction(input.requestId);
     this.deps.deletePendingAction(input.requestId);
@@ -60,9 +61,88 @@ export class FormSubmitApprovalFlow implements ToolApprovalFlow {
       ? args.submitTargetRefId
       : undefined;
     const formRefId = typeof args.formRefId === 'string' ? args.formRefId : undefined;
+    const verifyFailed = args.verifyFailed === true;
     const rpc = this.deps.createContentRpcClient(record.tabId);
+    const verifyResponse = await rpc.request({
+      type: CONTENT_RPC_MESSAGES.FORM_VERIFY,
+      fieldRefIds: [],
+      ...(formRefId ? { formRefId } : {})
+    });
+    if (!verifyResponse.ok) {
+      const result: ToolResult = {
+        ok: false,
+        code: verifyResponse.code,
+        summary: verifyResponse.message,
+        changedPage: false,
+        requiresObserve: false,
+        error: { message: verifyResponse.message, detail: verifyResponse.detail }
+      };
+      this.deps.setSnapshot(input.runId, {
+        ...this.deps.getSnapshot(input.runId),
+        status: 'error',
+        pendingApproval: undefined,
+        toolResult: snapshotToolResult(input.tool, result),
+        trace: record.trace,
+        error: { code: result.code, message: result.summary }
+      });
+      return result;
+    }
+    const verifyResult = 'verifyResult' in verifyResponse ? verifyResponse.verifyResult : undefined;
+    if (
+      verifyResult &&
+      typeof verifyResult === 'object' &&
+      'submitAvailable' in verifyResult &&
+      verifyResult.submitAvailable === false &&
+      !verifyFailed
+    ) {
+      const result: ToolResult = {
+        ok: false,
+        code: ERROR_CODES.SUBMIT_TARGET_NOT_READY,
+        summary: 'Submit target is not ready after re-verification',
+        changedPage: false,
+        requiresObserve: false,
+        error: { message: 'Submit target is not ready after re-verification' }
+      };
+      this.deps.setSnapshot(input.runId, {
+        ...this.deps.getSnapshot(input.runId),
+        status: 'error',
+        pendingApproval: undefined,
+        toolResult: snapshotToolResult(input.tool, result),
+        trace: record.trace,
+        error: { code: result.code, message: result.summary }
+      });
+      return result;
+    }
+    const grantResponse = await rpc.request({
+      type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+      action: 'submit',
+      fieldRefIds: [],
+      ...(submitTargetRefId ? { submitTargetRefId } : {})
+    });
+    if (!grantResponse.ok || !('actionToken' in grantResponse)) {
+      const message = grantResponse.ok ? 'Form submit authorization failed' : grantResponse.message;
+      const result: ToolResult = {
+        ok: false,
+        code: grantResponse.ok ? ERROR_CODES.FORM_ACTION_UNAUTHORIZED : grantResponse.code,
+        summary: message,
+        changedPage: false,
+        requiresObserve: false,
+        error: { message, detail: grantResponse.ok ? undefined : grantResponse.detail }
+      };
+      this.deps.setSnapshot(input.runId, {
+        ...this.deps.getSnapshot(input.runId),
+        status: 'error',
+        pendingApproval: undefined,
+        toolResult: snapshotToolResult(input.tool, result),
+        trace: record.trace,
+        error: { code: result.code, message: result.summary }
+      });
+      return result;
+    }
     const submitResponse = await rpc.request({
       type: CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT,
+      actionToken: grantResponse.actionToken,
+      allowDisabledSubmit: verifyFailed,
       ...(submitTargetRefId ? { submitTargetRefId } : {})
     });
 
@@ -108,7 +188,12 @@ export class FormSubmitApprovalFlow implements ToolApprovalFlow {
     const router = this.deps.createToolRouter(record.tabId);
     const observeResult = await router.execute(
       { tool: TOOL_NAMES.PAGE_OBSERVE, args: {} },
-      { runId: input.runId, stepId: `${input.runId}:post_submit_observe`, runMode: record.mode }
+      {
+        runId: input.runId,
+        stepId: `${input.runId}:post_submit_observe`,
+        runMode: record.mode,
+        ...(record.locale ? { locale: record.locale } : {})
+      }
     );
     this.deps.appendTrace(record, {
       runId: input.runId, type: TRACE_EVENT_NAMES.TOOL_RESULT,

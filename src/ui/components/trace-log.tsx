@@ -1,102 +1,118 @@
 import type { RuntimeEvent } from '../../runtime/runtime-messages';
-import { toolDescription } from '../../shared/tool-descriptions';
+import { toolDescription } from '../../i18n/tool-descriptions';
 import { StructuredPayload } from './structured-payload';
+
+import { useLocale, useT } from '../../i18n/context';
+import type { Locale } from '../../i18n/types';
 
 type TraceLogProps = {
   events: RuntimeEvent[];
 };
 
 export function TraceLog({ events }: TraceLogProps) {
+  const t = useT();
+  const locale = useLocale();
   const items = summarizeTraceEvents(events);
   return (
     <section className="bh-traceLog">
       <header className="bh-traceHeader">
-        <strong>Trace / 调试日志</strong>
-        <span>{items.length} 条</span>
+        <strong>{t('trace.header')}</strong>
+        <span>{t('trace.count', { count: String(items.length) })}</span>
       </header>
       {items.length > 0 ? (
         <ol className="bh-traceItems">
           {items.map((item, index) => (
             <li key={`${item.runId}:${index}`} className="bh-traceItem">
               <div className="bh-traceItemHeader">
-                <strong>{traceTitle(item)}</strong>
+                <strong>{traceTitle(item, t)}</strong>
                 {item.timestamp ? <time>{formatTime(item.timestamp)}</time> : null}
               </div>
-              <p className="bh-traceSummary">{traceSummary(item)}</p>
-              {traceToolDescription(item) ? (
-                <p className="bh-traceToolDescription">{traceToolDescription(item)}</p>
+              <p className="bh-traceSummary">{traceSummary(item, t)}</p>
+              {traceToolDescription(item, locale) ? (
+                <p className="bh-traceToolDescription">{traceToolDescription(item, locale)}</p>
               ) : null}
               <details className="bh-traceDetails">
-                <summary>查看原始详情</summary>
+                <summary>{t('trace.viewDetails')}</summary>
                 <StructuredPayload value={item.payload ?? {}} maxDepth={3} />
               </details>
             </li>
           ))}
         </ol>
       ) : (
-        <p className="bh-emptyState">暂无 trace</p>
+        <p className="bh-emptyState">{t('trace.empty')}</p>
       )}
     </section>
   );
 }
 
-function traceToolDescription(event: TraceSummaryItem): string | undefined {
+function traceToolDescription(event: TraceSummaryItem, locale: Locale): string | undefined {
   if (event.type !== 'tool_started' && event.type !== 'tool_result') {
     return undefined;
   }
-  return toolDescription(stringValue(recordPayload(event.payload).tool));
+  return toolDescription(stringValue(recordPayload(event.payload).tool), locale);
 }
 
-function traceTitle(event: TraceSummaryItem): string {
+function traceTitle(event: TraceSummaryItem, t: ReturnType<typeof useT>): string {
   const payload = recordPayload(event.payload);
-  if (event.type === 'run_started') return '开始任务';
-  if (event.type === 'tool_started') return `调用工具：${stringValue(payload.tool) ?? '未知工具'}`;
-  if (event.type === 'tool_result') return `工具结果：${stringValue(payload.tool) ?? '未知工具'}`;
-  if (event.type === 'model_stream_started') return '开始生成回复';
-  if (event.type === 'model_stream_delta_summary') return '生成中';
-  if (event.type === 'model_stream_finished') return '回复生成完成';
-  if (event.type === 'run_finished') return '任务完成';
-  if (event.type === 'run_failed') return '任务失败';
-  if (event.type === 'plan_updated') return '计划更新';
-  if (event.type === 'context_built') return '构建上下文';
-  if (event.type === 'context_compacted') return '压缩上下文';
+  if (event.type === 'run_started') return t('trace.event.runStarted');
+  if (event.type === 'tool_started') return t('trace.event.toolStarted', { tool: stringValue(payload.tool) ?? t('trace.event.unknownTool') });
+  if (event.type === 'tool_result') return t('trace.event.toolResult', { tool: stringValue(payload.tool) ?? t('trace.event.unknownTool') });
+  if (event.type === 'model_stream_started') return t('trace.event.modelStarted');
+  if (event.type === 'model_stream_delta_summary') return t('trace.event.modelDelta');
+  if (event.type === 'model_stream_finished') return t('trace.event.modelFinished');
+  if (event.type === 'run_finished') return t('trace.event.runFinished');
+  if (event.type === 'run_failed') return t('trace.event.runFailed');
+  if (event.type === 'plan_updated') return t('trace.event.planUpdated');
+  if (event.type === 'context_built') return t('trace.event.contextBuilt');
+  if (event.type === 'context_compacted') return t('trace.event.contextCompacted');
   return event.type;
 }
 
-function traceSummary(event: TraceSummaryItem): string {
+function traceSummary(event: TraceSummaryItem, t: ReturnType<typeof useT>): string {
   const payload = recordPayload(event.payload);
   if (event.type === 'run_started') {
-    return `目标：${stringValue(payload.task) ?? '未命名任务'}。模式：${stringValue(payload.mode) ?? 'ask'}。`;
+    return t('trace.summary.runStarted', {
+      task: stringValue(payload.task) ?? t('trace.summary.unnamedTask'),
+      mode: stringValue(payload.mode) ?? 'ask',
+    });
   }
   if (event.type === 'tool_started') {
-    return `BrowserHelm 正在执行 ${stringValue(payload.tool) ?? '工具'}。`;
+    return t('trace.summary.toolStartedStr', { tool: stringValue(payload.tool) ?? 'tool' });
   }
   if (event.type === 'tool_result') {
-    const status = payload.ok === false ? '失败' : '完成';
-    return `${status}：${stringValue(payload.summary) ?? stringValue(payload.code) ?? '工具已返回结果'}。`;
+    const summary = stringValue(payload.summary) ?? stringValue(payload.code) ?? t('trace.summary.toolReturned');
+    return payload.ok === false
+      ? t('trace.summary.toolResultFailed', { summary })
+      : t('trace.summary.toolResultDone', { summary });
   }
   if (event.type === 'model_stream_started') {
-    return `模型 ${stringValue(payload.model) ?? 'provider'} 开始输出。`;
+    return t('trace.summary.modelStarted', { model: stringValue(payload.model) ?? 'provider' });
   }
   if (event.type === 'model_stream_delta_summary') {
-    return `已收到 ${numberValue(payload.chunkCount)} 个片段，约 ${numberValue(payload.charCount)} 字符。`;
+    return t('trace.summary.modelDelta', {
+      chunks: String(numberValue(payload.chunkCount)),
+      chars: String(numberValue(payload.charCount)),
+    });
   }
   if (event.type === 'model_stream_finished') {
-    return `生成完成，约 ${numberValue(payload.charCount)} 字符。`;
+    return t('trace.summary.modelFinished', { chars: String(numberValue(payload.charCount)) });
   }
   if (event.type === 'run_failed') {
-    return stringValue(payload.message) ?? stringValue(payload.summary) ?? '运行未完成。';
+    return stringValue(payload.message) ?? stringValue(payload.summary) ?? t('trace.summary.runFailed');
   }
   if (event.type === 'plan_updated') {
-    return 'Agent 已更新当前目标和执行步骤。';
+    return t('trace.summary.planUpdated');
   }
   if (event.type === 'context_built') {
-    return `已构建 ${numberValue(payload.messageCount)} 条上下文消息。`;
+    return t('trace.summary.contextBuilt', { count: String(numberValue(payload.messageCount)) });
   }
   if (event.type === 'context_compacted') {
-    return `保留 ${numberValue(payload.retainedStepCount)} 步，丢弃 ${numberValue(payload.droppedStepCount)} 步。`;
+    return t('trace.summary.contextCompacted', {
+      retained: String(numberValue(payload.retainedStepCount)),
+      dropped: String(numberValue(payload.droppedStepCount)),
+    });
   }
-  return summarizePayload(payload);
+  return summarizePayload(payload, t);
 }
 
 function recordPayload(value: unknown): Record<string, unknown> {
@@ -109,15 +125,18 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
-function summarizePayload(payload: Record<string, unknown>): string {
+function summarizePayload(payload: Record<string, unknown>, t: ReturnType<typeof useT>): string {
   const summary = stringValue(payload.summary) ?? stringValue(payload.message);
   if (summary) return summary;
   const keys = Object.keys(payload);
-  return keys.length ? `包含 ${keys.length} 个字段：${keys.slice(0, 4).join('、')}` : '无附加详情。';
+  return keys.length
+    ? t('trace.summary.payloadFields', { count: String(keys.length), list: keys.slice(0, 4).join('、') })
+    : t('trace.summary.noDetail');
 }
 
-type TraceSummaryItem = RuntimeEvent & {
-  payload?: unknown;
+type TraceSummaryItem = Omit<RuntimeEvent, 'type'> & {
+  type: RuntimeEvent['type'] | 'model_stream_delta_summary';
+  payload?: Record<string, unknown> | undefined;
 };
 
 export function summarizeTraceEvents(events: RuntimeEvent[]): TraceSummaryItem[] {

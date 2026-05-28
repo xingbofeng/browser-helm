@@ -210,7 +210,14 @@ export class CockpitUiFlow {
       task: '填写并提交本地表单',
       mode: 'form'
     });
-    const fields = snapshot.structuredPageData?.forms.items ?? [];
+    const observeResult = await executeToolResult(sidePanel.executeTool({
+      runId: snapshot.runId,
+      tool: TOOL_NAMES.PAGE_OBSERVE,
+      args: {}
+    }));
+    expect(observeResult.ok).toBe(true);
+    const observedSnapshot = await sidePanel.snapshot(snapshot.runId);
+    const fields = observedSnapshot.structuredPageData?.forms.items ?? [];
     const fillTargets = [
       { fieldRefId: requireField(fields, 'name').refId, value: 'Counter User' },
       { fieldRefId: requireField(fields, 'email').refId, value: 'counter@example.com' },
@@ -218,7 +225,7 @@ export class CockpitUiFlow {
       { fieldRefId: requireField(fields, 'agree').refId, value: 'true' }
     ];
     const submitTargetRefId = fields.find((field) => field.submit?.refId)?.submit?.refId ??
-      snapshot.refs?.find((ref) => ref.role === 'button' && ref.name === 'Submit')?.refId;
+      observedSnapshot.refs?.find((ref) => ref.role === 'button' && ref.name === 'Submit')?.refId;
 
     const fillResult = await executeToolResult(sidePanel.executeTool({
       runId: snapshot.runId,
@@ -310,7 +317,14 @@ export class CockpitUiFlow {
       task: '填写本地测试表单并检查提交审批',
       mode: 'form'
     });
-    const fields = snapshot.structuredPageData?.forms.items ?? [];
+    const observeResult = await executeToolResult(sidePanel.executeTool({
+      runId: snapshot.runId,
+      tool: TOOL_NAMES.PAGE_OBSERVE,
+      args: {}
+    }));
+    expect(observeResult.ok).toBe(true);
+    const observedSnapshot = await sidePanel.snapshot(snapshot.runId);
+    const fields = observedSnapshot.structuredPageData?.forms.items ?? [];
     const fillTargets = [
       { fieldRefId: requireField(fields, 'name').refId, value: 'Counter User' },
       { fieldRefId: requireField(fields, 'email').refId, value: 'counter@example.com' },
@@ -318,7 +332,7 @@ export class CockpitUiFlow {
       { fieldRefId: requireField(fields, 'agree').refId, value: 'true' }
     ];
     const submitTargetRefId = fields.find((field) => field.submit?.refId)?.submit?.refId ??
-      snapshot.refs?.find((ref) => ref.role === 'button' && ref.name === 'Submit')?.refId;
+      observedSnapshot.refs?.find((ref) => ref.role === 'button' && ref.name === 'Submit')?.refId;
 
     await executeToolResult(sidePanel.executeTool({
       runId: snapshot.runId,

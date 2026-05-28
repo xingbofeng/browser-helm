@@ -190,7 +190,9 @@ describe('fillSingleField', () => {
     const refId = reg(document.querySelector('input')!, { name: 'q' });
     const r = fillSingleField(document, refMap, { fieldRefId: refId, value: 'test' });
     expect(r.status).toBe('filled');
-    expect(r.actualValuePreview).toBe('test');
+    expect(r.requestedValue).toBeUndefined();
+    expect(r.actualValuePreview).toBe('non-empty');
+    expect(r.maskedActualValue).toBe('[MASKED]');
   });
 
   it('skips disabled field', () => {
@@ -228,7 +230,7 @@ describe('fillSingleField', () => {
     const refId = reg(document.querySelector('select')!, { role: 'combobox', tagName: 'select', name: 'q' });
     const r = fillSingleField(document, refMap, { fieldRefId: refId, value: 'b' });
     expect(r.status).toBe('filled');
-    expect(r.actualValuePreview).toBe('b');
+    expect(r.actualValuePreview).toBe('non-empty');
   });
 
   it('fills checkbox', () => {
@@ -329,6 +331,19 @@ describe('verifyForm', () => {
     expect(r.fieldResults[0]!.valid).toBe(true);
     expect(r.fieldResults[0]!.required).toBe(false);
   });
+
+  it('does not return raw field values in verify result previews', () => {
+    setupPage('<input type="email" name="email" value="counter@example.com">');
+    const el = document.querySelector('input')! as HTMLElement;
+    const refId = reg(el, { name: 'email' });
+    const fieldMap = new Map<string, HTMLElement>([[refId, el]]);
+
+    const r = verifyForm(document, fieldMap);
+
+    expect(r.fieldResults[0]!.actualValuePreview).toBe('non-empty');
+    expect(r.fieldResults[0]!.maskedActualValue).toBe('[MASKED]');
+    expect(JSON.stringify(r)).not.toContain('counter@example.com');
+  });
 });
 
 describe('executeSubmit', () => {
@@ -340,6 +355,17 @@ describe('executeSubmit', () => {
     btn.addEventListener('click', () => { clicked = true; });
     expect(executeSubmit(document, refMap, refId)).toBe('submitted');
     expect(clicked).toBe(true);
+  });
+
+  it('does not click disabled submit button by ref', () => {
+    setupPage('<button type="submit" disabled>Go</button>');
+    const btn = document.querySelector('button')! as HTMLElement;
+    const refId = reg(btn, { role: 'button', tagName: 'button', name: 'submit' });
+    let clicked = false;
+    btn.addEventListener('click', () => { clicked = true; });
+
+    expect(executeSubmit(document, refMap, refId)).toBe('no_submit_path');
+    expect(clicked).toBe(false);
   });
 
   it('auto-finds submit button', () => {

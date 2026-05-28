@@ -17,6 +17,10 @@ export function bhIframeList(
     name: TOOL_NAMES.IFRAME_LIST,
     title: 'Iframe List',
     description: 'Lists iframes with stable iframeId metadata',
+    ui: {
+      titleKey: 'tool.title.bh_iframe_list',
+      descriptionKey: 'tool.description.bh_iframe_list',
+    },
     modes: ['ask', 'debug', 'form', 'act'],
     risk: 'safe',
     argsSchema,
@@ -32,7 +36,7 @@ export function bhIframeList(
         frameId: frame.frameId,
         url: frame.url,
         parentFrameId: frame.parentFrameId,
-        readable: true
+        readable: 'unknown' as const
       }));
       return {
         ok: true,

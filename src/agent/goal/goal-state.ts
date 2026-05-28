@@ -1,8 +1,11 @@
 import type { RunMode } from '../../shared/schemas/tool.schema';
+import type { Locale } from '../../i18n/types';
 import type { GoalState } from '../../shared/schemas/goal-plan.schema';
+import { t } from '../../i18n/t';
 import { goalStateSchema } from '../../shared/schemas/goal-plan.schema';
 
 type InitializeGoalInput = {
+  locale?: Locale;
   task: string;
   mode: RunMode;
   goal?: string;
@@ -10,10 +13,11 @@ type InitializeGoalInput = {
 };
 
 export function initializeGoalState(input: InitializeGoalInput): GoalState {
+  const locale = input.locale ?? 'zh';
   const successCriteria =
     input.successCriteria && input.successCriteria.length > 0
       ? input.successCriteria
-      : defaultCriteria(input.mode);
+      : defaultCriteria(input.mode, locale);
   return goalStateSchema.parse({
     goal: input.goal ?? input.task,
     successCriteria,
@@ -22,15 +26,27 @@ export function initializeGoalState(input: InitializeGoalInput): GoalState {
   });
 }
 
-function defaultCriteria(mode: RunMode): string[] {
+function defaultCriteria(mode: RunMode, locale: Locale): string[] {
   if (mode === 'form') {
-    return ['列出表单字段状态', '解释缺失字段、校验错误或 disabled submit 原因'];
+    return [
+      t('goal.criteria.form.0', locale),
+      t('goal.criteria.form.1', locale),
+    ];
   }
   if (mode === 'debug') {
-    return ['读取页面健康摘要', '解释 console 或 network 异常'];
+    return [
+      t('goal.criteria.debug.0', locale),
+      t('goal.criteria.debug.1', locale),
+    ];
   }
   if (mode === 'act') {
-    return ['完成动作前检查', '说明风险和审批边界'];
+    return [
+      t('goal.criteria.act.0', locale),
+      t('goal.criteria.act.1', locale),
+    ];
   }
-  return ['回答用户问题', '说明信息来源和限制'];
+  return [
+    t('goal.criteria.default.0', locale),
+    t('goal.criteria.default.1', locale),
+  ];
 }

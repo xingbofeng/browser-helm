@@ -1,35 +1,51 @@
 import type { RunSnapshot } from '../../../../runtime/runtime-messages';
+import { redactTextForModelContext } from '../../../../shared/redaction';
+import type { Locale } from '../../../../i18n/types';
+import { t } from '../../../../i18n/t';
 
-export function providerPrompt(task: string, snapshot: RunSnapshot): string {
+export function providerPrompt(task: string, snapshot: RunSnapshot, locale: Locale): string {
   const observation = snapshot.observation;
-  const summary = [
-    `用户任务：${task}`,
-    observation
-      ? `当前页面：${observation.title} (来源：${providerPageSource(observation)})`
-      : '当前页面：尚未获得页面摘要',
+  const untrustedPageContent = [
     observation?.visibleTextSummary
-      ? `页面摘要：${observation.visibleTextSummary}`
+      ? `${t('provider.prompt.pageSummary', locale)}${redactTextForModelContext(observation.visibleTextSummary)}`
       : undefined,
     observation?.pageStateSummary
-      ? `页面状态：${observation.pageStateSummary}`
-      : undefined,
-    typeof observation?.interactiveCount === 'number'
-      ? `可交互元素数量：${observation.interactiveCount}`
+      ? `${t('provider.prompt.pageState', locale)}${redactTextForModelContext(observation.pageStateSummary)}`
       : undefined,
     snapshot.structuredPageData?.forms.summary
-      ? `表单摘要：${snapshot.structuredPageData.forms.summary}`
+      ? `${t('provider.prompt.formSummary', locale)}${redactTextForModelContext(snapshot.structuredPageData.forms.summary)}`
       : undefined,
     snapshot.structuredPageData?.interactive.summary
-      ? `交互摘要：${snapshot.structuredPageData.interactive.summary}`
-      : undefined,
-    snapshot.toolResult
-      ? `工具结果：${snapshot.toolResult.tool} ${snapshot.toolResult.ok ? '成功' : '失败'}，${snapshot.toolResult.summary}`
+      ? `${t('provider.prompt.interactiveSummary', locale)}${redactTextForModelContext(snapshot.structuredPageData.interactive.summary)}`
       : undefined,
     longPageText(snapshot)
-      ? `补充读取的页面正文：\n${longPageText(snapshot)}`
+      ? `${t('provider.prompt.longPageText', locale)}\n${redactTextForModelContext(longPageText(snapshot) ?? '')}`
       : undefined
+  ].filter(Boolean);
+  const summary = [
+    `${t('provider.prompt.userTask', locale)}${redactTextForModelContext(task)}`,
+    observation
+      ? t('provider.prompt.currentPage', locale, { title: observation.title, source: providerPageSource(observation) })
+      : t('provider.prompt.noPageSummary', locale),
+    typeof observation?.interactiveCount === 'number'
+      ? t('provider.prompt.interactiveCount', locale, { count: String(observation.interactiveCount) })
+      : undefined,
+    untrustedPageContent.length > 0
+      ? [
+          t('provider.prompt.untrustedContentPrefix', locale),
+          ...untrustedPageContent,
+          t('provider.prompt.untrustedContentSuffix', locale)
+        ].join('\n')
+      : undefined,
+    snapshot.toolResult
+      ? t('provider.prompt.toolResult', locale, {
+          tool: snapshot.toolResult.tool,
+          status: snapshot.toolResult.ok ? t('provider.prompt.success', locale) : t('provider.prompt.failure', locale),
+          summary: redactTextForModelContext(snapshot.toolResult.summary)
+        })
+      : undefined,
   ].filter(Boolean).join('\n');
-  return `${summary}\n\n请基于这些信息给出面向真实用户的简短回答。`;
+  return `${summary}\n\n${t('provider.prompt.instruction', locale)}`;
 }
 
 export function providerLabel(baseUrl: string): string {

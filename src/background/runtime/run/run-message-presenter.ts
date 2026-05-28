@@ -2,6 +2,8 @@ import type { AgentMessage } from '../../../shared/schemas/agent-message.schema'
 import type { RunSnapshot } from '../../../runtime/runtime-messages';
 import type { DebugReport } from '../../../shared/schemas/diagnosis.schema';
 import { buildUserFacingPageSummary } from '../../../shared/page-summary';
+import { t } from '../../../i18n/t';
+import type { Locale } from '../../../i18n/types';
 
 /**
  * Creates initial messages for a new run.
@@ -9,14 +11,20 @@ import { buildUserFacingPageSummary } from '../../../shared/page-summary';
 export function initialMessages(
   runId: string,
   task: string,
+  localeOrOptions: Locale | {
+    includeUserTask?: boolean | undefined;
+    includeObserveStatus?: boolean | undefined;
+  } = 'zh',
   options: {
     includeUserTask?: boolean | undefined;
     includeObserveStatus?: boolean | undefined;
   } = {}
 ): AgentMessage[] {
+  const locale = typeof localeOrOptions === 'string' ? localeOrOptions : 'zh';
+  const messageOptions = typeof localeOrOptions === 'string' ? options : localeOrOptions;
   const now = Date.now();
   const messages: AgentMessage[] = [];
-  if (options.includeUserTask !== false) {
+  if (messageOptions.includeUserTask !== false) {
     messages.push({
       id: `${runId}:task`,
       role: 'user',
@@ -27,14 +35,14 @@ export function initialMessages(
       updatedAt: now
     });
   }
-  if (options.includeObserveStatus) {
+  if (messageOptions.includeObserveStatus) {
     messages.push({
       id: `${runId}:observe-status`,
       role: 'agent',
       kind: 'agent_status',
       status: 'streaming',
-      title: '正在观察当前页面',
-      content: 'BrowserHelm 正在读取当前页面摘要和可交互结构。',
+      title: t('observe.statusTitle', locale),
+      content: t('observe.statusContent', locale),
       createdAt: now,
       updatedAt: now
     });
@@ -47,7 +55,8 @@ export function initialMessages(
  */
 export function pageSummaryMessage(
   runId: string,
-  observation: NonNullable<RunSnapshot['observation']>
+  observation: NonNullable<RunSnapshot['observation']>,
+  locale: Locale = 'zh'
 ): AgentMessage {
   const now = Date.now();
   return {
@@ -55,7 +64,7 @@ export function pageSummaryMessage(
     role: 'agent',
     kind: 'page_summary',
     status: 'complete',
-    title: '页面摘要',
+    title: t('page.observation.summary', locale),
     content: buildUserFacingPageSummary({
       title: observation.title,
       currentDomain: observation.currentDomain,
@@ -63,7 +72,7 @@ export function pageSummaryMessage(
       pageStateSummary: observation.pageStateSummary,
       interactiveCount: observation.interactiveCount,
       warnings: observation.warnings
-    }),
+    }, locale),
     createdAt: now,
     updatedAt: now
   };
@@ -73,7 +82,7 @@ export function pageSummaryMessage(
  * Creates a diagnosis message from a debug report.
  * Only includes the first 3 findings.
  */
-export function diagnosisMessage(runId: string, report: DebugReport): AgentMessage {
+export function diagnosisMessage(runId: string, report: DebugReport, locale: Locale = 'zh'): AgentMessage {
   const now = Date.now();
   const findingText = report.findings
     .map((finding) => finding.title)
@@ -86,7 +95,7 @@ export function diagnosisMessage(runId: string, report: DebugReport): AgentMessa
     kind: 'diagnosis',
     status: 'complete',
     title: report.title,
-    content: findingText || '暂未发现高置信度问题。',
+    content: findingText || t('page.observation.noFindings', locale),
     createdAt: now,
     updatedAt: now
   };
@@ -109,8 +118,8 @@ export function agentStatusMessage(runId: string, title: string, content: string
   };
 }
 
-export function toolStatusMessage(runId: string, tool: string, summary: string): AgentMessage {
-  return agentStatusMessage(runId, humanToolStatusTitle(tool), summary);
+export function toolStatusMessage(runId: string, tool: string, summary: string, locale: Locale = 'zh'): AgentMessage {
+  return agentStatusMessage(runId, humanToolStatusTitle(tool, locale), summary);
 }
 
 /**
@@ -158,16 +167,16 @@ export function completeObserveStatusMessage(messages: AgentMessage[]): void {
   messages.splice(index, 1);
 }
 
-function humanToolStatusTitle(tool: string): string {
-  if (tool.includes('page_observe')) return '页面观察完成';
-  if (tool.includes('page_read_article')) return '正文读取完成';
-  if (tool.includes('page_read_visible_text')) return '可见文本读取完成';
-  if (tool.includes('iframe_list')) return 'iframe 检测完成';
-  if (tool.includes('iframe_read')) return 'iframe 读取完成';
-  if (tool.includes('viewport_scroll')) return '页面滚动完成';
-  if (tool.includes('form_infer_fill_plan')) return '表单填写计划完成';
-  if (tool.includes('form_fill')) return '字段填写完成';
-  if (tool.includes('form_verify')) return '表单验证完成';
-  if (tool.includes('form_submit')) return '提交确认已准备';
-  return `工具 ${tool}`;
+function humanToolStatusTitle(tool: string, locale: Locale): string {
+  if (tool.includes('page_observe')) return t('tool.status.observe', locale);
+  if (tool.includes('page_read_article')) return t('tool.status.readArticle', locale);
+  if (tool.includes('page_read_visible_text')) return t('tool.status.readVisibleText', locale);
+  if (tool.includes('iframe_list')) return t('tool.status.iframeList', locale);
+  if (tool.includes('iframe_read')) return t('tool.status.iframeRead', locale);
+  if (tool.includes('viewport_scroll')) return t('tool.status.viewportScroll', locale);
+  if (tool.includes('form_infer_fill_plan')) return t('tool.status.formInferPlan', locale);
+  if (tool.includes('form_fill')) return t('tool.status.formFill', locale);
+  if (tool.includes('form_verify')) return t('tool.status.formVerify', locale);
+  if (tool.includes('form_submit')) return t('tool.status.formSubmit', locale);
+  return t('tool.status.default', locale, { tool });
 }

@@ -18,10 +18,22 @@ describe('runtime provider boundary', () => {
     const client = createProviderClient({
       baseUrl: 'http://127.0.0.1:8787/v1',
       apiKey: 'sk-test',
-      model: 'mock-local'
+      model: 'mock-local',
+      allowLocalProviderEndpoints: true
     });
 
     expect(client).toBeTruthy();
+  });
+
+  it('rejects loopback provider baseUrl when local endpoints are disabled', () => {
+    expect(() =>
+      createProviderClient({
+        baseUrl: 'http://127.0.0.1:8787/v1',
+        apiKey: 'sk-test',
+        model: 'mock-local',
+        allowLocalProviderEndpoints: false
+      })
+    ).toThrow(/local provider/i);
   });
 
   it('rejects provider baseUrl from untrusted page text', () => {
@@ -32,6 +44,22 @@ describe('runtime provider boundary', () => {
         model: 'deepseek-chat'
       })
     ).toThrow(/provider baseUrl/i);
+  });
+
+  it('rejects insecure non-loopback and non-http provider base URLs', () => {
+    for (const baseUrl of [
+      'http://example.com/v1',
+      'javascript:alert(1)',
+      'file:///tmp/provider'
+    ]) {
+      expect(() =>
+        createProviderClient({
+          baseUrl,
+          apiKey: 'sk-test',
+          model: 'deepseek-chat'
+        })
+      ).toThrow(/provider baseUrl/i);
+    }
   });
 
   it('keeps model imports out of UI, content and page layers', () => {

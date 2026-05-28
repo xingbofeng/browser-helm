@@ -8,7 +8,10 @@ import {
   LoaderCircle,
   UserRound
 } from 'lucide-react';
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+import { useLocale, useT } from '../../i18n/context';
+import type { Locale } from '../../i18n/types';
 
 import type { RunSnapshot } from '../../runtime/runtime-messages';
 import { buildUserFacingPageSummary } from '../../shared/page-summary';
@@ -22,20 +25,23 @@ type AgentMessageListProps = {
 };
 
 export function AgentMessageList({ snapshot }: AgentMessageListProps) {
+  const t = useT();
+  const locale = useLocale();
   const waterfallRef = useRef<HTMLElement>(null);
   const hasRuntimeMessages = Boolean(snapshot?.messages?.length);
-  const baseMessages = hasRuntimeMessages ? snapshot?.messages ?? [] : fallbackMessages(snapshot);
+  const baseMessages = hasRuntimeMessages ? snapshot?.messages ?? [] : fallbackMessages(snapshot, t, locale);
   const rawMessages = snapshot
-    ? withDerivedPageSummary(baseMessages, snapshot)
+    ? withDerivedPageSummary(baseMessages, snapshot, t, locale)
     : baseMessages;
   const messages = prepareDisplayMessages(rawMessages);
-  const progress = buildRunProgress(snapshot);
+  const progress = buildRunProgress(snapshot, t);
   const nowTick = useNowTick(Boolean(progress));
-  const scrollAnchor = messages
+  const messageScrollAnchor = messages
     .map((message) =>
       `${message.id}:${message.status}:${message.updatedAt}:${message.content.length}`
     )
-    .join('|') + (progress ? `|progress:${progress.label}:${nowTick}` : '');
+    .join('|');
+  const scrollAnchor = `${messageScrollAnchor}${progress ? `|progress:${progress.label}:${nowTick}` : ''}`;
 
   const scrollToBottom = useCallback(() => {
     if (waterfallRef.current) {
@@ -65,7 +71,7 @@ export function AgentMessageList({ snapshot }: AgentMessageListProps) {
   }, [scrollToBottom]);
 
   return (
-    <section ref={waterfallRef} className="bh-agentWaterfall" aria-label="BrowserHelm Agent 消息">
+    <section ref={waterfallRef} className="bh-agentWaterfall" aria-label={t('messageList.aria')}>
       {messages.map((message) => (
         <article
           key={message.id}
@@ -79,12 +85,12 @@ export function AgentMessageList({ snapshot }: AgentMessageListProps) {
           <div className="bh-agentMessageBody">
             {message.reasoning ? (
               <details className="bh-reasoningSection">
-                <summary>思考过程</summary>
+                <summary>{t('messageList.reasoning')}</summary>
                 <StreamingMarkdown content={message.reasoning} className="bh-markdownContent" />
               </details>
             ) : null}
             {message.kind === 'page_summary' ? (
-              <PageObservationCard message={message} snapshot={snapshot} />
+              <PageObservationCard message={message} snapshot={snapshot} t={t} />
             ) : message.role === 'agent' && message.content ? (
               <>
                 {message.title ? <h2>{message.title}</h2> : null}
@@ -96,12 +102,12 @@ export function AgentMessageList({ snapshot }: AgentMessageListProps) {
                 <p>{message.content}</p>
               </>
             ) : (
-              <p>等待 BrowserHelm 输出...</p>
+              <p>{t('messageList.waitingOutput')}</p>
             )}
             {message.kind === 'diagnosis' && snapshot?.debugReport ? (
               <DebugReportSummary report={snapshot.debugReport} />
             ) : null}
-            {message.status === 'streaming' ? <span className="bh-streamingDots">生成中</span> : null}
+            {message.status === 'streaming' ? <span className="bh-streamingDots">{t('messageList.streaming')}</span> : null}
           </div>
         </article>
       ))}
@@ -122,7 +128,7 @@ function prepareDisplayMessages(messages: AgentMessage[]): AgentMessage[] {
     (lastIndex, message, index) => message.id.endsWith(':observe-status') ? index : lastIndex,
     -1
   );
-  return messages.filter((message, index) => {
+  const filtered = messages.filter((message, index) => {
     if (message.kind === 'page_summary') {
       return index === lastPageSummaryIndex;
     }
@@ -141,21 +147,57 @@ function prepareDisplayMessages(messages: AgentMessage[]): AgentMessage[] {
     }
     return index === lastObserveStatusIndex;
   });
+  return placePageSummaryAfterTask(filtered);
+}
+
+function placePageSummaryAfterTask(messages: AgentMessage[]): AgentMessage[] {
+  const pageSummaryIndex = messages.findIndex((message) => message.kind === 'page_summary');
+  if (pageSummaryIndex < 0) {
+    return messages;
+  }
+  const pageSummary = messages[pageSummaryIndex];
+  if (!pageSummary) {
+    return messages;
+  }
+  const pageSummaryRunId = runIdFromMessageId(pageSummary.id);
+  const withoutPageSummary = messages.filter((_, index) => index !== pageSummaryIndex);
+  const lastTaskIndex = withoutPageSummary.reduce(
+    (lastIndex, message, index) =>
+      message.kind === 'task' && runIdFromMessageId(message.id) === pageSummaryRunId
+        ? index
+        : lastIndex,
+    -1
+  );
+  if (lastTaskIndex < 0) {
+    return messages;
+  }
+  const insertAt = lastTaskIndex + 1;
+  return [
+    ...withoutPageSummary.slice(0, insertAt),
+    pageSummary,
+    ...withoutPageSummary.slice(insertAt)
+  ];
+}
+
+function runIdFromMessageId(id: string): string {
+  return id.split(':')[0] ?? id;
 }
 
 function PageObservationCard({
   message,
-  snapshot
+  snapshot,
+  t
 }: {
   message: AgentMessage;
   snapshot?: RunSnapshot | undefined;
+  t: ReturnType<typeof useT>;
 }) {
   const observation = snapshot?.structuredPageData?.observation.items[0];
   const currentDomain =
     observation?.currentDomain ??
     snapshot?.observation?.currentDomain ??
     domainFromSummary(message.content) ??
-    '当前页面';
+    t('page.observation.fallbackDomain');
   const url = observation?.url ?? snapshot?.observation?.url;
   const textCount = countSummaryText(observation?.visibleTextSummary ?? message.content);
   const linkCount = countLinks(snapshot);
@@ -167,27 +209,32 @@ function PageObservationCard({
         <span className="bh-qaCardStatusIcon" aria-hidden="true">
           <CheckCircle2 size={24} />
         </span>
-        <h2>已完成页面观察</h2>
+        <h2>{t('page.observation.completed')}</h2>
         {updatedAt ? <time>{formatMessageTime(updatedAt)}</time> : null}
         <ChevronDown size={17} aria-hidden="true" />
       </header>
       <div className="bh-pageObservationBody">
         <p>
-          <strong>当前页面：</strong>
+          <strong>{t('page.observation.currentPage')}：</strong>
           {url ? <span title={url}>{currentDomain}</span> : currentDomain}
         </p>
         <StreamingMarkdown content={message.content} className="bh-markdownContent" />
       </div>
-      <ul className="bh-pageObservationStats" aria-label="页面观察统计">
-        <li><FileText size={15} />文本 {textCount}</li>
-        <li><Link size={15} />链接 {linkCount}</li>
-        <li><FileText size={15} />表单 {formCount}</li>
+      <ul className="bh-pageObservationStats" aria-label={t('page.observation.statsAria')}>
+        <li><FileText size={15} />{t('page.observation.textCount', { count: String(textCount) })}</li>
+        <li><Link size={15} />{t('page.observation.linkCount', { count: String(linkCount) })}</li>
+        <li><FileText size={15} />{t('page.observation.formCount', { count: String(formCount) })}</li>
       </ul>
     </section>
   );
 }
 
-function withDerivedPageSummary(messages: AgentMessage[], snapshot: RunSnapshot): AgentMessage[] {
+function withDerivedPageSummary(
+  messages: AgentMessage[],
+  snapshot: RunSnapshot,
+  t: ReturnType<typeof useT>,
+  locale: Locale
+): AgentMessage[] {
   const nextMessages = [...messages];
   if (!nextMessages.some((message) => message.kind === 'page_summary')) {
     const item = snapshot.structuredPageData?.observation.items[0];
@@ -198,16 +245,16 @@ function withDerivedPageSummary(messages: AgentMessage[], snapshot: RunSnapshot)
       pageStateSummary: item?.pageStateSummary ?? snapshot.observation?.pageStateSummary,
       interactiveCount: snapshot.observation?.interactiveCount,
       warnings: snapshot.observation?.warnings
-    });
+    }, locale);
     if (summary || item || snapshot.observation) {
-      const title = item?.title ?? snapshot.observation?.title ?? '页面摘要';
+      const title = item?.title ?? snapshot.observation?.title ?? t('page.observation.summary');
       nextMessages.push({
         id: `${snapshot.runId}:derived-page-summary`,
         role: 'agent',
         kind: 'page_summary',
         status: 'complete',
         title,
-        content: summary || '当前页面已完成只读观察。',
+        content: summary || t('page.observation.readonlyDone'),
         createdAt: 0,
         updatedAt: 0
       });
@@ -218,7 +265,7 @@ function withDerivedPageSummary(messages: AgentMessage[], snapshot: RunSnapshot)
     ? streaming.finalText?.trim()
     : undefined;
   const finalProviderFinishedAt = streaming?.finishedAt;
-  if (finalProviderText) {
+  if (finalProviderText && !isRawAgentDecision(finalProviderText)) {
     const providerMessageId = `${snapshot.runId}:provider-response`;
     const providerMessageIndex = nextMessages.findIndex((message) =>
       message.id === providerMessageId
@@ -232,7 +279,7 @@ function withDerivedPageSummary(messages: AgentMessage[], snapshot: RunSnapshot)
         role: 'agent',
         kind: providerMessage?.kind ?? 'agent_status',
         status: 'complete',
-        title: providerMessage?.title ?? 'BrowserHelm',
+        title: providerMessage?.title ?? t('messageList.browserHelm'),
         content: finalProviderText,
         createdAt: providerMessage?.createdAt ?? finalProviderFinishedAt ?? 0,
         updatedAt: finalProviderFinishedAt ?? providerMessage?.updatedAt ?? 0
@@ -256,7 +303,7 @@ function withDerivedPageSummary(messages: AgentMessage[], snapshot: RunSnapshot)
       kind: 'diagnosis',
       status: 'complete',
       title: snapshot.debugReport.title,
-      content: findingText || '暂未发现高置信度问题。',
+      content: findingText || t('page.observation.noFindings'),
       createdAt: 0,
       updatedAt: 0
     });
@@ -272,7 +319,7 @@ function withDerivedPageSummary(messages: AgentMessage[], snapshot: RunSnapshot)
         role: 'agent',
         kind: 'recommendation',
         status: 'complete',
-        title: '建议',
+        title: t('page.observation.recommendation'),
         content: recommendationText,
         createdAt: 0,
         updatedAt: 0
@@ -280,6 +327,18 @@ function withDerivedPageSummary(messages: AgentMessage[], snapshot: RunSnapshot)
     }
   }
   return nextMessages;
+}
+
+function isRawAgentDecision(value: string): boolean {
+  try {
+    const parsed = JSON.parse(value) as { type?: unknown };
+    return parsed.type === 'tool_call' ||
+      parsed.type === 'finish' ||
+      parsed.type === 'ask_user' ||
+      parsed.type === 'fail';
+  } catch {
+    return false;
+  }
 }
 
 type RunProgress = {
@@ -310,7 +369,7 @@ function RunProgressCard({
   );
 }
 
-function buildRunProgress(snapshot: RunSnapshot | undefined): RunProgress | undefined {
+function buildRunProgress(snapshot: RunSnapshot | undefined, t: ReturnType<typeof useT>): RunProgress | undefined {
   if (!snapshot || !isActiveRunStatus(snapshot.status)) {
     return undefined;
   }
@@ -319,38 +378,38 @@ function buildRunProgress(snapshot: RunSnapshot | undefined): RunProgress | unde
   const latestModelStarted = [...trace].reverse().find((event) => event.type === 'model_stream_started');
   if (snapshot.status === 'thinking' || latestModelStarted) {
     return {
-      label: '正在思考下一步',
-      detail: 'BrowserHelm 正在结合页面观察、历史对话和工具结果组织回复。',
+      label: t('runProgress.thinking'),
+      detail: t('runProgress.thinkingDetail'),
       startedAt: latestModelStarted?.timestamp ?? Date.now()
     };
   }
   if (snapshot.status === 'executing_tool' && latestToolStarted) {
     const payload = recordPayload(latestToolStarted.payload);
-    const tool = stringValue(payload.tool) ?? '工具';
+    const tool = stringValue(payload.tool) ?? '';
     return {
-      label: humanToolLabel(tool),
-      detail: `正在运行 ${tool}，完成后会自动更新卡片和调试信息。`,
+      label: humanToolLabel(tool, t),
+      detail: t('runProgress.executingDetail', { tool }),
       startedAt: latestToolStarted.timestamp ?? Date.now()
     };
   }
   if (snapshot.status === 'observing') {
     return {
-      label: '正在观察当前页面',
-      detail: '正在读取标题、正文摘要、链接、表单和可交互元素。',
+      label: t('runProgress.observing'),
+      detail: t('runProgress.observingDetail'),
       startedAt: latestToolStarted?.timestamp ?? Date.now()
     };
   }
   if (snapshot.status === 'waiting_for_user') {
     return {
-      label: '等待你的补充',
-      detail: 'Agent 需要更多信息才能继续。',
+      label: t('runProgress.waitingUser'),
+      detail: t('runProgress.waitingUserDetail'),
       startedAt: Date.now()
     };
   }
   if (snapshot.status === 'recovering') {
     return {
-      label: '正在恢复运行',
-      detail: '正在根据错误信息选择下一步。',
+      label: t('runProgress.recovering'),
+      detail: t('runProgress.recoveringDetail'),
       startedAt: Date.now()
     };
   }
@@ -365,18 +424,18 @@ function isActiveRunStatus(status: RunSnapshot['status']): boolean {
     status === 'recovering';
 }
 
-function humanToolLabel(tool: string): string {
-  if (tool.includes('page_observe')) return '正在观察页面结构';
-  if (tool.includes('page_read_article')) return '正在读取页面正文';
-  if (tool.includes('page_read_visible_text')) return '正在读取可见文本';
-  if (tool.includes('iframe_list')) return '正在查找 iframe';
-  if (tool.includes('iframe_read')) return '正在读取 iframe 内容';
-  if (tool.includes('viewport_scroll')) return '正在滚动页面';
-  if (tool.includes('form_infer_fill_plan')) return '正在规划表单填写';
-  if (tool.includes('form_fill')) return '正在填写表单字段';
-  if (tool.includes('form_verify')) return '正在验证表单状态';
-  if (tool.includes('form_submit')) return '正在准备提交确认';
-  return '正在运行页面工具';
+function humanToolLabel(tool: string, t: ReturnType<typeof useT>): string {
+  if (tool.includes('page_observe')) return t('tool.running.observe');
+  if (tool.includes('page_read_article')) return t('tool.running.readArticle');
+  if (tool.includes('page_read_visible_text')) return t('tool.running.readVisibleText');
+  if (tool.includes('iframe_list')) return t('tool.running.iframeList');
+  if (tool.includes('iframe_read')) return t('tool.running.iframeRead');
+  if (tool.includes('viewport_scroll')) return t('tool.running.viewportScroll');
+  if (tool.includes('form_infer_fill_plan')) return t('tool.running.formInferPlan');
+  if (tool.includes('form_fill')) return t('tool.running.formFill');
+  if (tool.includes('form_verify')) return t('tool.running.formVerify');
+  if (tool.includes('form_submit')) return t('tool.running.formSubmit');
+  return t('tool.running.default');
 }
 
 function recordPayload(value: unknown): Record<string, unknown> {
@@ -401,7 +460,11 @@ function useNowTick(enabled: boolean): number {
   return now;
 }
 
-function fallbackMessages(snapshot: RunSnapshot | undefined): AgentMessage[] {
+function fallbackMessages(
+  snapshot: RunSnapshot | undefined,
+  t: ReturnType<typeof useT>,
+  locale: Locale
+): AgentMessage[] {
   if (!snapshot) {
     return [
       {
@@ -409,8 +472,8 @@ function fallbackMessages(snapshot: RunSnapshot | undefined): AgentMessage[] {
         role: 'agent',
         kind: 'agent_status',
         status: 'complete',
-        title: '准备观察当前页面',
-        content: 'BrowserHelm 会先读取页面摘要，再根据你的任务继续诊断。',
+        title: t('fallback.welcomeTitle'),
+        content: t('fallback.welcomeContent'),
         createdAt: 0,
         updatedAt: 0
       }
@@ -418,15 +481,15 @@ function fallbackMessages(snapshot: RunSnapshot | undefined): AgentMessage[] {
   }
   const content = snapshot.error?.message ??
     snapshot.debugReport?.title ??
-    (snapshot.observation ? buildUserFacingPageSummary(snapshot.observation) : undefined) ??
-    'BrowserHelm 已准备好继续检查当前页面。';
+    (snapshot.observation ? buildUserFacingPageSummary(snapshot.observation, locale) : undefined) ??
+    t('fallback.ready');
   return [
     {
       id: `${snapshot.runId}:fallback`,
       role: 'agent',
       kind: snapshot.error ? 'error' : 'agent_status',
       status: snapshot.error ? 'error' : 'complete',
-      title: snapshot.error ? '运行遇到问题' : '页面状态',
+      title: snapshot.error ? t('fallback.errorTitle') : t('fallback.pageStatus'),
       content,
       createdAt: 0,
       updatedAt: 0
@@ -469,8 +532,8 @@ function countLinks(snapshot: RunSnapshot | undefined): number {
 }
 
 function domainFromSummary(text: string): string | undefined {
-  const match = text.match(/来源：([^。\n]+)。/u);
-  return match?.[1];
+  const match = text.match(/来源：([^。\n]+)。|Source: ([^.\n]+)\./u);
+  return match?.[1] ?? match?.[2];
 }
 
 function formatMessageTime(value: number | string): string {
@@ -486,20 +549,33 @@ function formatMessageTime(value: number | string): string {
 }
 
 function DebugReportSummary({ report }: { report: DebugReport }) {
+  const t = useT();
   const findings = report.findings.slice(0, 3);
+  const confidenceLabels = {
+    high: t('diagnosis.confidence.high'),
+    medium: t('diagnosis.confidence.medium'),
+    low: t('diagnosis.confidence.low')
+  } as const;
+  const sourceLabels = {
+    observation: t('diagnosis.source.observation'),
+    form: t('diagnosis.source.form'),
+    debug: t('diagnosis.source.debug'),
+    tool_result: t('diagnosis.source.toolResult'),
+    user: t('diagnosis.source.user')
+  } as const;
   return (
-    <div className="bh-debugReportSummary" aria-label="诊断证据摘要">
+    <div className="bh-debugReportSummary" aria-label={t('diagnosis.summaryAria')}>
       {findings.map((finding, index) => (
         <article key={`${finding.title}:${index}`}>
           <header>
             <strong>{finding.title}</strong>
-            <span>{confidenceLabel(finding.confidence)}</span>
+            <span>{confidenceLabels[finding.confidence]}</span>
           </header>
           <p>{finding.explanation}</p>
           <ul>
             {finding.evidence.slice(0, 2).map((evidence, evidenceIndex) => (
               <li key={`${finding.title}:evidence:${evidenceIndex}`}>
-                {sourceLabel(evidence.source)}：{evidence.summary}
+                {sourceLabels[evidence.source]}: {evidence.summary}
               </li>
             ))}
           </ul>
@@ -507,27 +583,9 @@ function DebugReportSummary({ report }: { report: DebugReport }) {
       ))}
       {report.limitations?.length ? (
         <p className="bh-reportLimitations">
-          限制：{report.limitations.slice(0, 2).join('；')}
+          {t('diagnosis.limitations', { items: report.limitations.slice(0, 2).join('; ') })}
         </p>
       ) : null}
     </div>
   );
-}
-
-function confidenceLabel(confidence: DebugReport['findings'][number]['confidence']): string {
-  return {
-    high: '高信心',
-    medium: '中等信心',
-    low: '低信心'
-  }[confidence];
-}
-
-function sourceLabel(source: DebugReport['findings'][number]['evidence'][number]['source']): string {
-  return {
-    observation: '页面观察',
-    form: '表单',
-    debug: '调试信号',
-    tool_result: '工具结果',
-    user: '用户输入'
-  }[source];
 }

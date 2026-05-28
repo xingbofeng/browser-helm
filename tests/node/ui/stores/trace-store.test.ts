@@ -4,7 +4,7 @@ import { createTraceStore } from '../../../../src/ui/stores/trace-store';
 
 describe('trace store', () => {
   it('groups runtime events and selects event detail', () => {
-    const store = createTraceStore();
+    const store = createTraceStore('zh');
     const selected: Array<string | undefined> = [];
     const unsubscribe = store.subscribe(() => {
       selected.push(store.getState().selectedEvent?.type);

@@ -8,6 +8,10 @@ import type { AgentMessage } from '../../shared/schemas/agent-message.schema';
 import type { StructuredPageData } from '../../shared/schemas/structured-page-data.schema';
 import type { RunMode } from '../../shared/schemas/tool.schema';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
+import { useT } from '../../i18n/context';
+import { useLocale } from '../../i18n/context';
+import { readLocale, writeLocale } from '../../i18n/locale';
+import { createAppSettingsStore } from '../stores/app-settings-store';
 import { ApprovalDrawer } from '../approval/approval-drawer';
 import { AdvancedDebugPanel } from '../components/advanced-debug-drawer';
 import { AgentMessageList } from '../components/agent-message-list';
@@ -36,6 +40,8 @@ export function CockpitApp({
   targetRevision = 0,
   initialRunId
 }: CockpitAppProps) {
+  const t = useT();
+  const locale = useLocale();
   const [task, setTask] = useState('');
   const [mode, setMode] = useState<RunMode>('ask');
   const [busy, setBusy] = useState(false);
@@ -49,10 +55,14 @@ export function CockpitApp({
   const foregroundUserRunIdRef = useRef<string | undefined>(initialRunId);
   const userRunPendingRef = useRef(false);
   const agentStore = useMemo(() => createAgentStore(), []);
+  const traceStore = useMemo(() => createTraceStore(locale), [locale]);
   const pageDataStore = useMemo(() => createPageDataStore(), []);
-  const traceStore = useMemo(() => createTraceStore(), []);
   const approvalStore = useMemo(() => createApprovalStore(), []);
-  const settingsStore = useMemo(() => createSettingsStore(runtime), [runtime]);
+  const settingsStore = useMemo(() => createSettingsStore(runtime, locale), [runtime, locale]);
+  const appSettingsStore = useMemo(
+    () => createAppSettingsStore({ readLocale, writeLocale }),
+    []
+  );
   const agentState = useStore(agentStore);
   const pageDataState = useStore(pageDataStore);
   const traceState = useStore(traceStore);
@@ -106,6 +116,10 @@ export function CockpitApp({
   }, [settingsStore]);
 
   useEffect(() => {
+    void appSettingsStore.getState().loadLocale();
+  }, [appSettingsStore]);
+
+  useEffect(() => {
     document.body.classList.add('animal-cursor--force');
     document.documentElement.classList.add('animal-cursor--force');
     return () => {
@@ -152,10 +166,10 @@ export function CockpitApp({
       }
       void runtime
         .startRun({
-          task: '观察当前页面',
+          task: t('cockpit.autoObserveTask'),
           mode: 'ask',
           tabId: targetTabId,
-          skipProviderResponse: true
+          runKind: 'observe_only'
         })
         .then((started) => {
           if (foregroundUserRunIdRef.current || userRunPendingRef.current) {
@@ -185,7 +199,7 @@ export function CockpitApp({
         window.clearTimeout(timer);
       }
     };
-  }, [applySnapshot, runtime, subscribeToRun, targetTabId, targetRevision, initialRunId]);
+  }, [applySnapshot, runtime, subscribeToRun, targetTabId, targetRevision, initialRunId, t]);
 
   const start = async () => {
     const submittedTask = task.trim();
@@ -213,8 +227,8 @@ export function CockpitApp({
         ...messages,
         localErrorMessage(
           `local-error:${Date.now()}`,
-          '发送失败',
-          error instanceof Error ? error.message : 'BrowserHelm 未能启动当前任务。'
+          t('error.sendFailed'),
+          error instanceof Error ? error.message : t('error.cantStart')
         )
       ]);
       foregroundUserRunIdRef.current = undefined;
@@ -263,7 +277,7 @@ export function CockpitApp({
       runId: currentSnapshot.runId,
       requestId: pendingApproval.id,
       decision,
-      ...(decision === 'denied' ? { reason: '用户拒绝' } : {})
+      ...(decision === 'denied' ? { reason: t('cockpit.approvalDenyReason') } : {})
     });
     if (!result.ok) {
       approvalStore.getState().failDecision(result.code);
@@ -280,7 +294,7 @@ export function CockpitApp({
     const pendingApproval = currentSnapshot?.pendingApproval;
     const submitArgs = readSubmitApprovalArgs(pendingApproval?.argsPreview);
     if (!currentSnapshot || !submitArgs) {
-      throw new Error('当前没有可修改的提交审批');
+      throw new Error(t('runtime.error.noModifiableApproval'));
     }
 
     const fillResult = await runtime.executeTool({
@@ -350,16 +364,18 @@ export function CockpitApp({
         <div className="bh-agentBrand">
           <img className="bh-brandMark" src={browserHelmLogoUrl} alt="" aria-hidden="true" />
           <div>
-            <h1>BrowserHelm</h1>
-            <p>agentic page inspector</p>
+            <h1>{t('brand.name')}</h1>
+            <p>{t('brand.tagline')}</p>
           </div>
         </div>
         <div className="bh-agentHeaderActions">
-          <span className={`bh-agentStatus${!settingsState.settings ? ' bh-agentStatus--unconfigured' : ''}`}>{statusLabel(runDisplayState)}</span>
+          <span className={`bh-agentStatus${!settingsState.settings ? ' bh-agentStatus--unconfigured' : ''}`}>
+            {statusLabel(runDisplayState, t)}
+          </span>
           <Button
             htmlType="button"
             className="bh-headerIconButton"
-            aria-label="高级开发者选项"
+            aria-label={t('header.debugAria')}
             icon={<Bug size={18} />}
             onClick={() => {
               setDebugTab('trace');
@@ -369,7 +385,7 @@ export function CockpitApp({
           <Button
             htmlType="button"
             className="bh-headerIconButton"
-            aria-label="打开模型配置"
+            aria-label={t('header.settingsAria')}
             icon={<Settings size={18} />}
             onClick={() => setSettingsOpen(true)}
           />
@@ -381,7 +397,7 @@ export function CockpitApp({
       <div className="bh-agentComposerDock">
         {showReviseGoal ? (
           <div className="bh-reviseGoalBar">
-            <span>当前 run 可修改目标</span>
+            <span>{t('reviseGoal.hint')}</span>
             <Button
               htmlType="button"
               type="default"
@@ -391,7 +407,7 @@ export function CockpitApp({
                 void reviseCurrentGoal();
               }}
             >
-              修改目标
+              {t('reviseGoal.button')}
             </Button>
           </div>
         ) : null}
@@ -427,7 +443,7 @@ export function CockpitApp({
           />
           {approvalResult ? (
             <p className="bh-approvalResult" role="status">
-              审批结果：{approvalResult.code}
+              {t('approval.resultPrefix')}{approvalResult.code}
             </p>
           ) : null}
         </section>
@@ -437,10 +453,10 @@ export function CockpitApp({
         <div className="bh-debugOverlay" onClick={() => setSettingsOpen(false)}>
           <div className="bh-debugDrawerPanel" onClick={(e) => e.stopPropagation()}>
             <div className="bh-debugDrawerHeader">
-              <span className="bh-modalTitle"><Settings size={18} />模型配置</span>
+              <span className="bh-modalTitle"><Settings size={18} />{t('settings.title')}</span>
               <button
                 className="bh-debugDrawerClose"
-                aria-label="关闭"
+                aria-label={t('settings.closeAria')}
                 onClick={() => setSettingsOpen(false)}
               >
                 ✕
@@ -468,10 +484,10 @@ export function CockpitApp({
         <div className="bh-debugOverlay" onClick={() => setDebugOpen(false)}>
           <div className="bh-debugDrawerPanel" onClick={(e) => e.stopPropagation()}>
             <div className="bh-debugDrawerHeader">
-              <span className="bh-modalTitle"><Bug size={18} />高级开发者选项</span>
+              <span className="bh-modalTitle"><Bug size={18} />{t('debug.title')}</span>
               <button
                 className="bh-debugDrawerClose"
-                aria-label="关闭"
+                aria-label={t('debug.closeAria')}
                 onClick={() => setDebugOpen(false)}
               >
                 ✕
@@ -574,19 +590,22 @@ function statusToDisplayState(
   return 'idle';
 }
 
-function statusLabel(status: RunDisplayState): string {
+function statusLabel(
+  status: RunDisplayState,
+  t: ReturnType<typeof useT>
+): string {
   const labels: Record<RunDisplayState, string> = {
-    idle: 'Ready',
-    starting: 'Starting',
-    observing: 'Observing',
-    thinking: 'Thinking',
-    executing_tool: 'Running',
-    waiting_for_approval: 'Approval',
-    waiting_for_user: 'Waiting',
-    recovering: 'Recovering',
-    finished: 'Done',
-    failed: 'Error',
-    cancelled: 'Stopped'
+    idle: t('status.ready'),
+    starting: t('status.starting'),
+    observing: t('status.observing'),
+    thinking: t('status.thinking'),
+    executing_tool: t('status.running'),
+    waiting_for_approval: t('status.approval'),
+    waiting_for_user: t('status.waiting'),
+    recovering: t('status.recovering'),
+    finished: t('status.done'),
+    failed: t('status.error'),
+    cancelled: t('status.stopped')
   };
   return labels[status];
 }
@@ -616,118 +635,104 @@ function localErrorMessage(id: string, title: string, content: string): AgentMes
 
 function emptyStructuredPageData(): StructuredPageData {
   const updatedAt = '2026-05-25T00:00:00.000Z';
+
   return {
     observation: {
-      status: 'empty',
-      summary: '等待页面观察',
-      count: 0,
       items: [],
+      warnings: [],
+      count: 0,
+      status: 'empty',
       updatedAt,
-      warnings: []
+      summary: ''
     },
     refs: {
-      status: 'empty',
-      summary: '等待 Ref 映射',
-      count: 0,
       items: [],
+      warnings: [],
+      count: 0,
+      status: 'empty',
       updatedAt,
-      warnings: []
+      summary: ''
     },
     interactive: {
-      status: 'empty',
-      summary: '等待交互元素',
-      count: 0,
       items: [],
+      warnings: [],
+      count: 0,
+      status: 'empty',
       updatedAt,
-      warnings: []
+      summary: ''
     },
     forms: {
-      status: 'empty',
-      summary: '等待表单字段',
-      count: 0,
       items: [],
+      warnings: [],
+      count: 0,
+      status: 'empty',
       updatedAt,
-      warnings: []
+      summary: ''
     }
   };
 }
 
 type SubmitApprovalArgsPreview = {
-  formRefId?: string | undefined;
   formName: string;
-  submitMethod: 'button-click' | 'enter-submit';
-  submitTargetRefId?: string | undefined;
-  verifyStatus: 'pass' | 'fail' | 'warn';
-  verifyFailed: boolean;
   fieldCount: number;
   filledCount: number;
   skippedCount: number;
-  riskExplanation: string;
-  fields: Array<{
-    fieldRefId: string;
-    label: string;
-    name?: string | undefined;
-    type: string;
-    valuePreview: string;
-    isSensitive: boolean;
-    skipped?: boolean | undefined;
-  }>;
+  fields: SubmitApprovalFieldPreview[];
+  verifyStatus: string;
+  submitMethod: string;
+  riskExplanation?: string;
   warnings: string[];
+  submitTargetRefId?: string;
+  highRisk: boolean;
+};
+
+type SubmitApprovalFieldPreview = {
+  label: string;
+  name?: string;
+  valuePreview: string;
+  fieldRefId: string;
+  isSensitive: boolean;
+  skipped: boolean;
 };
 
 function readSubmitApprovalArgs(value: unknown): SubmitApprovalArgsPreview | undefined {
-  if (!isRecord(value) || !Array.isArray(value.fields)) {
-    return undefined;
-  }
-  const formName = readString(value.formName);
-  const submitMethod = readSubmitMethod(value.submitMethod);
-  const verifyStatus = readVerifyStatus(value.verifyStatus);
+  if (!isRecord(value)) return undefined;
+  const fields = readSubmitApprovalField(value.fields);
+  if (!fields.length) return undefined;
   const riskExplanation = readString(value.riskExplanation);
-  if (!formName || !submitMethod || !verifyStatus || !riskExplanation) {
-    return undefined;
-  }
-  const fields = value.fields.flatMap(readSubmitApprovalField);
-  if (fields.length === 0) {
-    return undefined;
-  }
+  const submitTargetRefId = readString(value.submitTargetRefId);
   return {
-    formRefId: readString(value.formRefId),
-    formName,
-    submitMethod,
-    submitTargetRefId: readString(value.submitTargetRefId),
-    verifyStatus,
-    verifyFailed: value.verifyFailed === true,
+    formName: readString(value.formName) ?? 'Unknown form',
     fieldCount: readNumber(value.fieldCount),
     filledCount: readNumber(value.filledCount),
     skippedCount: readNumber(value.skippedCount),
-    riskExplanation,
     fields,
+    verifyStatus: readString(value.verifyStatus) ?? 'unknown',
+    submitMethod: readSubmitMethod(value.submitMethod) ?? 'unknown',
     warnings: Array.isArray(value.warnings)
-      ? value.warnings.flatMap((warning) => readString(warning) ?? [])
-      : []
+      ? value.warnings.filter((w): w is string => typeof w === 'string')
+      : [],
+    highRisk: Boolean(value.highRisk),
+    ...(riskExplanation ? { riskExplanation } : {}),
+    ...(submitTargetRefId ? { submitTargetRefId } : {})
   };
 }
 
-function readSubmitApprovalField(value: unknown): SubmitApprovalArgsPreview['fields'] {
-  if (!isRecord(value)) return [];
-  const fieldRefId = readString(value.fieldRefId);
-  const label = readString(value.label);
-  const type = readString(value.type);
-  const valuePreview = readString(value.valuePreview);
-  if (!fieldRefId || !label || !type || !valuePreview) return [];
-  return [{
-    fieldRefId,
-    label,
-    name: readString(value.name),
-    type,
-    valuePreview,
-    isSensitive: value.isSensitive === true,
-    skipped: value.skipped === true
-  }];
-}
-
-function readVerifyStatus(value: unknown): SubmitApprovalArgsPreview['verifyStatus'] | undefined {
-  return value === 'pass' || value === 'fail' || value === 'warn' ? value : undefined;
+function readSubmitApprovalField(value: unknown): SubmitApprovalFieldPreview[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(isRecord)
+    .map((item) => {
+      const name = readString(item.name);
+      return {
+        label: readString(item.label) ?? 'Unknown field',
+        valuePreview: readString(item.valuePreview) ?? '',
+        fieldRefId: readString(item.fieldRefId) ?? '',
+        isSensitive: Boolean(item.isSensitive),
+        skipped: Boolean(item.skipped),
+        ...(name ? { name } : {})
+      };
+    });
 }
 
 function readSubmitMethod(value: unknown): SubmitApprovalArgsPreview['submitMethod'] | undefined {

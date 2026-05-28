@@ -18,7 +18,7 @@
 
 - [x] 3.1 Implement `bh_viewport_get_info` for page and iframe contexts.
 - [x] 3.2 Implement `bh_viewport_scroll` for page and iframe targets with changedPage and requiresObserve.
-- [x] 3.3 Remove deprecated `bh_iframe_click` and `bh_iframe_type` exposure.
+- [x] 3.3 Remove old `bh_iframe_click` and `bh_iframe_type` exposure.
 - [x] 3.4 Implement iframe-aware `bh_element_click` and `bh_element_type_text`.
 - [x] 3.5 Implement `bh_element_get_computed_style` and `bh_element_focus`.
 

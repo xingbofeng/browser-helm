@@ -1,7 +1,40 @@
 import { SIDE_PANEL_MESSAGES } from '../../shared/constants/event-names';
 
+export type SidePanelSurface = 'native' | 'floating' | 'debug_tab';
+
 export function sidePanelPathForTab(tabId: number): string {
   return `sidepanel.html?target=active&tabId=${tabId}`;
+}
+
+export function floatingPanelPathForTab(tabId: number): string {
+  return `sidepanel.html?target=active&tabId=${tabId}&surface=floating`;
+}
+
+export function sidePanelTargetTabIdFromUrl(url: string | undefined): number | undefined {
+  if (!url) {
+    return undefined;
+  }
+  try {
+    const tabId = Number(new URL(url).searchParams.get('tabId'));
+    return Number.isFinite(tabId) && tabId > 0 ? tabId : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function sidePanelSurfaceFromSender(input: {
+  url?: string | undefined;
+  hasSenderTab?: boolean | undefined;
+}): SidePanelSurface {
+  try {
+    const surface = input.url ? new URL(input.url).searchParams.get('surface') : undefined;
+    if (surface === 'floating') {
+      return 'floating';
+    }
+  } catch {
+    // Malformed sender URLs cannot be trusted as floating panels.
+  }
+  return input.hasSenderTab ? 'debug_tab' : 'native';
 }
 
 export async function bindSidePanelToTab(tabId: number): Promise<void> {

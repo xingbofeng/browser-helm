@@ -50,6 +50,52 @@ describe('decision-parser', () => {
     expect(result.error.code).toBe('MODEL_OUTPUT_INVALID_JSON');
   });
 
+  it('normalizes wrapped tool_call decisions from provider JSON mode', () => {
+    const result = parser.parse(JSON.stringify({
+      tool_call: {
+        tool: 'bh_page_read_article',
+        args: { maxChars: 1000 },
+        reason: 'need article text'
+      }
+    }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error('expected parse success');
+    }
+    expect(result.decision).toMatchObject({
+      type: 'tool_call',
+      tool: 'bh_page_read_article',
+      args: { maxChars: 1000 }
+    });
+  });
+
+  it('normalizes legacy bh_form_fill formFields into bh_form_fill_many fields', () => {
+    const result = parser.parse(JSON.stringify({
+      tool_call: {
+        tool: 'bh_form_fill',
+        args: {
+          formFields: {
+            ref_108: '美国'
+          }
+        },
+        reason: 'fill search box'
+      }
+    }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error('expected parse success');
+    }
+    expect(result.decision).toMatchObject({
+      type: 'tool_call',
+      tool: 'bh_form_fill_many',
+      args: {
+        fields: [{ fieldRefId: 'ref_108', value: '美国' }]
+      }
+    });
+  });
+
   it('returns parse error for invalid json', () => {
     const result = parser.parse('not-json');
 

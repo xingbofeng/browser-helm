@@ -49,6 +49,10 @@ export function bhFormSubmitWithApproval(
     // 提交审批。
     title: 'Submit Form (Approval Required)',
     description: 'Requests user approval before submitting a form.',
+    ui: {
+      titleKey: 'tool.title.bh_form_submit_with_approval',
+      descriptionKey: 'tool.description.bh_form_submit_with_approval',
+    },
     modes: ['form'],
     risk: 'high',
     argsSchema,

@@ -2,8 +2,10 @@ html,
 body,
 #root {
   min-width: 0;
-  min-height: 100vh;
+  width: 100%;
+  height: 100vh;
   margin: 0;
+  overflow: hidden;
 }
 
 button,
@@ -26,7 +28,7 @@ body.animal-cursor--force *,
 }
 
 .bh-agentSidePanel {
-  min-height: 100vh;
+  height: 100vh;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto auto;
   gap: 10px;
@@ -37,7 +39,7 @@ body.animal-cursor--force *,
   background-size: 22px 22px, auto;
   color: #33271f;
   font-family: var(--animal-font-family);
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .bh-agentSidePanel *,
@@ -49,7 +51,7 @@ body.animal-cursor--force *,
 .bh-agentHeader {
   position: sticky;
   top: 0;
-  z-index: 4;
+  z-index: 40;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -57,8 +59,11 @@ body.animal-cursor--force *,
   margin: -10px -10px 0;
   border-bottom: 1px solid rgba(226, 214, 190, 0.9);
   padding: 9px 10px;
-  background: rgba(255, 249, 238, 0.96);
+  background:
+    linear-gradient(180deg, rgba(255, 249, 238, 0.99), rgba(255, 249, 238, 0.96)),
+    #fff9ee;
   backdrop-filter: blur(12px);
+  isolation: isolate;
 }
 
 .bh-agentBrand {
@@ -803,7 +808,7 @@ body.animal-cursor--force *,
 .bh-debugOverlay {
   position: fixed;
   inset: 0;
-  z-index: 10;
+  z-index: 80;
   background: rgba(0, 0, 0, 0.24);
   animation: bhDebugFadeIn 0.18s ease;
 }
@@ -812,7 +817,7 @@ body.animal-cursor--force *,
   position: fixed;
   top: 0;
   right: 0;
-  z-index: 11;
+  z-index: 81;
   width: min(92vw, 420px);
   height: 100vh;
   display: grid;
@@ -1728,3 +1733,22 @@ body.animal-cursor--force *,
 .bh-eventList { list-style: none; padding: 0; margin: 0; }
 .bh-eventItem { padding: 3px 0; font-size: 0.82rem; font-family: monospace; color: #666; border-bottom: 1px solid #eee; }
 .bh-eventType { font-weight: 600; }
+
+/* --- 语言选择器 --- */
+.bh-localeSelect { display: flex; gap: 6px; }
+.bh-localeOption {
+  padding: 4px 12px;
+  border: 1px solid #dccbaa;
+  border-radius: 4px;
+  background: #fdf6ed;
+  color: #6a5546;
+  font-size: 12px;
+  cursor: url("../../../node_modules/animal-island-ui/dist/files/cursor-icon.1ea93a65.png") 4 0, default !important;
+}
+.bh-localeOption:hover { background: #f3e5d2; }
+.bh-localeOption.is-selected {
+  border-color: #448a50;
+  background: #dff0d8;
+  color: #1f5a29;
+  font-weight: 600;
+}

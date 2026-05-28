@@ -18,7 +18,7 @@ describe('format-tool helpers', () => {
         changedPage: false,
         requiresObserve: true
       })
-    ).toEqual(['需要用户确认', '需要重新观察', '页面未修改']);
+    ).toEqual(['tool.flag.approvalRequired', 'tool.flag.reobserveRequired', 'tool.flag.pageUnchanged']);
   });
 
   it('masks provider keys and sensitive args recursively', () => {

@@ -15,6 +15,7 @@ export class FloatingPanelFlow {
 
     // floating entry host 在页面 DOM 中
     const host = fixture.page.locator('#browserhelm-floating-entry-host');
+    await host.waitFor({ state: 'attached', timeout: 15000 });
     await expect(host).toBeAttached();
 
     // 用 evaluate 检查 shadow DOM 内的按钮是否存在

@@ -1,13 +1,13 @@
-import type { ApprovalRequest } from '../../shared/schemas/approval.schema';
+import type { ApprovalUiState } from '../../shared/schemas/approval.schema';
 import { createSimpleStore } from './store-core';
 
-type ApprovalStatus = ApprovalRequest['status'];
+type ApprovalStatus = ApprovalUiState['status'];
 
 type ApprovalStoreState = {
-  pending?: ApprovalRequest | undefined;
+  pending?: ApprovalUiState | undefined;
   decision?: ApprovalStatus | undefined;
   decisionError?: string | undefined;
-  setPending: (request: ApprovalRequest) => void;
+  setPending: (request: ApprovalUiState) => void;
   clearPending: () => void;
   startDecision: (decision: ApprovalStatus) => void;
   failDecision: (message: string) => void;

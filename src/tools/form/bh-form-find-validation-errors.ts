@@ -24,6 +24,10 @@ export function bhFormFindValidationErrors(
     // 找出浏览器校验失败或 aria-invalid 的字段，只用于 Form 模式诊断。
     title: 'Find Validation Errors',
     description: 'Finds fields with validation errors',
+    ui: {
+      titleKey: 'tool.title.bh_form_find_validation_errors',
+      descriptionKey: 'tool.description.bh_form_find_validation_errors',
+    },
     modes: ['form'],
     risk: 'safe',
     argsSchema,

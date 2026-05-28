@@ -1,3 +1,6 @@
+import { t } from '../i18n/t';
+import type { Locale } from '../i18n/types';
+
 type PageSummaryInput = {
   title?: string | undefined;
   currentDomain?: string | undefined;
@@ -7,23 +10,26 @@ type PageSummaryInput = {
   warnings?: string[] | undefined;
 };
 
-export function buildUserFacingPageSummary(input: PageSummaryInput): string {
+export function buildUserFacingPageSummary(input: PageSummaryInput, locale: Locale): string {
   const title = cleanSummaryPart(input.title);
   const domain = cleanSummaryPart(input.currentDomain) ?? domainFromUrl(input.url);
   const state = cleanSummaryPart(input.pageStateSummary);
+  const interactiveUnit = t('page.summary.interactiveUnit', locale);
   const shouldShowInteractiveCount = typeof input.interactiveCount === 'number' &&
-    !state?.includes('可交互元素');
+    !state?.includes(interactiveUnit);
   const lines = [
     title
-      ? `当前页面看起来是“${title}”。`
-      : '当前页面已完成只读观察。',
-    domain ? `来源：${domain}。` : undefined,
+      ? t('page.summary.pageLooksLike', locale, { title })
+      : t('page.observation.readonlyDone', locale),
+    domain ? t('page.summary.source', locale, { domain }) : undefined,
     state,
     shouldShowInteractiveCount
-      ? `检测到约 ${input.interactiveCount} 个可交互元素。`
+      ? t('page.summary.interactiveCount', locale, { count: String(input.interactiveCount) })
       : undefined,
     input.warnings?.length
-      ? `需要注意：${input.warnings.map(cleanSummaryPart).filter(Boolean).join('；')}。`
+      ? t('page.summary.warnings', locale, {
+        warnings: input.warnings.map(cleanSummaryPart).filter(Boolean).join('；')
+      })
       : undefined
   ];
   return lines.filter(Boolean).join('\n');

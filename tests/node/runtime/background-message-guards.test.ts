@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  isFloatingPanelOpenNativeMessage,
   isFloatingPanelUrlMessage,
   isFloatingPanelToggleMessage,
   isRuntimeMessageName,
@@ -86,6 +87,29 @@ describe('isFloatingPanelToggleMessage', () => {
   it('非对象返回 false', () => {
     expect(isFloatingPanelToggleMessage(null)).toBe(false);
     expect(isFloatingPanelToggleMessage(123)).toBe(false);
+  });
+});
+
+describe('isFloatingPanelOpenNativeMessage', () => {
+  it('合法的 FLOATING_PANEL_OPEN_NATIVE 消息返回 true', () => {
+    expect(
+      isFloatingPanelOpenNativeMessage({
+        type: SIDE_PANEL_MESSAGES.FLOATING_PANEL_OPEN_NATIVE
+      })
+    ).toBe(true);
+  });
+
+  it('其他 side panel 消息返回 false', () => {
+    expect(
+      isFloatingPanelOpenNativeMessage({
+        type: SIDE_PANEL_MESSAGES.FLOATING_PANEL_URL
+      })
+    ).toBe(false);
+  });
+
+  it('非对象返回 false', () => {
+    expect(isFloatingPanelOpenNativeMessage(null)).toBe(false);
+    expect(isFloatingPanelOpenNativeMessage('x')).toBe(false);
   });
 });
 

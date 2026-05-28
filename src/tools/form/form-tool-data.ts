@@ -10,6 +10,7 @@ import {
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 import type { ToolResult } from '../../shared/schemas/tool-result.schema';
+import type { Locale } from '../../i18n/types';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 
 export type FormToolData = {
@@ -20,7 +21,8 @@ export type FormToolData = {
 };
 
 export async function loadFormToolData(
-  rpc: ContentRpcClient
+  rpc: ContentRpcClient,
+  _locale: Locale = 'zh'
 ): Promise<FormToolData | ToolResult> {
   const response = await rpc.request({ type: CONTENT_RPC_MESSAGES.PAGE_OBSERVE });
   if (!response.ok) {

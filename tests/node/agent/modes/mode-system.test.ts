@@ -5,6 +5,7 @@ import { resolveRunMode } from '../../../../src/agent/modes/mode-system';
 describe('resolveRunMode', () => {
   it('uses explicit mode while adding classification reason', () => {
     const result = resolveRunMode({
+      locale: 'zh',
       task: '帮我看这个页面为什么报错',
       explicitMode: 'form'
     });
@@ -16,6 +17,7 @@ describe('resolveRunMode', () => {
 
   it('classifies mode when no explicit mode is provided', () => {
     const result = resolveRunMode({
+      locale: 'zh',
       task: '检查 console 和 network 错误'
     });
 
@@ -25,6 +27,7 @@ describe('resolveRunMode', () => {
 
   it('defaults ambiguous tasks to ask mode', () => {
     const result = resolveRunMode({
+      locale: 'zh',
       task: '看看这个'
     });
 
@@ -32,12 +35,13 @@ describe('resolveRunMode', () => {
     expect(result.classification.confidence).toBe('low');
   });
 
-  it('keeps act as action preparation instead of execution', () => {
+  it('describes act as bounded execution without final submission', () => {
     const result = resolveRunMode({
+      locale: 'zh',
       task: '点击提交按钮'
     });
 
     expect(result.mode).toBe('act');
-    expect(result.reason).toContain('不自动执行');
+    expect(result.reason).toContain('不自动提交');
   });
 });

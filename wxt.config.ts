@@ -50,12 +50,13 @@ export default defineConfig({
         description: 'Toggle BrowserHelm floating panel'
       }
     },
-    permissions: ['storage', 'tabs', 'scripting', 'sidePanel', 'webNavigation'],
-    host_permissions: ['<all_urls>'],
+    permissions: ['activeTab', 'storage', 'tabs', 'scripting', 'sidePanel', 'webNavigation'],
+    host_permissions: [],
+    optional_host_permissions: ['http://*/*', 'https://*/*', '<all_urls>'],
     web_accessible_resources: [
       {
         resources: ['sidepanel.html', 'assets/*', 'icons/*'],
-        matches: ['<all_urls>']
+        matches: ['http://*/*', 'https://*/*']
       }
     ]
   }

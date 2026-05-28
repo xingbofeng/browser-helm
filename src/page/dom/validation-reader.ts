@@ -1,4 +1,6 @@
 import type { FormFieldSnapshot } from '../../shared/schemas/structured-page-data.schema';
+import type { Locale } from '../../i18n/types';
+import { t } from '../../i18n/t';
 
 export type FieldValidationSnapshot = Pick<
   FormFieldSnapshot,
@@ -6,7 +8,8 @@ export type FieldValidationSnapshot = Pick<
 >;
 
 export function readFieldValidation(
-  element: HTMLElement
+  element: HTMLElement,
+  locale: Locale = 'zh'
 ): FieldValidationSnapshot {
   const required =
     element.hasAttribute('required') ||
@@ -19,7 +22,7 @@ export function readFieldValidation(
   const nativeValid = validity?.valid ?? true;
   const message =
     readValidationMessage(element) ??
-    (!nativeValid || ariaInvalid ? '字段校验未通过' : undefined);
+    (!nativeValid || ariaInvalid ? t('dom.field.validationFailed', locale) : undefined);
 
   return {
     required,

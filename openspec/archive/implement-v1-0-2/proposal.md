@@ -8,7 +8,7 @@ v1.0.1 已经把 BrowserHelm 产品化为单 Agent side panel 并接入真实 pr
 - 新增 viewport 读取和滚动能力：读取顶层页面或 iframe viewport 信息，执行低风险滚动并要求后续重新 observe/read。
 - 统一 iframe 读取语义：新增 `bh_iframe_list` 和 `bh_iframe_read`，使用 iframeId 表达 Agent 语义，读取 summary / visible text / article-like content 和 iframe scroll 状态。
 - 补齐 v1.0 必须工具缺口：element inspect/focus/click/type、nav open/reload/back/forward、debug console/network/explain、policy mask secrets。
-- 将 iframe 内元素动作统一到 iframe-aware stable ref + `bh_element_click` / `bh_element_type_text`，不保留 `bh_iframe_click` / `bh_iframe_type` deprecated 工具。
+- 将 iframe 内元素动作统一到 iframe-aware stable ref + `bh_element_click` / `bh_element_type_text`，不保留 `bh_iframe_click` / `bh_iframe_type` 兼容工具。
 - 将 side panel 用户任务从一次 snapshot provider answer 升级为 AgentLoop tool-calling 路径，使模型可根据工具结果继续读取、滚动、等待稳定和读取 iframe。
 - 保持 ContextCompactor 边界：完整文本、raw DOM、ToolResult data 进入 trace/storage；模型上下文只接收裁剪 summary/chunk。
 - 更新工具清单、content RPC、runtime messages、system prompt、trace、tests 和 E2E fixtures。

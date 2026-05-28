@@ -22,7 +22,7 @@ v1.0.2 的设计目标是补齐 v1.0 必须工具，并把用户任务接入真�
 - 不新增 `bh_iframe_scroll`，iframe 滚动统一由 viewport 工具承担。
 - 不做 screenshot-first、vision full page capture、CDP DOM snapshot 或 response body deep inspector。
 - 不做 PDF、下载文件、shadow DOM deep reader、上传、长期 memory、workflow replay 或 sub-agent。
-- 不保留 `bh_iframe_click` / `bh_iframe_type` deprecated 兼容工具。
+- 不保留 `bh_iframe_click` / `bh_iframe_type` 兼容工具。
 
 ## Decisions
 

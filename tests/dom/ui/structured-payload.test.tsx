@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
+import { I18nProvider } from '../../../src/i18n/context';
 import { StructuredPayload } from '../../../src/ui/components/structured-payload';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -18,7 +18,7 @@ describe('StructuredPayload 安全渲染', () => {
     document.body.append(container);
     const root = createRoot(container);
     act(() => {
-      root.render(<StructuredPayload value={value} maxDepth={maxDepth} />);
+      root.render(<I18nProvider initialLocale="en"><StructuredPayload value={value} maxDepth={maxDepth} /></I18nProvider>);
     });
     return container;
   }
@@ -69,7 +69,7 @@ describe('StructuredPayload 安全渲染', () => {
   it('超过 12 项的数组截断并显示剩余数', () => {
     const largeArray = Array.from({ length: 20 }, (_, i) => `item-${i}`);
     const container = renderPayload(largeArray);
-    expect(container.textContent).toContain('还有 8 项');
+    expect(container.textContent).toContain('8 more items');
   });
 
   it('空对象显示 {}', () => {
@@ -92,7 +92,7 @@ describe('StructuredPayload 安全渲染', () => {
       largeObj[`key${i}`] = i;
     }
     const container = renderPayload(largeObj);
-    expect(container.textContent).toContain('还有 4 项');
+    expect(container.textContent).toContain('4 more items');
   });
 
   it('超过 maxDepth 深层嵌套折叠', () => {

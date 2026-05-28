@@ -4,7 +4,7 @@ import { classifyTask } from '../../../../src/agent/task/task-classifier';
 
 describe('classifyTask', () => {
   it('classifies form diagnosis requests as form mode', () => {
-    const result = classifyTask('帮我看这个表单为什么不能提交，哪些必填项缺失');
+    const result = classifyTask('帮我看这个表单为什么不能提交，哪些必填项缺失', 'zh');
 
     expect(result.mode).toBe('form');
     expect(result.confidence).toBe('high');
@@ -12,28 +12,38 @@ describe('classifyTask', () => {
   });
 
   it('classifies page error requests as debug mode', () => {
-    const result = classifyTask('检查这个页面 console 和 network 为什么报错');
+    const result = classifyTask('检查这个页面 console 和 network 为什么报错', 'zh');
 
     expect(result.mode).toBe('debug');
     expect(result.reason).toContain('页面');
   });
 
   it('classifies action requests as act mode without promising execution', () => {
-    const result = classifyTask('帮我点击提交按钮');
+    const result = classifyTask('帮我点击提交按钮', 'zh');
 
     expect(result.mode).toBe('act');
-    expect(result.reason).toContain('动作准备');
+    expect(result.reason).toContain('执行');
+    expect(result.actionIntent).toBe('submit');
+    expect(result.requiresApproval).toBe(true);
+  });
+
+  it('preserves action intent when a form task asks to submit', () => {
+    const result = classifyTask('帮我提交这个表单', 'zh');
+
+    expect(result.mode).toBe('form');
+    expect(result.actionIntent).toBe('submit');
+    expect(result.requiresApproval).toBe(true);
   });
 
   it('classifies general questions as ask mode', () => {
-    const result = classifyTask('总结一下当前页面内容');
+    const result = classifyTask('总结一下当前页面内容', 'zh');
 
     expect(result.mode).toBe('ask');
     expect(result.confidence).toBe('medium');
   });
 
   it('safely falls back to ask mode for ambiguous tasks', () => {
-    const result = classifyTask('看看这个');
+    const result = classifyTask('看看这个', 'zh');
 
     expect(result.mode).toBe('ask');
     expect(result.confidence).toBe('low');

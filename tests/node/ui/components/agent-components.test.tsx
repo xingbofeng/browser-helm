@@ -6,34 +6,80 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AdvancedDebugDrawer } from '../../../../src/ui/components/advanced-debug-drawer';
 import { AgentMessageList } from '../../../../src/ui/components/agent-message-list';
+import { ChatPanel } from '../../../../src/ui/components/chat-panel';
 import { ModelConfigForm } from '../../../../src/ui/components/model-config-modal';
 import type { RunSnapshot } from '../../../../src/runtime/runtime-messages';
+import { I18nProvider } from '../../../../src/i18n/context';
 import type { StructuredPageData } from '../../../../src/shared/schemas/structured-page-data.schema';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 describe('agent side panel components', () => {
+  it('only exposes ask and act modes in the primary composer', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+
+    try {
+      await act(async () => {
+        root.render(
+          <I18nProvider>
+            <ChatPanel
+              task=""
+              mode="ask"
+              busy={false}
+              canStop={false}
+              onTaskChange={() => undefined}
+              onModeChange={() => undefined}
+              onStart={() => undefined}
+              onStop={() => undefined}
+            />
+          </I18nProvider>
+        );
+        await Promise.resolve();
+      });
+
+      const picker = container.querySelector<HTMLButtonElement>('button[aria-label="选择 Run Mode"]');
+      expect(picker).not.toBeNull();
+      await act(async () => {
+        picker?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+
+      const options = [...container.querySelectorAll('[role="option"]')]
+        .map((option) => option.textContent ?? '');
+      expect(options).toEqual(['询问 / Ask', '执行 / Act']);
+      expect(container.textContent).not.toContain('表单 / Form');
+      expect(container.textContent).not.toContain('调试 / Debug');
+    } finally {
+      root.unmount();
+      container.remove();
+    }
+  });
+
   it('derives page summaries even when runtime messages only contain user-authored messages', () => {
     const html = renderToString(
-      <AgentMessageList
-        snapshot={{
-          runId: 'run_1',
-          mode: 'ask',
-          status: 'observed',
-          messages: [
-            {
-              id: 'run_1:task',
-              role: 'user',
-              kind: 'task',
-              status: 'complete',
-              content: '检查这个页面',
-              createdAt: 1,
-              updatedAt: 1
-            }
-          ],
-          structuredPageData: structuredData()
-        }}
-      />
+      <I18nProvider>
+        <AgentMessageList
+          snapshot={{
+            runId: 'run_1',
+            mode: 'ask',
+            status: 'observed',
+            messages: [
+              {
+                id: 'run_1:task',
+                role: 'user',
+                kind: 'task',
+                status: 'complete',
+                content: '检查这个页面',
+                createdAt: 1,
+                updatedAt: 1
+              }
+            ],
+            structuredPageData: structuredData()
+          }}
+        />
+      </I18nProvider>
     );
 
     expect(html).toContain('检查这个页面');
@@ -46,14 +92,16 @@ describe('agent side panel components', () => {
 
   it('derives an initial page summary when runtime messages are absent', () => {
     const html = renderToString(
-      <AgentMessageList
-        snapshot={{
-          runId: 'run_1',
-          mode: 'ask',
-          status: 'observed',
-          structuredPageData: structuredData()
-        }}
-      />
+      <I18nProvider>
+        <AgentMessageList
+          snapshot={{
+            runId: 'run_1',
+            mode: 'ask',
+            status: 'observed',
+            structuredPageData: structuredData()
+          }}
+        />
+      </I18nProvider>
     );
 
     expect(html).toContain('注册页');
@@ -64,33 +112,35 @@ describe('agent side panel components', () => {
 
   it('renders diagnosis evidence and confidence without exposing raw ref ids', () => {
     const html = renderToString(
-      <AgentMessageList
-        snapshot={{
-          runId: 'run_report',
-          mode: 'form',
-          status: 'finished',
-          refs: [],
-          debugReport: {
-            title: '表单诊断',
-            findings: [
-              {
-                title: '提交按钮不可用',
-                explanation: '页面提交按钮处于禁用状态，需要先补齐必填字段。',
-                confidence: 'high',
-                evidence: [
-                  {
-                    source: 'form',
-                    summary: '邮箱字段缺少必填值',
-                    refId: 'ref_email'
-                  }
-                ]
-              }
-            ],
-            recommendations: ['补齐邮箱后再提交'],
-            limitations: ['只能读取页面状态，不能自动提交']
-          }
-        }}
-      />
+      <I18nProvider>
+        <AgentMessageList
+          snapshot={{
+            runId: 'run_report',
+            mode: 'form',
+            status: 'finished',
+            refs: [],
+            debugReport: {
+              title: '表单诊断',
+              findings: [
+                {
+                  title: '提交按钮不可用',
+                  explanation: '页面提交按钮处于禁用状态，需要先补齐必填字段。',
+                  confidence: 'high',
+                  evidence: [
+                    {
+                      source: 'form',
+                      summary: '邮箱字段缺少必填值',
+                      refId: 'ref_email'
+                    }
+                  ]
+                }
+              ],
+              recommendations: ['补齐邮箱后再提交'],
+              limitations: ['只能读取页面状态，不能自动提交']
+            }
+          }}
+        />
+      </I18nProvider>
     );
 
     expect(html).toContain('提交按钮不可用');
@@ -107,25 +157,27 @@ describe('agent side panel components', () => {
 
     act(() => {
       root.render(
-        <AgentMessageList
-          snapshot={{
-            runId: 'run_xss',
-            mode: 'ask',
-            status: 'observed',
-            messages: [
-              {
-                id: 'run_xss:provider-response',
-                role: 'agent',
-                kind: 'agent_status',
-                status: 'complete',
-                title: 'BrowserHelm',
-                content: '安全 **加粗** <img src=x onerror="window.__xss=1"> [bad](javascript:alert(1)) [ok](https://example.com)',
-                createdAt: 1,
-                updatedAt: 1
-              }
-            ]
-          }}
-        />
+        <I18nProvider>
+          <AgentMessageList
+            snapshot={{
+              runId: 'run_xss',
+              mode: 'ask',
+              status: 'observed',
+              messages: [
+                {
+                  id: 'run_xss:provider-response',
+                  role: 'agent',
+                  kind: 'agent_status',
+                  status: 'complete',
+                  title: 'BrowserHelm',
+                  content: '安全 **加粗** <img src=x onerror="window.__xss=1"> [bad](javascript:alert(1)) [ok](https://example.com)',
+                  createdAt: 1,
+                  updatedAt: 1
+                }
+              ]
+            }}
+          />
+        </I18nProvider>
       );
     });
 
@@ -169,16 +221,20 @@ describe('agent side panel components', () => {
     try {
       await act(async () => {
         root.render(
-          <AgentMessageList snapshot={snapshotWithStreamingMessage('hello', 1)} />
+          <I18nProvider>
+            <AgentMessageList snapshot={snapshotWithStreamingMessage('hello', 1)} />
+          </I18nProvider>
         );
         await Promise.resolve();
       });
 
       await act(async () => {
         root.render(
-          <AgentMessageList
-            snapshot={snapshotWithStreamingMessage('hello world with more text', 2)}
-          />
+          <I18nProvider>
+            <AgentMessageList
+              snapshot={snapshotWithStreamingMessage('hello world with more text', 2)}
+            />
+          </I18nProvider>
         );
         await Promise.resolve();
       });
@@ -209,11 +265,12 @@ describe('agent side panel components', () => {
         active: false,
         chunkCount: 3,
         fallbackUsed: false
-      }
+      },
+      capabilityLimitations: ['CDP deep inspection unavailable']
     };
 
     await act(async () => {
-      root.render(<AdvancedDebugDrawer snapshot={snapshot} structuredPageData={structuredData()} />);
+      root.render(<I18nProvider><AdvancedDebugDrawer snapshot={snapshot} structuredPageData={structuredData()} /></I18nProvider>);
       await Promise.resolve();
     });
 
@@ -231,6 +288,7 @@ describe('agent side panel components', () => {
 
     expect(container.textContent).toContain('ref_submit');
     expect(container.textContent).toContain('邮箱');
+    expect(container.textContent).toContain('浅层 Debug / CDP 不可用');
     root.unmount();
     container.remove();
   });
@@ -250,18 +308,20 @@ describe('agent side panel components', () => {
 
     await act(async () => {
       root.render(
-        <ModelConfigForm
-          settings={{
-            baseUrl: 'https://api.example.com/v1',
-            model: 'gpt-old',
-            apiKey: 'sk-existing-secret',
-            streamingEnabled: true
-          }}
-          maskedApiKey="sk-...cret"
-          onClose={() => undefined}
-          onSave={onSave}
-          onTest={onTest}
-        />
+        <I18nProvider>
+          <ModelConfigForm
+            settings={{
+              baseUrl: 'https://api.example.com/v1',
+              model: 'gpt-old',
+              apiKey: 'sk-existing-secret',
+              streamingEnabled: true
+            }}
+            maskedApiKey="sk-...cret"
+            onClose={() => undefined}
+            onSave={onSave}
+            onTest={onTest}
+          />
+        </I18nProvider>
       );
       await Promise.resolve();
     });
@@ -279,12 +339,13 @@ describe('agent side panel components', () => {
       await Promise.resolve();
     });
 
-    expect(onTest).toHaveBeenCalledWith(expect.objectContaining({
+    const testSettings = (onTest.mock.calls as unknown as Array<[unknown]>)[0]?.[0];
+    expect(testSettings).toMatchObject({
       baseUrl: 'https://api.next.example/v1',
       model: 'gpt-test',
       apiKey: 'sk-new-secret',
       streamingEnabled: true
-    }));
+    });
     expect(document.body.textContent).toContain('连接正常');
     expect(document.body.textContent).not.toContain('sk-new-secret');
 
@@ -293,9 +354,58 @@ describe('agent side panel components', () => {
       await Promise.resolve();
     });
 
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+    const savedSettings = (onSave.mock.calls as unknown as Array<[unknown]>)[0]?.[0];
+    expect(savedSettings).toMatchObject({
       apiKey: 'sk-new-secret',
       streamingEnabled: true
+    });
+    root.unmount();
+    container.remove();
+  });
+
+  it('warns and saves explicit consent for local provider endpoints', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const onSave = vi.fn(() => Promise.resolve());
+    const onTest = vi.fn(() => Promise.resolve({
+      ok: true,
+      code: 'OK',
+      message: '连接正常',
+      supportsStreaming: false,
+      model: 'local-model'
+    }));
+
+    await act(async () => {
+      root.render(
+        <I18nProvider>
+          <ModelConfigForm
+            settings={{
+              baseUrl: 'http://127.0.0.1:8787/v1',
+              model: 'local-model',
+              apiKey: 'sk-local',
+              streamingEnabled: false,
+              allowLocalProviderEndpoints: true
+            }}
+            onClose={() => undefined}
+            onSave={onSave}
+            onTest={onTest}
+          />
+        </I18nProvider>
+      );
+      await Promise.resolve();
+    });
+
+    expect(document.body.textContent).toContain('本地配置');
+
+    await act(async () => {
+      button('保存配置').click();
+      await Promise.resolve();
+    });
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      baseUrl: 'http://127.0.0.1:8787/v1',
+      allowLocalProviderEndpoints: true
     }));
     root.unmount();
     container.remove();

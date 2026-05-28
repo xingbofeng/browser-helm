@@ -11,10 +11,16 @@ describe('settings store', () => {
         model: 'gpt-test',
         apiKey: 'sk-secret-1234'
       }),
+      getDomainPolicy: async () => ({
+        enabledDomains: ['example.com']
+      }),
       setProviderSettings: async (settings) => {
         saved.push(settings);
+      },
+      setDomainPolicy: async (policy) => {
+        saved.push(policy);
       }
-    });
+    }, 'zh');
 
     await store.getState().load();
     await store.getState().save({
@@ -27,14 +33,46 @@ describe('settings store', () => {
     expect(store.getState().policyPlaceholders.map((item) => item.id)).toEqual([
       'read_only_default',
       'confirm_before_submit',
-      'domain_blocklist',
+      'domain_policy',
       'debug_network_read'
     ]);
+    expect(store.getState().domainPolicy).toEqual({ enabledDomains: ['example.com'] });
     expect(saved).toEqual([
       {
         baseUrl: 'https://api.next.example.com/v1',
         model: 'gpt-next',
         apiKey: 'sk-secret-5678'
+      }
+    ]);
+  });
+
+  it('saves explicit domain policy settings', async () => {
+    const saved: unknown[] = [];
+    const store = createSettingsStore({
+      getProviderSettings: async () => undefined,
+      setProviderSettings: async () => undefined,
+      getDomainPolicy: async () => undefined,
+      setDomainPolicy: async (policy) => {
+        saved.push(policy);
+      }
+    }, 'zh');
+
+    await store.getState().saveDomainPolicy({
+      enabledDomains: ['example.com'],
+      blockedDomains: ['blocked.example'],
+      defaultEnabled: false
+    });
+
+    expect(store.getState().domainPolicy).toEqual({
+      enabledDomains: ['example.com'],
+      blockedDomains: ['blocked.example'],
+      defaultEnabled: false
+    });
+    expect(saved).toEqual([
+      {
+        enabledDomains: ['example.com'],
+        blockedDomains: ['blocked.example'],
+        defaultEnabled: false
       }
     ]);
   });
@@ -50,7 +88,7 @@ describe('settings store', () => {
       setProviderSettings: async (settings) => {
         saved.push(settings);
       }
-    });
+    }, 'zh');
 
     await store.getState().load();
     await store.getState().save({

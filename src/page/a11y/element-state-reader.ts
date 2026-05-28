@@ -1,4 +1,6 @@
 import { ERROR_CODES } from '../../shared/constants/error-codes';
+import type { Locale } from '../../i18n/types';
+import { t } from '../../i18n/t';
 import type { StructuredPageWarning } from '../../shared/schemas/structured-page-data.schema';
 import { isDisabledElement, isVisibleElement } from './element-finder';
 import { resolveRole } from './role-resolver';
@@ -11,7 +13,7 @@ export type ElementStateSnapshot = {
   warnings: StructuredPageWarning[];
 };
 
-export function readElementState(element: Element | null): ElementStateSnapshot {
+export function readElementState(element: Element | null, locale: Locale = 'zh'): ElementStateSnapshot {
   if (!element) {
     return {
       visible: false,
@@ -19,7 +21,7 @@ export function readElementState(element: Element | null): ElementStateSnapshot 
       warnings: [
         {
           code: ERROR_CODES.ELEMENT_STATE_UNREADABLE,
-          message: '无法读取元素状态：元素不存在或已失效'
+          message: t('page.elementState.unreadable', locale)
         }
       ]
     };

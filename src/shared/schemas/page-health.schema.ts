@@ -6,6 +6,13 @@ export const consoleErrorSummarySchema = z.object({
   source: z.string().min(1).optional()
 });
 
+export const consoleMessageSummarySchema = z.object({
+  level: z.enum(['debug', 'info', 'log', 'warn']),
+  message: z.string().min(1),
+  count: z.number().int().positive(),
+  source: z.string().min(1).optional()
+});
+
 export const networkFailureSummarySchema = z.object({
   url: z.string().min(1),
   method: z.string().min(1),
@@ -15,6 +22,7 @@ export const networkFailureSummarySchema = z.object({
 
 export const pageHealthSummarySchema = z.object({
   consoleErrors: z.array(consoleErrorSummarySchema),
+  consoleMessages: z.array(consoleMessageSummarySchema).optional(),
   networkFailures: z.array(networkFailureSummarySchema),
   hasForm: z.boolean(),
   pageStateSummary: z.string().min(1),
@@ -22,5 +30,6 @@ export const pageHealthSummarySchema = z.object({
 });
 
 export type ConsoleErrorSummary = z.infer<typeof consoleErrorSummarySchema>;
+export type ConsoleMessageSummary = z.infer<typeof consoleMessageSummarySchema>;
 export type NetworkFailureSummary = z.infer<typeof networkFailureSummarySchema>;
 export type PageHealthSummary = z.infer<typeof pageHealthSummarySchema>;

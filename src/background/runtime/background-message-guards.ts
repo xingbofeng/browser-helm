@@ -20,6 +20,17 @@ export function isFloatingPanelUrlMessage(value: unknown): value is {
   );
 }
 
+/** 类型守卫：FLOATING_PANEL_OPEN_NATIVE 消息。 */
+export function isFloatingPanelOpenNativeMessage(value: unknown): value is {
+  type: typeof SIDE_PANEL_MESSAGES.FLOATING_PANEL_OPEN_NATIVE;
+} {
+  return (
+    Boolean(value) &&
+    typeof value === 'object' &&
+    (value as Record<string, unknown>).type === SIDE_PANEL_MESSAGES.FLOATING_PANEL_OPEN_NATIVE
+  );
+}
+
 /** 类型守卫：FLOATING_PANEL_TOGGLE 消息。 */
 export function isFloatingPanelToggleMessage(value: unknown): value is {
   type: typeof SIDE_PANEL_MESSAGES.FLOATING_PANEL_TOGGLE;

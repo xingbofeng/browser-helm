@@ -74,6 +74,34 @@ describe('open-ai-compatible-client', () => {
     });
   });
 
+  it('passes abort signals to completion requests', async () => {
+    const controller = new AbortController();
+    let receivedSignal: AbortSignal | null | undefined;
+    const client = new OpenAICompatibleClient({
+      apiKey: 'k',
+      baseUrl: 'https://example.com/v1',
+      model: 'gpt-5-mini',
+      fetchImpl: async (_input, init) => {
+        receivedSignal = init?.signal;
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content: '{"ok":true}' } }]
+          }),
+          { status: 200 }
+        );
+      }
+    });
+
+    await client.complete({
+      runId: 'run_1',
+      stepIndex: 0,
+      messages: [],
+      signal: controller.signal
+    });
+
+    expect(receivedSignal).toBe(controller.signal);
+  });
+
   it('streams text chunks from OpenAI-compatible SSE responses', async () => {
     const requestedBodies: unknown[] = [];
     const client = new OpenAICompatibleClient({
@@ -267,10 +295,73 @@ describe('open-ai-compatible-client', () => {
     expect(result).toMatchObject({
       ok: true,
       code: 'OK',
-      supportsStreaming: true,
+      supportsStreaming: false,
       model: 'gpt-5-mini'
     });
     expect(JSON.stringify(result)).not.toContain('sk-live-super-secret-token');
+  });
+
+  it('reports streaming support from an actual stream probe', async () => {
+    const requestBodies: unknown[] = [];
+    const client = new OpenAICompatibleClient({
+      apiKey: 'k',
+      baseUrl: 'https://example.com/v1',
+      model: 'gpt-5-mini',
+      fetchImpl: async (_input, init) => {
+        const body = parseJsonBody(init?.body);
+        requestBodies.push(body);
+        if (typeof body === 'object' && body && (body as { stream?: unknown }).stream === true) {
+          return new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                const encoder = new TextEncoder();
+                controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'));
+                controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                controller.close();
+              }
+            }),
+            { status: 200, headers: { 'content-type': 'text/event-stream' } }
+          );
+        }
+        return new Response(
+          JSON.stringify({ choices: [{ message: { content: '{"ok":true}' } }] }),
+          { status: 200 }
+        );
+      }
+    });
+
+    const result = await client.testConnection();
+
+    expect(result.supportsStreaming).toBe(true);
+    expect(requestBodies.some((body) =>
+      typeof body === 'object' && body !== null && (body as { stream?: unknown }).stream === true
+    )).toBe(true);
+  });
+
+  it('reports no streaming support when the stream probe fails', async () => {
+    const client = new OpenAICompatibleClient({
+      apiKey: 'k',
+      baseUrl: 'https://example.com/v1',
+      model: 'gpt-5-mini',
+      fetchImpl: async (_input, init) => {
+        const body = parseJsonBody(init?.body);
+        if (typeof body === 'object' && body && (body as { stream?: unknown }).stream === true) {
+          return new Response('stream disabled', { status: 400 });
+        }
+        return new Response(
+          JSON.stringify({ choices: [{ message: { content: '{"ok":true}' } }] }),
+          { status: 200 }
+        );
+      }
+    });
+
+    const result = await client.testConnection();
+
+    expect(result).toMatchObject({
+      ok: true,
+      code: 'OK',
+      supportsStreaming: false
+    });
   });
 });
 

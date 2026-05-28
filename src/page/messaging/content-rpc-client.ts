@@ -8,6 +8,12 @@ import {
   mergeFrameObservationResponses,
   type ContentRpcStrategy
 } from './content-rpc-strategies';
+import {
+  BROWSER_HELM_DOMAIN_POLICY_STORAGE_KEY,
+  evaluateBrowserHelmDomainPolicy,
+  isBrowserHelmDomainPolicy,
+  type BrowserHelmDomainPolicy
+} from '../../shared/domain-policy';
 
 export interface ContentRpcClient {
   request(message: ContentRpcRequest): Promise<ContentRpcResponse>;
@@ -88,6 +94,9 @@ export class ChromeContentRpcClient implements ContentRpcClient {
     if (ChromeContentRpcClient.ensuredContentScriptTabs.has(this.tabId)) {
       return;
     }
+    if (!(await this.isDomainAllowedForTab())) {
+      return;
+    }
 
     try {
       await chrome.scripting.executeScript({
@@ -102,6 +111,28 @@ export class ChromeContentRpcClient implements ContentRpcClient {
       // Some pages cannot be injected. The follow-up sendMessage keeps the
       // existing CONTENT_SCRIPT_UNAVAILABLE reporting path.
     }
+  }
+
+  private async isDomainAllowedForTab(): Promise<boolean> {
+    if (!globalThis.chrome?.tabs?.get) {
+      return true;
+    }
+    try {
+      const tab = await chrome.tabs.get(this.tabId);
+      const policy = await this.readDomainPolicy();
+      return evaluateBrowserHelmDomainPolicy(tab.url, policy).allowed;
+    } catch {
+      return true;
+    }
+  }
+
+  private async readDomainPolicy(): Promise<BrowserHelmDomainPolicy | undefined> {
+    if (!globalThis.chrome?.storage?.local) {
+      return undefined;
+    }
+    const result = await chrome.storage.local.get(BROWSER_HELM_DOMAIN_POLICY_STORAGE_KEY);
+    const value = result[BROWSER_HELM_DOMAIN_POLICY_STORAGE_KEY];
+    return isBrowserHelmDomainPolicy(value) ? value : undefined;
   }
 }
 

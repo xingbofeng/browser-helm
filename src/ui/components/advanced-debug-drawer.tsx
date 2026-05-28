@@ -2,6 +2,7 @@ import { Bug, Download, ListTree, MousePointerClick, RadioTower, Wrench } from '
 import { FileText } from 'lucide-react';
 import { Button } from 'animal-island-ui';
 import { useMemo, useState } from 'react';
+import { useT, useLocale } from '../../i18n/context';
 
 import type { RunSnapshot, RuntimeEvent } from '../../runtime/runtime-messages';
 import type { StructuredPageData } from '../../shared/schemas/structured-page-data.schema';
@@ -19,21 +20,35 @@ type AdvancedDebugDrawerProps = {
   onInspectElement?: ((refId: string) => void) | undefined;
 };
 
-const filterChips = ['全部', '表单字段', '按钮', '异常', '禁用'] as const;
-const debugTabs = [
-  { key: 'trace', label: 'Trace', icon: ListTree },
-  { key: 'tools', label: '工具', icon: Wrench },
-  { key: 'elements', label: '元素与表单', icon: MousePointerClick },
-  { key: 'form', label: '表单执行', icon: FileText },
-  { key: 'streaming', label: 'Streaming', icon: RadioTower }
-] as const;
-type DebugTabKey = (typeof debugTabs)[number]['key'];
+type FilterChipKey = 'all' | 'formField' | 'button' | 'error' | 'disabled';
+
+function filterChips(t: ReturnType<typeof useT>) {
+  return [
+    { key: 'all', label: t('debug.elements.filterAll') },
+    { key: 'formField', label: t('debug.elements.filterFormField') },
+    { key: 'button', label: t('debug.elements.filterButton') },
+    { key: 'error', label: t('debug.elements.filterError') },
+    { key: 'disabled', label: t('debug.elements.filterDisabled') }
+  ] as const;
+}
+
+function debugTabs(t: ReturnType<typeof useT>) {
+  return [
+    { key: 'trace', label: t('debug.tab.trace'), icon: ListTree },
+    { key: 'tools', label: t('debug.tab.tools'), icon: Wrench },
+    { key: 'elements', label: t('debug.tab.elements'), icon: MousePointerClick },
+    { key: 'form', label: t('debug.tab.form'), icon: FileText },
+    { key: 'streaming', label: t('debug.tab.streaming'), icon: RadioTower }
+  ] as const;
+}
+type DebugTabKey = ReturnType<typeof debugTabs>[number]['key'];
 
 export function AdvancedDebugDrawer({
   snapshot,
   structuredPageData,
   onInspectElement
 }: AdvancedDebugDrawerProps) {
+  const t = useT();
   const [open, setOpen] = useState(() =>
     typeof localStorage !== 'undefined'
       ? localStorage.getItem('browserhelm.debug.open') === 'true'
@@ -57,7 +72,7 @@ export function AdvancedDebugDrawer({
         icon={<Bug size={16} />}
         onClick={() => setOpenAndPersist(!open)}
       >
-        高级开发者选项
+        {t('debug.title')}
       </Button>
       {open ? (
         <AdvancedDebugPanel
@@ -82,11 +97,14 @@ export function AdvancedDebugPanel({
   activeTab: DebugTabKey;
   onTabChange: (tab: DebugTabKey) => void;
 }) {
+  const t = useT();
+  const tabs = debugTabs(t);
+
   return (
     <div className="bh-debugPanel">
       <DebugSummary snapshot={snapshot} structuredPageData={structuredPageData} />
-      <div className="bh-debugTabs" aria-label="高级开发者选项">
-        {debugTabs.map((tab) => {
+      <div className="bh-debugTabs" aria-label={t('debug.tab.aria')}>
+        {tabs.map((tab) => {
           const Icon = tab.icon;
           return (
             <button
@@ -120,26 +138,38 @@ function DebugSummary(props: {
   snapshot?: RunSnapshot | undefined;
   structuredPageData: StructuredPageData;
 }) {
+  const t = useT();
   const observation = props.snapshot?.observation;
   const streaming = props.snapshot?.streaming;
+  const debugLimitations = [
+    ...(props.snapshot?.capabilityLimitations ?? []),
+    ...(props.snapshot?.debugReport?.limitations ?? [])
+  ];
+  const showDebugBoundary = props.snapshot?.mode === 'debug' || debugLimitations.length > 0;
   return (
     <div className="bh-debugSummary">
-      <span>{observation?.currentDomain ?? '未观察页面'}</span>
+      <span>{observation?.currentDomain ?? t('debug.notObserved')}</span>
       <span>{props.snapshot?.mode ?? 'ask'} / {props.snapshot?.status ?? 'idle'}</span>
-      <span>元素 {props.structuredPageData.interactive.count}</span>
-      <span>表单 {props.structuredPageData.forms.count}</span>
-      <span>警告 {props.structuredPageData.observation.warnings.length}</span>
-      <span>{streaming?.enabled ? 'Streaming on' : 'Streaming off'}</span>
+      <span>{t('debug.elements.elementCount', { count: String(props.structuredPageData.interactive.count) })}</span>
+      <span>{t('debug.elements.formCount', { count: String(props.structuredPageData.forms.count) })}</span>
+      <span>{t('debug.elements.warningCount', { count: String(props.structuredPageData.observation.warnings.length) })}</span>
+      <span>{streaming?.enabled ? t('debug.streaming.on') : t('debug.streaming.off')}</span>
+      {showDebugBoundary ? (
+        <span title={debugLimitations.join('; ') || t('debug.shallowBoundaryTitle')}>
+          {t('debug.shallowBoundary')}
+        </span>
+      ) : null}
     </div>
   );
 }
 
 function TraceTab({ snapshot }: { snapshot?: RunSnapshot | undefined }) {
+  const t = useT();
   return (
     <div className="bh-debugTab">
       <div className="bh-debugTabHeader">
         <ListTree size={16} />
-        <strong>事件摘要</strong>
+        <strong>{t('debug.trace.title')}</strong>
         <span className="bh-debugTabActions">
           <DownloadTraceButton events={snapshot?.trace ?? []} />
         </span>
@@ -150,11 +180,12 @@ function TraceTab({ snapshot }: { snapshot?: RunSnapshot | undefined }) {
 }
 
 function ToolTab({ snapshot }: { snapshot?: RunSnapshot | undefined }) {
+  const t = useT();
   return (
     <div className="bh-debugTab">
       <div className="bh-debugTabHeader">
         <Wrench size={16} />
-        <strong>工具结果</strong>
+        <strong>{t('debug.tools.title')}</strong>
       </div>
       <ToolInspector
         toolResult={snapshot?.toolResult}
@@ -171,10 +202,13 @@ function ElementsFormsTab({
   data: StructuredPageData;
   onInspectElement?: ((refId: string) => void) | undefined;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const [query, setQuery] = useState('');
-  const [chip, setChip] = useState<(typeof filterChips)[number]>('全部');
+  const [chip, setChip] = useState<FilterChipKey>('all');
   const [selectedRowId, setSelectedRowId] = useState<string | undefined>();
-  const rows = useMemo(() => mergeElementsAndForms(data), [data]);
+  const rows = useMemo(() => mergeElementsAndForms(data, locale), [data, locale]);
+  const chips = filterChips(t);
   const filteredRows = rows.filter((row) => matchRow(row, query, chip));
   const selected = filteredRows.find((row) => row.id === selectedRowId) ?? filteredRows[0];
   const selectRow = (row: ElementsFormsRow) => {
@@ -186,31 +220,31 @@ function ElementsFormsTab({
     <div className="bh-elementsFormsTab">
       <div className="bh-filterBar">
         <input
-          aria-label="搜索元素与表单"
-          placeholder="搜索名称、标签、role 或 ref"
+          aria-label={t('debug.elements.searchAria')}
+          placeholder={t('debug.elements.searchPlaceholder')}
           value={query}
           onChange={(event) => setQuery(event.currentTarget.value)}
         />
-        <div className="bh-chipRow" aria-label="元素与表单过滤">
-          {filterChips.map((item) => (
+        <div className="bh-chipRow" aria-label={t('debug.elements.filterAria')}>
+          {chips.map((item) => (
             <button
-              key={item}
+              key={item.key}
               type="button"
-              aria-pressed={chip === item}
-              onClick={() => setChip(item)}
+              aria-pressed={chip === item.key}
+              onClick={() => setChip(item.key)}
             >
-              {item}
+              {item.label}
             </button>
           ))}
         </div>
       </div>
-      <div className="bh-elementList" role="list" aria-label="元素与表单结果">
+      <div className="bh-elementList" role="list" aria-label={t('debug.elements.resultAria')}>
         {filteredRows.map((row) => (
           <button
             key={row.id}
             type="button"
             className="bh-elementListItem"
-            aria-label={`检查元素 ${row.label} ${row.refId}`}
+            aria-label={t('debug.elements.inspectAria', { label: row.label, refId: row.refId })}
             aria-pressed={row.id === selected?.id}
             onClick={() => selectRow(row)}
           >
@@ -233,24 +267,26 @@ function ElementsFormsTab({
 }
 
 function ElementDetail({ row }: { row: ElementsFormsRow }) {
+  const t = useT();
   return (
     <article className="bh-detailPanel">
       <header>
-        <h3>选中详情</h3>
+        <h3>{t('debug.detail.title')}</h3>
         <code>{row.refId}</code>
       </header>
       <dl>
-        <div><dt>名称</dt><dd>{row.label}</dd></div>
-        <div><dt>状态</dt><dd>visible={String(row.visible)} disabled={String(row.disabled)}</dd></div>
-        <div><dt>约束</dt><dd>required={String(row.required ?? false)}</dd></div>
-        <div><dt>校验</dt><dd>{row.validationMessage ?? row.validation}</dd></div>
-        <div><dt>提交原因</dt><dd>{row.submitReason ?? '无阻塞'}</dd></div>
+        <div><dt>{t('debug.detail.name')}</dt><dd>{row.label}</dd></div>
+        <div><dt>{t('debug.detail.state')}</dt><dd>visible={String(row.visible)} disabled={String(row.disabled)}</dd></div>
+        <div><dt>{t('debug.detail.constraints')}</dt><dd>required={String(row.required ?? false)}</dd></div>
+        <div><dt>{t('debug.detail.validation')}</dt><dd>{row.validationMessage ?? row.validation}</dd></div>
+        <div><dt>{t('debug.detail.submitReason')}</dt><dd>{row.submitReason ?? t('debug.detail.noBlock')}</dd></div>
       </dl>
     </article>
   );
 }
 
 function StreamingTab({ snapshot }: { snapshot?: RunSnapshot | undefined }) {
+  const t = useT();
   const streaming = snapshot?.streaming;
   const streamEvents = (snapshot?.trace ?? []).filter((event) =>
     event.type.startsWith('model_stream_')
@@ -258,27 +294,27 @@ function StreamingTab({ snapshot }: { snapshot?: RunSnapshot | undefined }) {
   const duration = streaming?.startedAt && streaming.finishedAt
     ? `${Math.max(0, streaming.finishedAt - streaming.startedAt)}ms`
     : streaming?.active
-      ? '进行中'
+      ? t('debug.streaming.inProgress')
       : '-';
   return (
     <div className="bh-streamingTab">
       <div className="bh-debugTabHeader">
         <RadioTower size={16} />
-        <strong>Streaming 状态</strong>
+        <strong>{t('debug.streaming.title')}</strong>
       </div>
       <dl className="bh-streamingMetrics">
-        <div><dt>Provider</dt><dd>{streaming?.provider ?? '-'}</dd></div>
-        <div><dt>Model</dt><dd>{streaming?.model ?? '-'}</dd></div>
-        <div><dt>启用</dt><dd>{String(streaming?.enabled ?? false)}</dd></div>
-        <div><dt>进行中</dt><dd>{String(streaming?.active ?? false)}</dd></div>
-        <div><dt>Chunk</dt><dd>{streaming?.chunkCount ?? 0}</dd></div>
-        <div><dt>耗时</dt><dd>{duration}</dd></div>
-        <div><dt>Fallback</dt><dd>{String(streaming?.fallbackUsed ?? false)}</dd></div>
+        <div><dt>{t('debug.streaming.provider')}</dt><dd>{streaming?.provider ?? '-'}</dd></div>
+        <div><dt>{t('debug.streaming.model')}</dt><dd>{streaming?.model ?? '-'}</dd></div>
+        <div><dt>{t('debug.streaming.enabled')}</dt><dd>{String(streaming?.enabled ?? false)}</dd></div>
+        <div><dt>{t('debug.streaming.active')}</dt><dd>{String(streaming?.active ?? false)}</dd></div>
+        <div><dt>{t('debug.streaming.chunk')}</dt><dd>{streaming?.chunkCount ?? 0}</dd></div>
+        <div><dt>{t('debug.streaming.duration')}</dt><dd>{duration}</dd></div>
+        <div><dt>{t('debug.streaming.fallback')}</dt><dd>{String(streaming?.fallbackUsed ?? false)}</dd></div>
       </dl>
       {streaming?.fallbackReason ? <p>{streaming.fallbackReason}</p> : null}
       {streaming?.finalText ? (
         <article className="bh-streamPreview">
-          <h3>Final preview</h3>
+          <h3>{t('debug.streaming.finalPreview')}</h3>
           <p>{streaming.finalText}</p>
         </article>
       ) : null}
@@ -293,9 +329,9 @@ function StreamingTab({ snapshot }: { snapshot?: RunSnapshot | undefined }) {
 }
 
 function DownloadTraceButton({ events }: { events: RuntimeEvent[] }) {
+  const t = useT();
   const handleDownload = () => {
     if (events.length === 0) return;
-    // 和 UI 一样聚合 delta 事件，避免 68 个 chunk 导出 68 行噪点
     const summarized = summarizeTraceEvents(events);
     const jsonl = summarized
       .map((event) => JSON.stringify(event))
@@ -317,7 +353,7 @@ function DownloadTraceButton({ events }: { events: RuntimeEvent[] }) {
     <button
       type="button"
       className="bh-debugActionButton"
-      aria-label="下载 trace JSONL"
+      aria-label={t('debug.trace.downloadAria')}
       disabled={events.length === 0}
       onClick={handleDownload}
     >
@@ -329,15 +365,15 @@ function DownloadTraceButton({ events }: { events: RuntimeEvent[] }) {
 function matchRow(
   row: ElementsFormsRow,
   query: string,
-  chip: (typeof filterChips)[number]
+  chip: FilterChipKey
 ): boolean {
   const normalized = query.trim().toLowerCase();
   const chipMatched =
-    chip === '全部' ||
-    (chip === '表单字段' && row.type === 'form-field') ||
-    (chip === '按钮' && row.type === 'button') ||
-    (chip === '异常' && row.validation !== '-' && !row.validation.includes('通过')) ||
-    (chip === '禁用' && row.disabled);
+    chip === 'all' ||
+    (chip === 'formField' && row.type === 'form-field') ||
+    (chip === 'button' && row.type === 'button') ||
+    (chip === 'error' && !!row.hasValidationIssue) ||
+    (chip === 'disabled' && row.disabled);
   if (!chipMatched) {
     return false;
   }
@@ -350,10 +386,10 @@ function matchRow(
     .includes(normalized);
 }
 
-
 function FormExecutionTab({ snapshot }: { snapshot?: RunSnapshot | undefined }) {
+  const t = useT();
   if (!snapshot) {
-    return <p className="bh-emptyMsg">暂无运行快照</p>;
+    return <p className="bh-emptyMsg">{t('debug.noSnapshot')}</p>;
   }
 
   const toolResult = snapshot.toolResult;
@@ -367,19 +403,19 @@ function FormExecutionTab({ snapshot }: { snapshot?: RunSnapshot | undefined }) 
 
   return (
     <div className="bh-debugSection">
-      <h3>表单执行状态</h3>
+      <h3>{t('debug.form.title')}</h3>
       {toolResult ? (
         <div className="bh-debugDetail">
-          <p><strong>工具:</strong> {toolResult.tool}</p>
-          <p><strong>代码:</strong> {toolResult.code}</p>
-          <p><strong>摘要:</strong> {toolResult.summary}</p>
-          <p><strong>成功:</strong> {toolResult.ok ? '是' : '否'}</p>
+          <p><strong>{t('debug.form.tool')}:</strong> {toolResult.tool}</p>
+          <p><strong>{t('debug.form.code')}:</strong> {toolResult.code}</p>
+          <p><strong>{t('debug.form.summary')}:</strong> {toolResult.summary}</p>
+          <p><strong>{t('debug.form.success')}:</strong> {toolResult.ok ? t('debug.form.yes') : t('debug.form.no')}</p>
         </div>
       ) : null}
 
-      <h3>表单生命周期事件 ({formTraceEvents.length})</h3>
+      <h3>{t('debug.form.events', { count: String(formTraceEvents.length) })}</h3>
       {formTraceEvents.length === 0 ? (
-        <p className="bh-emptyMsg">暂无表单相关事件</p>
+        <p className="bh-emptyMsg">{t('debug.form.noEvents')}</p>
       ) : (
         <ul className="bh-eventList">
           {formTraceEvents.map((evt: RuntimeEvent, i: number) => (

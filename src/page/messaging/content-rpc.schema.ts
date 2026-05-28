@@ -91,10 +91,21 @@ export const contentRpcRequestSchema = z.discriminatedUnion('type', [
     valuePreview: actionValuePreviewSchema
   }),
   // 表单填写动作
-  z.object({ type: z.literal(CONTENT_RPC_MESSAGES.FORM_FILL_FIELD), fieldRefId: z.string().min(1), value: z.string(), clear: z.boolean().optional() }),
-  z.object({ type: z.literal(CONTENT_RPC_MESSAGES.FORM_FILL_MANY), targets: z.array(z.object({ fieldRefId: z.string().min(1), value: z.string(), clear: z.boolean().optional() })) }),
+  z.object({
+    type: z.literal(CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE),
+    action: z.enum(['fill', 'submit']),
+    fieldRefIds: z.array(z.string().min(1)).optional(),
+    submitTargetRefId: z.string().min(1).optional()
+  }),
+  z.object({ type: z.literal(CONTENT_RPC_MESSAGES.FORM_FILL_FIELD), fieldRefId: z.string().min(1), value: z.string(), clear: z.boolean().optional(), actionToken: z.string().optional() }),
+  z.object({ type: z.literal(CONTENT_RPC_MESSAGES.FORM_FILL_MANY), targets: z.array(z.object({ fieldRefId: z.string().min(1), value: z.string(), clear: z.boolean().optional() })), actionToken: z.string().optional() }),
   z.object({ type: z.literal(CONTENT_RPC_MESSAGES.FORM_VERIFY), fieldRefIds: z.array(z.string().min(1)), submitRefId: z.string().min(1).optional() }),
-  z.object({ type: z.literal(CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT), submitTargetRefId: z.string().min(1).optional() }),
+  z.object({
+    type: z.literal(CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT),
+    submitTargetRefId: z.string().min(1).optional(),
+    actionToken: z.string().optional(),
+    allowDisabledSubmit: z.boolean().optional()
+  }),
 ]);
 
 export const contentRpcSuccessSchema = z.union([
@@ -152,6 +163,9 @@ export const contentRpcSuccessSchema = z.union([
     ok: z.literal(true),
     stable: z.boolean(),
     readyState: z.string(),
+    layoutStableFrames: z.number().int().nonnegative().optional(),
+    fontsReady: z.boolean().optional(),
+    networkIdle: z.enum(['unavailable', 'observed']).optional(),
     waitedMs: z.number().int().nonnegative()
   }),
   z.object({

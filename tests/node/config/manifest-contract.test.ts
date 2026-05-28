@@ -52,9 +52,16 @@ describe('manifest 权限契约', () => {
     expect(permissions).toContain('storage');
   });
 
-  it('包含 <all_urls> host 权限', () => {
-    const hostPermissions = manifest.host_permissions as string[];
-    expect(hostPermissions).toContain('<all_urls>');
+  it('使用 activeTab，并把 http/https 与 <all_urls> 放入 optional host 权限', () => {
+    const permissions = manifest.permissions as string[];
+    const hostPermissions = (manifest.host_permissions as string[] | undefined) ?? [];
+    const optionalHostPermissions = manifest.optional_host_permissions as string[];
+
+    expect(permissions).toContain('activeTab');
+    expect(hostPermissions).toEqual([]);
+    expect(hostPermissions).not.toContain('<all_urls>');
+    expect(optionalHostPermissions).toEqual(expect.arrayContaining(['http://*/*', 'https://*/*']));
+    expect(optionalHostPermissions).toContain('<all_urls>');
   });
 });
 
@@ -116,10 +123,11 @@ describe('manifest action / web_accessible_resources 契约', () => {
     expect(allResources).toContain('assets/*');
   });
 
-  it('web_accessible_resources 全部匹配 <all_urls>', () => {
+  it('web_accessible_resources 只暴露给 http/https 页面', () => {
     const resources = manifest.web_accessible_resources as Array<{ matches: string[] }>;
     for (const entry of resources) {
-      expect(entry.matches).toContain('<all_urls>');
+      expect(entry.matches).toEqual(expect.arrayContaining(['http://*/*', 'https://*/*']));
+      expect(entry.matches).not.toContain('<all_urls>');
     }
   });
 });

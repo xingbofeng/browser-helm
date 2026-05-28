@@ -6,6 +6,8 @@ import type {
   RuntimeProviderSettings,
   RuntimeProviderTestResult
 } from '../../runtime/runtime-messages';
+import { useT, useLocale, useSetLocale } from '../../i18n/context';
+import { LOCALE_LABELS, SUPPORTED_LOCALES } from '../../i18n/types';
 
 type ModelConfigFormProps = {
   settings?: RuntimeProviderSettings | undefined;
@@ -16,11 +18,17 @@ type ModelConfigFormProps = {
 };
 
 export function ModelConfigForm(props: ModelConfigFormProps) {
+  const t = useT();
+  const currentLocale = useLocale();
+  const setLocale = useSetLocale();
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState(props.settings?.baseUrl ?? '');
   const [model, setModel] = useState(props.settings?.model ?? '');
   const [streamingEnabled, setStreamingEnabled] = useState(
     props.settings?.streamingEnabled ?? true
+  );
+  const [allowLocalProviderEndpoints, setAllowLocalProviderEndpoints] = useState(
+    props.settings?.allowLocalProviderEndpoints ?? true
   );
   const [showKey, setShowKey] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -30,8 +38,10 @@ export function ModelConfigForm(props: ModelConfigFormProps) {
     baseUrl,
     model,
     ...(apiKey ? { apiKey } : props.settings?.apiKey ? { apiKey: props.settings.apiKey } : {}),
-    streamingEnabled
+    streamingEnabled,
+    allowLocalProviderEndpoints
   });
+  const usesLocalProviderEndpoint = isLocalProviderEndpoint(baseUrl);
 
   const testConnection = async () => {
     setBusy(true);
@@ -56,58 +66,91 @@ export function ModelConfigForm(props: ModelConfigFormProps) {
     <div className="bh-modelConfig">
       <div className="bh-providerStatus">
         <span className="bh-statusDot" aria-hidden="true" />
-        <span>本地配置</span>
-        <small>配置只保存在当前浏览器扩展中</small>
+        <span>{t('settings.localConfig')}</span>
+        <small>{t('settings.localConfigNote')}</small>
       </div>
 
       <label>
-        <span>Base URL</span>
+        <span>{t('settings.baseUrl')}</span>
         <Input
-          aria-label="Base URL"
+          aria-label={t('settings.baseUrl')}
           value={baseUrl}
-          placeholder="https://api.openai.com/v1"
+          placeholder={t('settings.baseUrlPlaceholder')}
           onChange={(event) => setBaseUrl(event.currentTarget.value)}
         />
       </label>
 
       <label>
-        <span>Model</span>
+        <span>{t('settings.model')}</span>
         <Input
-          aria-label="Model"
+          aria-label={t('settings.model')}
           value={model}
-          placeholder="gpt-4.1-mini"
+          placeholder={t('settings.modelPlaceholder')}
           onChange={(event) => setModel(event.currentTarget.value)}
         />
       </label>
 
       <label>
-        <span>API Key</span>
+        <span>{t('settings.apiKey')}</span>
         <Input
-          aria-label="API Key"
+          aria-label={t('settings.apiKey')}
           type={showKey ? 'text' : 'password'}
-          placeholder={props.maskedApiKey ?? 'sk-...'}
+          placeholder={props.maskedApiKey ?? t('settings.apiKeyPlaceholder')}
           value={apiKey}
           onChange={(event) => setApiKey(event.currentTarget.value)}
           suffix={
             <button
               type="button"
               className="bh-iconButtonInline"
-              aria-label={showKey ? '隐藏 API Key' : '显示 API Key'}
+              aria-label={showKey ? t('settings.hideApiKey') : t('settings.showApiKey')}
               onClick={() => setShowKey((value) => !value)}
             >
               {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
             </button>
           }
         />
-        <small>不会写入 Trace 或页面摘要</small>
+        <small>{t('settings.apiKeyNotice')}</small>
       </label>
 
       <div className="bh-switchRow">
         <div>
-          <strong>启用流式输出</strong>
-          <small>失败时自动回退到普通完成模式</small>
+          <strong>{t('settings.streamingEnabled')}</strong>
+          <small>{t('settings.streamingNote')}</small>
         </div>
         <Switch checked={streamingEnabled} onChange={setStreamingEnabled} />
+      </div>
+
+      <div className="bh-switchRow">
+        <div>
+          <strong>{t('settings.allowLocalProvider')}</strong>
+          <small>{t('settings.allowLocalProviderNote')}</small>
+        </div>
+        <Switch checked={allowLocalProviderEndpoints} onChange={setAllowLocalProviderEndpoints} />
+      </div>
+
+      {usesLocalProviderEndpoint ? (
+        <p className="bh-configNotice" role="status">
+          {t('settings.localProviderWarning', { baseUrl: baseUrl.trim() })}
+        </p>
+      ) : null}
+
+      <div className="bh-switchRow">
+        <div>
+          <strong>{t('settings.language')}</strong>
+          <small>{t('settings.languageLabel')}</small>
+        </div>
+        <div className="bh-localeSelect">
+          {SUPPORTED_LOCALES.map((locale) => (
+            <button
+              key={locale}
+              type="button"
+              className={locale === currentLocale ? 'bh-localeOption is-selected' : 'bh-localeOption'}
+              onClick={() => setLocale(locale)}
+            >
+              {LOCALE_LABELS[locale]}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="bh-testConnection">
@@ -121,23 +164,23 @@ export function ModelConfigForm(props: ModelConfigFormProps) {
             void testConnection();
           }}
         >
-          测试连接
+          {t('settings.testConnection')}
         </Button>
         {testResult ? (
           <p data-result-ok={testResult.ok}>
             {testResult.message}
-            {testResult.supportsStreaming ? ' · 支持 streaming' : ''}
+            {testResult.supportsStreaming ? t('settings.streamingSupported') : ''}
           </p>
         ) : null}
       </div>
 
       <p className="bh-configNotice">
-        Debug 仅显示 provider、model 和 streaming 状态，不显示完整 Key。
+        {t('settings.debugNotice')}
       </p>
 
       <div className="bh-modalActions">
         <Button htmlType="button" onClick={props.onClose} icon={<X size={15} />}>
-          取消
+          {t('settings.cancel')}
         </Button>
         <Button
           htmlType="button"
@@ -147,9 +190,23 @@ export function ModelConfigForm(props: ModelConfigFormProps) {
             void save();
           }}
         >
-          保存配置
+          {t('settings.save')}
         </Button>
       </div>
     </div>
   );
+}
+
+function isLocalProviderEndpoint(value: string): boolean {
+  try {
+    const parsed = new URL(value.trim());
+    return parsed.protocol === 'http:' && (
+      parsed.hostname === 'localhost' ||
+      parsed.hostname === '127.0.0.1' ||
+      parsed.hostname === '[::1]' ||
+      parsed.hostname === '::1'
+    );
+  } catch {
+    return false;
+  }
 }

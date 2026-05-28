@@ -24,6 +24,10 @@ export function bhFormReadFields(
     // 读取当前页面字段快照，返回 label/type/required/valuePreview/validation。
     title: 'Read Form Fields',
     description: 'Reads form field snapshots',
+    ui: {
+      titleKey: 'tool.title.bh_form_read_fields',
+      descriptionKey: 'tool.description.bh_form_read_fields',
+    },
     modes: ['debug', 'form'],
     risk: 'safe',
     argsSchema,

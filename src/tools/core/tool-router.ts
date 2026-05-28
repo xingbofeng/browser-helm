@@ -119,6 +119,7 @@ export function isToolAvailableInRunMode(
   }
   return (
     toolModes.includes('act') ||
+    toolModes.includes('form') ||
     (toolName !== undefined && ACT_MODE_SHARED_TOOL_NAMES.has(toolName))
   );
 }

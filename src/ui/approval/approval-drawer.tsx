@@ -1,12 +1,13 @@
 import { Eye, EyeOff } from 'lucide-react';
+import { useT } from '../../i18n/context';
 import { useState } from 'react';
-import type { ApprovalRequest } from '../../shared/schemas/approval.schema';
+import type { ApprovalUiState } from '../../shared/schemas/approval.schema';
 import { jsonPreview } from '../lib/format-tool';
 import { ApprovalRiskBadge } from './approval-risk-badge';
 import { StreamingMarkdown } from '../components/streaming-markdown';
 
 type ApprovalDrawerProps = {
-  request?: ApprovalRequest | undefined;
+  request?: ApprovalUiState | undefined;
   decision?: 'approved' | 'denied' | undefined;
   decisionError?: string | undefined;
   onFieldValueChange?: ((input: {
@@ -18,13 +19,14 @@ type ApprovalDrawerProps = {
 };
 
 export function ApprovalDrawer(props: ApprovalDrawerProps) {
+  const t = useT();
   if (!props.request) {
     return null;
   }
   const submitPreview = readSubmitApprovalPreview(props.request.argsPreview);
   return (
-    <aside className="bh-approvalDrawer" aria-label="Approval">
-      <h2>Approval</h2>
+    <aside className="bh-approvalDrawer" aria-label={t('approval.aria')}>
+      <h2>{t('approval.aria')}</h2>
       <ApprovalRiskBadge risk={props.request.risk} />
       <StreamingMarkdown content={props.request.reason} />
       {props.request.actionPreview ? <StreamingMarkdown content={props.request.actionPreview} /> : null}
@@ -44,7 +46,7 @@ export function ApprovalDrawer(props: ApprovalDrawerProps) {
         onClick={props.onApprove}
         disabled={props.decision === 'approved'}
       >
-        Approve
+        {t('approval.approve')}
       </button>
       <button
         type="button"
@@ -52,7 +54,7 @@ export function ApprovalDrawer(props: ApprovalDrawerProps) {
         onClick={props.onDeny}
         disabled={props.decision === 'denied'}
       >
-        Deny
+        {t('approval.deny')}
       </button>
     </aside>
   );
@@ -89,10 +91,11 @@ function SubmitApprovalPreview({
   onFieldValueChange?: ApprovalDrawerProps['onFieldValueChange'];
 }) {
   const [revealed, setRevealed] = useState(false);
+  const t = useT();
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
   const [applyingField, setApplyingField] = useState<string>();
   const [editError, setEditError] = useState<string>();
-  const fieldText = `${preview.filledCount}/${preview.fieldCount} 已填写，${preview.skippedCount} 跳过`;
+  const fieldText = t('approval.filledSkipped', { filled: String(preview.filledCount), total: String(preview.fieldCount), skipped: String(preview.skippedCount) });
 
   return (
     <section className={preview.highRisk ? 'bh-submitApproval is-highRisk' : 'bh-submitApproval'}>
@@ -109,7 +112,7 @@ function SubmitApprovalPreview({
         aria-pressed={revealed}
       >
         {revealed ? <EyeOff size={14} /> : <Eye size={14} />}
-        {revealed ? '隐藏字段值' : '显示字段值'}
+        {revealed ? t('approval.revealHide') : t('approval.revealShow')}
       </button>
       <ul className="bh-submitApprovalFields">
         {preview.fields.map((field, index) => (
@@ -118,11 +121,11 @@ function SubmitApprovalPreview({
               <strong>{field.label}</strong>
               {field.name ? <small>{field.name}</small> : null}
             </span>
-            <code>{formatFieldValue(field, revealed)}</code>
+            <code>{formatFieldValue(field, revealed, t)}</code>
             {revealed && !field.isSensitive && !field.skipped && onFieldValueChange ? (
               <span className="bh-submitApprovalEdit">
                 <input
-                  aria-label={`修改字段 ${field.label}`}
+                  aria-label={t('approval.fieldEditAria', { label: field.label })}
                   value={draftValues[field.fieldRefId] ?? field.valuePreview}
                   onChange={(event) => {
                     const value = event.currentTarget.value;
@@ -143,13 +146,13 @@ function SubmitApprovalPreview({
                       value
                     })
                       .catch((error) => {
-                        setEditError(error instanceof Error ? error.message : '字段修改失败');
+                        setEditError(error instanceof Error ? error.message : t('approval.fieldEditFailed'));
                       })
                       .finally(() => setApplyingField(undefined));
                   }}
                   disabled={applyingField === field.fieldRefId}
                 >
-                  {applyingField === field.fieldRefId ? '应用中' : '应用字段修改'}
+                  {applyingField === field.fieldRefId ? t('approval.fieldApplying') : t('approval.fieldApply')}
                 </button>
               </span>
             ) : null}
@@ -168,8 +171,12 @@ function SubmitApprovalPreview({
   );
 }
 
-function formatFieldValue(field: SubmitApprovalFieldPreview, revealed: boolean): string {
-  if (field.skipped) return 'skipped';
+function formatFieldValue(
+  field: SubmitApprovalFieldPreview,
+  revealed: boolean,
+  t: ReturnType<typeof useT>
+): string {
+  if (field.skipped) return t('approval.fieldSkipped');
   if (!revealed || field.isSensitive) return '******';
   return field.valuePreview;
 }

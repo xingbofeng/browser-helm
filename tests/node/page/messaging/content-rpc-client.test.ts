@@ -25,6 +25,7 @@ describe('content RPC frame aggregation', () => {
         executeScript
       },
       tabs: {
+        get: vi.fn(async () => ({ url: 'https://mail.google.com/mail/u/0/#inbox' })),
         sendMessage
       },
       webNavigation: {
@@ -56,6 +57,67 @@ describe('content RPC frame aggregation', () => {
       { type: CONTENT_RPC_MESSAGES.PAGE_OBSERVE },
       { frameId: 0 }
     );
+  });
+
+  it('does not dynamically inject into restricted domains', async () => {
+    const executeScript = vi.fn(async () => []);
+    const sendMessage = vi.fn(async () => ({
+      ok: false,
+      code: 'CONTENT_SCRIPT_UNAVAILABLE',
+      message: 'restricted'
+    }));
+    vi.stubGlobal('chrome', {
+      scripting: {
+        executeScript
+      },
+      tabs: {
+        get: vi.fn(async () => ({ url: 'https://secure.bank.example/login' })),
+        sendMessage
+      },
+      webNavigation: {
+        getAllFrames: vi.fn(async () => [{ frameId: 0, url: 'https://secure.bank.example/login' }])
+      }
+    });
+
+    const client = new ChromeContentRpcClient(42);
+    await client.request({ type: CONTENT_RPC_MESSAGES.PAGE_OBSERVE });
+
+    expect(executeScript).not.toHaveBeenCalled();
+  });
+
+  it('does not dynamically inject when stored domain policy does not enable the tab domain', async () => {
+    const executeScript = vi.fn(async () => []);
+    const sendMessage = vi.fn(async () => ({
+      ok: false,
+      code: 'CONTENT_SCRIPT_UNAVAILABLE',
+      message: 'not enabled'
+    }));
+    vi.stubGlobal('chrome', {
+      scripting: {
+        executeScript
+      },
+      storage: {
+        local: {
+          get: vi.fn(async () => ({
+            browserHelmDomainPolicy: {
+              enabledDomains: ['allowed.example']
+            }
+          }))
+        }
+      },
+      tabs: {
+        get: vi.fn(async () => ({ url: 'https://blocked.example/page' })),
+        sendMessage
+      },
+      webNavigation: {
+        getAllFrames: vi.fn(async () => [{ frameId: 0, url: 'https://blocked.example/page' }])
+      }
+    });
+
+    const client = new ChromeContentRpcClient(43);
+    await client.request({ type: CONTENT_RPC_MESSAGES.PAGE_OBSERVE });
+
+    expect(executeScript).not.toHaveBeenCalled();
   });
 
   it('prefixes iframe refs and form fields while keeping top-level page metadata', () => {

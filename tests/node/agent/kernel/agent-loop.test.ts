@@ -50,6 +50,7 @@ describe('agent-loop', () => {
     });
 
     const result = await loop.run({
+      locale: 'zh',
       task: '观察页面',
       maxSteps: 1
     });
@@ -93,6 +94,7 @@ describe('agent-loop', () => {
     });
 
     const result = await loop.run({
+      locale: 'zh',
       task: '观察页面',
       maxSteps: 1
     });
@@ -130,6 +132,7 @@ describe('agent-loop', () => {
     });
 
     const result = await loop.run({
+      locale: 'zh',
       task,
       mode,
       maxSteps: 1
@@ -163,6 +166,7 @@ describe('agent-loop', () => {
     });
 
     const result = await loop.run({
+      locale: 'zh',
       task: 'Need interaction',
       maxSteps: 1
     });
@@ -216,6 +220,7 @@ describe('agent-loop', () => {
     });
 
     const result = await loop.run({
+      locale: 'zh',
       task: 'Run high risk action',
       maxSteps: 2
     });
@@ -256,6 +261,7 @@ describe('agent-loop', () => {
     });
 
     const result = await loop.run({
+      locale: 'zh',
       task: 'metadata check',
       maxSteps: 1
     });
@@ -347,6 +353,7 @@ describe('agent-loop', () => {
     });
 
     const result = await loop.run({
+      locale: 'zh',
       task: 'Diagnose form',
       mode: 'form',
       maxSteps: 1
@@ -427,6 +434,7 @@ describe('agent-loop', () => {
     });
 
     await loop.run({
+      locale: 'zh',
       task: 'Observe page',
       maxSteps: 1
     });
@@ -484,6 +492,7 @@ describe('agent-loop', () => {
     });
 
     const result = await loop.run({
+      locale: 'zh',
       task: '检查页面错误',
       mode: 'debug',
       maxSteps: 1
@@ -513,6 +522,7 @@ describe('agent-loop', () => {
     });
 
     const result = await loop.run({
+      locale: 'zh',
       task: 'Observe page',
       maxSteps: 1
     });
@@ -564,6 +574,7 @@ describe('agent-loop', () => {
     });
 
     const result = await loop.run({
+      locale: 'zh',
       task: 'Run tool',
       maxSteps: 2
     });
@@ -652,6 +663,7 @@ describe('agent-loop', () => {
     });
 
     const result = await loop.run({
+      locale: 'zh',
       task: 'Type password',
       mode: 'act',
       maxSteps: 2
@@ -711,6 +723,7 @@ describe('agent-loop', () => {
     });
 
     const result = await loop.run({
+      locale: 'zh',
       task: 'Run retryable tool',
       maxSteps: 2
     });
@@ -783,6 +796,7 @@ describe('agent-loop', () => {
     });
 
     const result = await loop.run({
+      locale: 'zh',
       task: 'Recover stale ref',
       maxSteps: 3
     });
@@ -874,6 +888,7 @@ describe('agent-loop', () => {
     });
 
     const result = await loop.run({
+      locale: 'zh',
       task: 'Recover stale ref twice',
       maxSteps: 3
     });
@@ -965,6 +980,7 @@ describe('agent-loop', () => {
     });
 
     const result = await loop.run({
+      locale: 'zh',
       task: '诊断这个表单为什么不能提交',
       mode: 'form',
       maxSteps: 3
@@ -1006,6 +1022,7 @@ describe('agent-loop', () => {
     });
 
     const result = await loop.run({
+      locale: 'zh',
       task: '检查页面健康状态',
       mode: 'debug',
       successCriteria: ['读取页面健康摘要'],
@@ -1038,6 +1055,7 @@ describe('agent-loop', () => {
     });
 
     const result = await loop.run({
+      locale: 'zh',
       task: 'Finish with internal tool',
       maxSteps: 2
     });
@@ -1069,6 +1087,7 @@ describe('agent-loop', () => {
     });
 
     const result = await loop.run({
+      locale: 'zh',
       task: 'Ask user through internal tool',
       maxSteps: 2
     });

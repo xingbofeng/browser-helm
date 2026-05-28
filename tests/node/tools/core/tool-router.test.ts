@@ -162,6 +162,7 @@ describe('ToolRouter', () => {
       'bh_internal'
     ]);
     expect(router.listToolContracts('act').map((tool) => tool.name)).toEqual([
+      'bh_form',
       'bh_act',
       'bh_internal'
     ]);

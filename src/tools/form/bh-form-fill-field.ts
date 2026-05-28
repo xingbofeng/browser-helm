@@ -33,16 +33,37 @@ export function bhFormFillField(
     // 填写单个表单字段。
     title: 'Fill Single Field',
     description: 'Fills a single form field with guard checks and event dispatch.',
+    ui: {
+      titleKey: 'tool.title.bh_form_fill_field',
+      descriptionKey: 'tool.description.bh_form_fill_field',
+    },
     modes: ['form'],
     risk: 'medium',
     argsSchema,
     resultSchema: toolResultSchema,
     async execute(args) {
+      const grant = await rpc.request({
+        type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+        action: 'fill',
+        fieldRefIds: [args.fieldRefId]
+      });
+      if (!grant.ok || !('actionToken' in grant)) {
+        const message = grant.ok ? 'form fill authorization failed' : grant.message;
+        return {
+          ok: false,
+          code: grant.ok ? ERROR_CODES.FORM_ACTION_UNAUTHORIZED : grant.code,
+          summary: message,
+          error: { message },
+          changedPage: false,
+          requiresObserve: false
+        };
+      }
       const resp = await rpc.request({
         type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
         fieldRefId: args.fieldRefId,
         value: args.value,
         clear: args.clear,
+        actionToken: grant.actionToken,
       });
 
       if (!resp.ok) {

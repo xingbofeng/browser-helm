@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentMessageList } from '../../../src/ui/components/agent-message-list';
+import { I18nProvider } from '../../../src/i18n/context';
 import type { RunSnapshot } from '../../../src/runtime/runtime-messages';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -70,7 +71,7 @@ describe('QA 卡片 / 页面观察卡组件', () => {
     document.body.append(container);
     const root = createRoot(container);
     act(() => {
-      root.render(<AgentMessageList snapshot={snapshot} />);
+      root.render(<I18nProvider initialLocale="en"><AgentMessageList snapshot={snapshot} /></I18nProvider>);
     });
     return { container, unmount: () => root.unmount() };
   }
@@ -88,7 +89,7 @@ describe('QA 卡片 / 页面观察卡组件', () => {
     const { container, unmount } = render(snapshot);
 
     expect(container.querySelector('.bh-qaCard')).toBeTruthy();
-    expect(container.textContent).toContain('已完成页面观察');
+    expect(container.textContent).toContain('Page observation completed');
     expect(container.textContent).toContain('example.com');
     expect(container.textContent).not.toContain('https://example.com/test');
     unmount();
@@ -125,9 +126,9 @@ describe('QA 卡片 / 页面观察卡组件', () => {
     const { container, unmount } = render(snapshot);
 
     expect(container.querySelector('.bh-pageObservationStats')).toBeTruthy();
-    expect(container.textContent).toContain('链接');
-    expect(container.textContent).toContain('表单');
-    expect(container.textContent).toContain('文本');
+    expect(container.textContent).toContain('Links');
+    expect(container.textContent).toContain('Forms');
+    expect(container.textContent).toContain('Text');
     unmount();
   });
 
@@ -168,7 +169,7 @@ describe('QA 卡片 / 页面观察卡组件', () => {
 
   it('无 snapshot 时显示欢迎状态', () => {
     const { container, unmount } = render(undefined);
-    expect(container.textContent).toContain('准备观察当前页面');
+    expect(container.textContent).toContain('Ready to observe page');
     expect(container.textContent).toContain('BrowserHelm');
     unmount();
   });
@@ -191,7 +192,7 @@ describe('QA 卡片 / 页面观察卡组件', () => {
     } as unknown as RunSnapshot;
     const { container, unmount } = render(snapshot);
     expect(container.querySelector('.bh-runProgressCard')).toBeTruthy();
-    expect(container.textContent).toContain('正在思考下一步');
+    expect(container.textContent).toContain('Model thinking');
     unmount();
   });
 
@@ -202,7 +203,7 @@ describe('QA 卡片 / 页面观察卡组件', () => {
       trace: [{ runId: 'test-run', type: 'tool_started', payload: { tool: 'bh_page_read_article' }, timestamp: Date.now() }]
     } as unknown as RunSnapshot;
     const { container, unmount } = render(snapshot);
-    expect(container.textContent).toContain('正在读取页面正文');
+    expect(container.textContent).toContain('Reading page article');
     expect(container.querySelector('.bh-runProgressCard time')).toBeTruthy();
     unmount();
   });
@@ -249,8 +250,8 @@ describe('QA 卡片 / 页面观察卡组件', () => {
       }
     });
     const { container, unmount } = render(snapshot);
-    expect(container.textContent).toContain('链接 3');
-    expect(container.textContent).toContain('表单 2');
+    expect(container.textContent).toContain('Links 3');
+    expect(container.textContent).toContain('Forms 2');
     unmount();
   });
 
@@ -274,7 +275,7 @@ describe('QA 卡片 / 页面观察卡组件', () => {
 
     // 思考过程以折叠形式展示
     expect(container.textContent).toContain('最终回答文本。');
-    expect(container.textContent).toContain('思考过程');
+    expect(container.textContent).toContain('Reasoning');
     expect(container.querySelector('details')).toBeTruthy();
     expect(container.textContent).toContain('观察页面');
     unmount();
@@ -297,8 +298,52 @@ describe('QA 卡片 / 页面观察卡组件', () => {
     } as unknown as RunSnapshot;
     const { container, unmount } = render(snapshot);
 
-    expect(container.textContent).not.toContain('思考过程');
+    expect(container.textContent).not.toContain('Reasoning');
     expect(container.querySelector('details')).toBeNull();
+    unmount();
+  });
+
+  it('页面观察卡固定显示在任务后、回答前', () => {
+    const snapshot: RunSnapshot = {
+      ...mkObsSnapshot(),
+      status: 'finished',
+      messages: [
+        {
+          id: 'test-run:task',
+          role: 'user',
+          kind: 'task',
+          status: 'complete',
+          content: '总结下这个页面',
+          createdAt: 1,
+          updatedAt: 1
+        },
+        {
+          id: 'test-run:provider-response',
+          role: 'agent',
+          kind: 'agent_status',
+          status: 'complete',
+          title: 'BrowserHelm',
+          content: '这是最终回答。',
+          createdAt: 3,
+          updatedAt: 3
+        },
+        {
+          id: 'test-run:page-summary',
+          role: 'agent',
+          kind: 'page_summary',
+          status: 'complete',
+          title: 'Page observation completed',
+          content: '当前页面看起来是测试页。',
+          createdAt: 4,
+          updatedAt: 4
+        }
+      ]
+    } as unknown as RunSnapshot;
+    const { container, unmount } = render(snapshot);
+    const text = container.textContent ?? '';
+
+    expect(text.indexOf('总结下这个页面')).toBeLessThan(text.indexOf('Page observation completed'));
+    expect(text.indexOf('Page observation completed')).toBeLessThan(text.indexOf('这是最终回答。'));
     unmount();
   });
 });

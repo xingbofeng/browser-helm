@@ -15,6 +15,8 @@ import { detectSubmitSummary, findSubmitButton } from './submit-detector';
 import { readValuePreview } from './value-preview';
 import { readFieldValidation } from './validation-reader';
 import { readWritabilityMeta } from './form-fill-dom';
+import type { Locale } from '../../i18n/types';
+import { t } from '../../i18n/t';
 
 export type FormReaderResult = {
   status: Exclude<TabDataStatus, 'unsupported' | 'error'>;
@@ -28,7 +30,8 @@ export type FormReaderResult = {
 const FIELD_SELECTOR = 'input:not([type="hidden"]), select, textarea, [contenteditable="true"]';
 export function readFormFields(
   document: Document,
-  refMap: RefMap
+  refMap: RefMap,
+  locale: Locale = 'zh'
 ): FormReaderResult {
   const fieldElements = Array.from(
     document.querySelectorAll<HTMLElement>(FIELD_SELECTOR)
@@ -46,7 +49,7 @@ export function readFormFields(
   const warnings: StructuredPageWarning[] = [];
   const formByRef = new Map<string, HTMLFormElement | undefined>();
   const fields = fieldElements.map((element, index) => {
-    const field = readFieldSnapshot(element, refMap, index);
+    const field = readFieldSnapshot(element, refMap, index, locale);
     const form = element.closest('form');
     formByRef.set(field.refId, form instanceof HTMLFormElement ? form : undefined);
     return field;
@@ -59,12 +62,12 @@ export function readFormFields(
   const submitByForm = new Map<HTMLFormElement, FormSubmitSummary>();
   for (const form of forms) {
     const formFields = fields.filter((field) => formByRef.get(field.refId) === form);
-    const submit = detectSubmitSummary(form, formFields, refMap);
+    const submit = detectSubmitSummary(form, formFields, refMap, locale);
     submitByForm.set(form, submit);
     if (!findSubmitButton(form)) {
       warnings.push({
         code: ERROR_CODES.FORM_SUBMIT_NOT_FOUND,
-        message: '字段读取成功，但未找到可关联的 submit button'
+        message: t('dom.form.submitNotFound', locale)
       });
     }
   }
@@ -93,10 +96,11 @@ export function readFormFields(
 function readFieldSnapshot(
   element: HTMLElement,
   refMap: RefMap,
-  domOrder: number
+  domOrder: number,
+  locale: Locale
 ): FormFieldSnapshot {
-  const label = resolveFieldLabel(element);
-  const validation = readFieldValidation(element);
+  const label = resolveFieldLabel(element, locale);
+  const validation = readFieldValidation(element, locale);
   const ref = refMap.register(element, {
     role: fieldRole(element),
     name: label.label,

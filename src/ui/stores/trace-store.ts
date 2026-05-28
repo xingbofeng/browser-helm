@@ -1,4 +1,6 @@
 import type { RuntimeEvent } from '../../runtime/runtime-messages';
+import type { Locale } from '../../i18n/types';
+import { t } from '../../i18n/t';
 import { createSimpleStore } from './store-core';
 
 type TraceItem = {
@@ -15,13 +17,13 @@ type TraceStoreState = {
   selectEvent: (id: string) => void;
 };
 
-const labels: Record<string, string> = {
-  run_started: 'Run 开始',
-  approval_required: '等待审批',
-  run_cancelled: '用户停止'
+const LABEL_KEYS: Record<string, string> = {
+  run_started: 'traceStore.runStarted',
+  approval_required: 'traceStore.approvalRequired',
+  run_cancelled: 'traceStore.runCancelled'
 };
 
-export function createTraceStore() {
+export function createTraceStore(locale: Locale) {
   const store = createSimpleStore<TraceStoreState>({
     events: [],
     items: [],
@@ -31,7 +33,7 @@ export function createTraceStore() {
         items: events.map((event, index) => ({
           id: `${event.runId}:${index}`,
           event,
-          label: labels[event.type] ?? event.type
+          label: t(LABEL_KEYS[event.type] ?? event.type, locale)
         }))
       });
     },

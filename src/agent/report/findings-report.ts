@@ -14,6 +14,8 @@ import type {
   StructuredPageWarning
 } from '../../shared/schemas/structured-page-data.schema';
 import type { PageHealthSummary } from '../../shared/schemas/page-health.schema';
+import { t } from '../../i18n/t';
+import type { Locale } from '../../i18n/types';
 
 type BuildFindingInput = {
   title: string;
@@ -59,7 +61,8 @@ export function buildDebugReport(input: BuildDebugReportInput): DebugReport {
 }
 
 export function buildFormDoctorFindings(
-  input: BuildFormDoctorFindingsInput
+  input: BuildFormDoctorFindingsInput,
+  locale: Locale = 'zh',
 ): AgentFinding[] {
   const findings: AgentFinding[] = [];
   const missingRequired = input.fields.filter(
@@ -71,8 +74,10 @@ export function buildFormDoctorFindings(
   if (missingRequired.length > 0) {
     findings.push(
       buildFinding({
-        title: '必填字段为空',
-        explanation: `发现 ${missingRequired.length} 个必填字段当前为空。`,
+        title: t('finding.title.requiredEmpty', locale),
+        explanation: t('finding.explanation.requiredEmpty', locale, {
+          count: String(missingRequired.length),
+        }),
         evidence: missingRequired.map((field) => ({
           source: 'form',
           summary: fieldSummary(field, 'required empty'),
@@ -88,8 +93,10 @@ export function buildFormDoctorFindings(
   if (invalidFields.length > 0) {
     findings.push(
       buildFinding({
-        title: '字段校验失败',
-        explanation: `发现 ${invalidFields.length} 个字段存在校验错误。`,
+        title: t('finding.title.validationFailed', locale),
+        explanation: t('finding.explanation.validationFailed', locale, {
+          count: String(invalidFields.length),
+        }),
         evidence: invalidFields.map((field) => ({
           source: 'form',
           summary: fieldSummary(field, field.validation.message ?? 'invalid'),
@@ -103,8 +110,8 @@ export function buildFormDoctorFindings(
     const reason = input.submit.reason;
     findings.push(
       buildFinding({
-        title: '提交按钮不可用',
-        explanation: reason?.message ?? '提交按钮处于禁用状态，原因暂未确认。',
+        title: t('finding.title.submitDisabled', locale),
+        explanation: reason?.message ?? t('finding.explanation.submitDisabledFallback', locale),
         evidence: [
           {
             source: reason?.kind === 'confirmed' ? 'form' : 'tool_result',
@@ -120,13 +127,15 @@ export function buildFormDoctorFindings(
   return findings;
 }
 
-export function buildPageHealthFindings(input: PageHealthSummary): AgentFinding[] {
+export function buildPageHealthFindings(input: PageHealthSummary, locale: Locale = 'zh'): AgentFinding[] {
   const findings: AgentFinding[] = [];
   if (input.consoleErrors.length > 0) {
     findings.push(
       buildFinding({
-        title: 'Console error',
-        explanation: `发现 ${input.consoleErrors.length} 类 console error。`,
+        title: t('finding.title.consoleError', locale),
+        explanation: t('finding.explanation.consoleError', locale, {
+          count: String(input.consoleErrors.length),
+        }),
         evidence: input.consoleErrors.map((error) => ({
           source: 'debug',
           summary: `${error.source ? `${error.source}: ` : ''}${error.message} (${error.count} 次)`
@@ -138,8 +147,10 @@ export function buildPageHealthFindings(input: PageHealthSummary): AgentFinding[
   if (input.networkFailures.length > 0) {
     findings.push(
       buildFinding({
-        title: 'Network failure',
-        explanation: `发现 ${input.networkFailures.length} 个 network failure。`,
+        title: t('finding.title.networkFailure', locale),
+        explanation: t('finding.explanation.networkFailure', locale, {
+          count: String(input.networkFailures.length),
+        }),
         evidence: input.networkFailures.map((failure) => ({
           source: 'debug',
           summary: `${failure.method} ${failure.url}: ${failure.errorText}${failure.status ? ` (${failure.status})` : ''}`

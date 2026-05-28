@@ -29,6 +29,9 @@ import {
   buildPageHealthFindings
 } from '../report/findings-report';
 import { resolveRuntimeCapabilities } from '../../runtime/capabilities/runtime-capabilities';
+
+import { t } from '../../i18n/t';
+import type { Locale } from '../../i18n/types';
 import { approvalRequiredResult } from '../../tools/core/tool-result-factory';
 import { failedToolResult } from '../../tools/core/tool-result-factory';
 import { formReadFieldsPayloadSchema } from '../../shared/schemas/structured-page-data.schema';
@@ -69,7 +72,9 @@ export class AgentLoop {
   async run(input: AgentRunInput): Promise<AgentRunResult> {
     const runId = createRunId();
     const maxSteps = input.maxSteps ?? 3;
+    const locale = input.locale ?? 'zh';
     const resolvedMode = resolveRunMode({
+      locale,
       task: input.task,
       ...(input.mode ? { explicitMode: input.mode } : {})
     });
@@ -83,14 +88,15 @@ export class AgentLoop {
     const toolSelection = selectToolsForRun({
       mode: runMode,
       task: input.task,
-      tools: this.deps.toolRouter.listToolContracts(runMode),
+      tools: this.deps.toolRouter.listToolContracts(),
       capabilities: runtimeCapabilities
     });
     const controller = new RunController(maxSteps);
     const stepRunner = new StepRunner();
     const policyEngine = new PolicyEngine();
-    const recoveryBudget = new RecoveryBudget();
+    const recoveryBudget = new RecoveryBudget(1);
     const goalState = initializeGoalState({
+      locale,
       task: input.task,
       mode: runMode,
       ...(input.goal ? { goal: input.goal } : {}),
@@ -100,7 +106,8 @@ export class AgentLoop {
       id: `plan_${runId}`,
       mode: runMode,
       task: input.task,
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      locale
     });
     const session = createLoopSession({
       runId,
@@ -192,7 +199,7 @@ export class AgentLoop {
         turns: session.turns,
         toolNames: this.deps.toolRouter.listToolNames(),
         tools: this.deps.toolRouter
-          .listToolContracts(runMode)
+          .listToolContracts()
           .filter((tool) => toolSelection.visibleTools.includes(tool.name)),
         runMode,
         modeReason: resolvedMode.reason,
@@ -518,7 +525,8 @@ export class AgentLoop {
           stepId,
           stepIndex,
           runMode,
-          session
+          session,
+          locale,
         });
         appendTrace(this.deps.traceRecorder, {
           id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.RUN_FINISHED),
@@ -667,7 +675,8 @@ export class AgentLoop {
         plan: planState,
         tool: toolCall.tool,
         result: toolResult,
-        updatedAt: Date.now()
+        updatedAt: Date.now(),
+        locale
       });
       appendTrace(this.deps.traceRecorder, {
         id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.PLAN_UPDATED),
@@ -723,7 +732,8 @@ export class AgentLoop {
           stepId,
           stepIndex,
           runMode,
-          session
+          session,
+          locale,
         });
         appendTrace(this.deps.traceRecorder, {
           id: createEventId(runId, stepIndex, TRACE_EVENT_NAMES.RUN_FINISHED),
@@ -996,6 +1006,7 @@ export class AgentLoop {
     stepIndex: number;
     runMode: RunMode;
     session: ReturnType<typeof createLoopSession>;
+    locale: Locale;
   }): void {
     if (input.runMode !== 'form' && input.runMode !== 'debug') {
       return;
@@ -1011,13 +1022,13 @@ export class AgentLoop {
           fields: parsed.data.fields,
           submit: parsed.data.submit,
           warnings: parsed.data.warnings
-        });
+        }, input.locale);
       }
       const parsed = pageHealthSummarySchema.safeParse(turn.toolResult?.data);
       if (!parsed.success) {
         return [];
       }
-      return buildPageHealthFindings(parsed.data);
+      return buildPageHealthFindings(parsed.data, input.locale);
     });
 
     if (findings.length > 0) {
@@ -1041,13 +1052,13 @@ export class AgentLoop {
     const limitations =
       input.runMode === 'debug'
         ? debugHealth?.limitations ?? (findings.length === 0
-            ? ['暂未收集到可汇总的浅层 debug finding']
+            ? [t('diagnosis.noDebugSignal', input.locale)]
             : undefined)
         : undefined;
     const report = buildDebugReport({
-      title: input.runMode === 'form' ? 'Form Doctor 诊断报告' : 'Page Inspector 诊断报告',
+      title: input.runMode === 'form' ? t('diagnosis.title.formDoctor', input.locale) : t('diagnosis.title.pageInspector', input.locale),
       findings,
-      recommendations: findings.length > 0 ? ['根据 finding 的 evidence 逐项处理。'] : [],
+      recommendations: findings.length > 0 ? [t('diagnosis.recommendation.handleFindings', input.locale)] : [],
       ...(limitations ? { limitations } : {})
     });
     appendTrace(this.deps.traceRecorder, {

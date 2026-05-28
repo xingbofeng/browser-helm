@@ -2,7 +2,8 @@ import { Check, ChevronDown, ChevronUp, Pause, Send } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
-import { runModeLabels, type RunMode } from '../../shared/schemas/tool.schema';
+import { type RunMode } from '../../shared/schemas/tool.schema';
+import { useT } from '../../i18n/context';
 
 type ChatPanelProps = {
   task: string;
@@ -15,13 +16,23 @@ type ChatPanelProps = {
   onStop: () => void;
 };
 
-const runModes = ['ask', 'debug', 'form', 'act'] as const;
+const primaryRunModes = ['ask', 'act'] as const;
 
 export function ChatPanel(props: ChatPanelProps) {
+  const t = useT();
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const modeMenuId = useId();
   const modePickerRef = useRef<HTMLSpanElement>(null);
   const ModeChevron = modeMenuOpen ? ChevronUp : ChevronDown;
+
+  const modeLabel = (mode: RunMode): string => {
+    switch (mode) {
+      case 'ask': return t('chat.mode.ask');
+      case 'act': return t('chat.mode.act');
+      case 'form': return t('chat.mode.form');
+      case 'debug': return t('chat.mode.debug');
+    }
+  };
 
   useEffect(() => {
     const closeOnOutsideClick = (event: MouseEvent) => {
@@ -61,21 +72,21 @@ export function ChatPanel(props: ChatPanelProps) {
           <span className="bh-modeSelectPill" ref={modePickerRef}>
             <button
               type="button"
-              aria-label="选择 Run Mode"
+              aria-label={t('chat.modeLabel')}
               aria-haspopup="listbox"
               aria-expanded={modeMenuOpen}
               aria-controls={modeMenuId}
               onClick={() => setModeMenuOpen((open) => !open)}
               onKeyDown={handleModeKeyDown}
             >
-              {runModeLabels[props.mode]}
+              {modeLabel(props.mode)}
             </button>
             <span className="bh-modeSelectArrow" data-open={modeMenuOpen} aria-hidden="true">
               <ModeChevron size={15} />
             </span>
             {modeMenuOpen ? (
-              <ul className="bh-modeMenu" id={modeMenuId} role="listbox" aria-label="Run Mode">
-                {runModes.map((mode) => (
+              <ul className="bh-modeMenu" id={modeMenuId} role="listbox" aria-label={t('chat.modeLabel')}>
+                {primaryRunModes.map((mode) => (
                   <li key={mode} role="none">
                     <button
                       type="button"
@@ -84,7 +95,7 @@ export function ChatPanel(props: ChatPanelProps) {
                       className={props.mode === mode ? 'is-selected' : undefined}
                       onClick={() => chooseMode(mode)}
                     >
-                      <span>{runModeLabels[mode]}</span>
+                      <span>{modeLabel(mode)}</span>
                       {props.mode === mode ? <Check aria-hidden="true" size={16} /> : null}
                     </button>
                   </li>
@@ -93,22 +104,22 @@ export function ChatPanel(props: ChatPanelProps) {
             ) : null}
           </span>
           <input
-            aria-label="任务"
-            placeholder="你想和 BrowserHelm 聊点什么......"
+            aria-label={t('chat.taskLabel')}
+            placeholder={t('chat.placeholder')}
             value={props.task}
             onChange={(event) => props.onTaskChange(event.currentTarget.value)}
           />
           {props.canStop ? (
             <button
               type="button"
-              aria-label="暂停回复"
+              aria-label={t('chat.pauseAria')}
               className="bh-pauseButton"
               onClick={props.onStop}
             >
               <Pause aria-hidden="true" size={18} />
             </button>
           ) : (
-            <button type="submit" aria-label="启动任务" className="bh-sendButton" disabled={props.busy}>
+            <button type="submit" aria-label={t('chat.startAria')} className="bh-sendButton" disabled={props.busy}>
               <Send aria-hidden="true" size={18} />
             </button>
           )}

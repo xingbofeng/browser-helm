@@ -1,42 +1,44 @@
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { CockpitApp } from '../../../../src/ui/sidepanel/cockpit-app';
+import { I18nProvider } from '../../../../src/i18n/context';
 import { FakeRuntimePort } from '../../../../src/runtime/fake-runtime-port';
+import { CockpitApp } from '../../../../src/ui/sidepanel/cockpit-app';
 
 describe('CockpitApp', () => {
   it('renders BrowserHelm agent surface with debug and model configuration entry points', () => {
     const html = renderToString(
-      <CockpitApp
-        runtime={new FakeRuntimePort({
-          snapshots: [
-            {
-              runId: 'seed',
-              mode: 'act',
-              status: 'waiting_for_approval',
-              refs: [],
-              pendingApproval: {
-                id: 'apr_1',
+      <I18nProvider>
+        <CockpitApp
+          runtime={new FakeRuntimePort({
+            snapshots: [
+              {
                 runId: 'seed',
-                stepId: 'step_1',
-                tool: 'bh_iframe_click',
-                argsPreview: { refId: 'frame_1:ref_1' },
-                risk: 'high',
-                reason: 'Delete account',
-                status: 'pending',
-                createdAt: 1
-              },
-              trace: [{ runId: 'seed', type: 'approval_required' }]
-            }
-          ]
-        })}
-        initialRunId="seed"
-      />
+                mode: 'act',
+                status: 'waiting_for_approval',
+                refs: [],
+                pendingApproval: {
+                  id: 'apr_1',
+                  runId: 'seed',
+                  stepId: 'step_1',
+                  tool: 'bh_iframe_click',
+                  argsPreview: { refId: 'frame_1:ref_1' },
+                  risk: 'high',
+                  reason: 'Delete account',
+                  status: 'pending',
+                  createdAt: 1
+                },
+                trace: [{ runId: 'seed', type: 'approval_required' }]
+              }
+            ]
+          })}
+          initialRunId="seed"
+        />
+      </I18nProvider>
     );
 
     expect(html).toContain('BrowserHelm');
     expect(html).not.toContain('Cockpit');
-    expect(html).not.toContain('页面数据驾驶舱');
     expect(html).not.toContain('页面数据驾驶舱');
     expect(html).toContain('BrowserHelm Agent 消息');
     expect(html).toContain('高级开发者选项');

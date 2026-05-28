@@ -24,6 +24,10 @@ export function bhFormList(
     // 列出当前页面表单概览，供 Debug/Form 模式快速判断字段数量和 submit 状态。
     title: 'List Forms',
     description: 'Lists detected forms and field counts',
+    ui: {
+      titleKey: 'tool.title.bh_form_list',
+      descriptionKey: 'tool.description.bh_form_list',
+    },
     modes: ['debug', 'form'],
     risk: 'safe',
     argsSchema,

@@ -5,29 +5,35 @@ import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 import { a11ySnapshotSchema } from '../../shared/schemas/observation.schema';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
+import { t } from '../../i18n/t';
+import type { Locale } from '../../i18n/types';
 import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({});
 
 /**
- * 捕获当前页面的 a11y-like 快照及 stable refs。
+ * 读取当前页面的 a11y 风格快照。
  *
- * 面向 Ask/Debug/Form 模式的安全只读工具，作为底层页面结构读取入口。不接受参数，
- * 不修改页面状态，永不触发 approval，返回有界的快照及紧凑摘要，适于 Agent 上下文。
+ * 这是 Ask/Debug/Form 模式的安全只读工具，用于返回带 stable refs 的可访问性近似树，帮助 agent 理解页面结构和交互目标，不改变页面状态，也不会触发 approval。返回值包含元素集合、origin 和观察警告。
  */
 export function bhA11ySnapshot(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
   return {
     name: 'bh_a11y_snapshot',
-    // 捕获当前页面的 a11y-like 快照，并为可交互候选生成 stable refs。
+    // 读取当前页面 a11y 快照。
     title: 'A11y Snapshot',
     description: 'Returns an accessibility-like snapshot with stable refs',
     modes: ['ask', 'debug', 'form'],
     risk: 'safe',
     argsSchema,
     resultSchema: toolResultSchema,
-    async execute() {
+    ui: {
+      titleKey: 'tool.title.bh_a11y_snapshot',
+      descriptionKey: 'tool.description.bh_a11y_snapshot',
+    },
+    async execute(_args, ctx) {
+      const locale: Locale = ctx.locale ?? 'zh';
       const response = await rpc.request({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
       if (!response.ok) {
         return failure(response.code, response.message, response.detail);
@@ -35,14 +41,14 @@ export function bhA11ySnapshot(
       if (!('snapshot' in response)) {
         return failure(
           ERROR_CODES.OBSERVATION_FAILED,
-          'Content RPC did not return an a11y snapshot'
+          t('tool.summary.bh_a11y_snapshot.missing', locale)
         );
       }
       const snapshot = a11ySnapshotSchema.parse(response.snapshot);
       return {
         ok: true,
         code: ERROR_CODES.OK,
-        summary: `Captured ${snapshot.elements.length} interactive refs`,
+        summary: t('tool.summary.bh_a11y_snapshot', locale, { count: String(snapshot.elements.length) }),
         data: snapshot,
         changedPage: false,
         requiresObserve: false,

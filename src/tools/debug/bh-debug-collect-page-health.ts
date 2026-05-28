@@ -6,30 +6,29 @@ import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { pageHealthSummarySchema } from '../../shared/schemas/page-health.schema';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
+import { t } from '../../i18n/t';
+import type { Locale } from '../../i18n/types';
 import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({});
 
-/**
- * 收集页面健康只读摘要。
- *
- * 面向 Debug 模式的安全诊断工具，供 Agent 获取浅层页面健康信号。通过 content RPC
- * 读取当前 observation，不使用 chrome.debugger/CDP，不修改页面状态，永不触发
- * approval，在浅层信号不可用时返回 console/network 的限制说明。
- */
 export function bhDebugCollectPageHealth(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
   return {
     name: TOOL_NAMES.DEBUG_COLLECT_PAGE_HEALTH,
-    // 收集页面健康浅层摘要，只用于 Debug 模式诊断。
     title: 'Collect Page Health',
     description: 'Collects a read-only shallow page health summary',
     modes: ['debug'],
     risk: 'safe',
     argsSchema,
     resultSchema: toolResultSchema,
-    async execute() {
+    ui: {
+      titleKey: 'tool.title.bh_debug_collect_page_health',
+      descriptionKey: 'tool.description.bh_debug_collect_page_health',
+    },
+    async execute(_args, ctx) {
+      const locale: Locale = ctx.locale ?? 'zh';
       const response = await rpc.request({ type: CONTENT_RPC_MESSAGES.PAGE_OBSERVE });
       if (!response.ok) {
         return {
@@ -48,7 +47,7 @@ export function bhDebugCollectPageHealth(
         return {
           ok: false,
           code: ERROR_CODES.OBSERVATION_FAILED,
-          summary: 'Content RPC did not return page observation',
+          summary: t('tool.summary.bh_debug_collect_page_health.missing', locale),
           changedPage: false,
           requiresObserve: true
         };

@@ -84,7 +84,7 @@ describe('selectToolsForRun', () => {
     expect(result.limitations).toContain('Shallow debug signals are unavailable');
   });
 
-  it('hides high-risk act tools by default', () => {
+  it('exposes form inspection tools in unified act mode while hiding high-risk tools', () => {
     const result = selectToolsForRun({
       mode: 'act',
       task: '点击提交按钮',
@@ -100,7 +100,7 @@ describe('selectToolsForRun', () => {
       }
     });
 
-    expect(result.visibleTools).toEqual(['bh_page_observe']);
+    expect(result.visibleTools).toEqual(['bh_page_observe', 'bh_form_read_fields']);
     expect(result.hiddenTools).toContainEqual({
       tool: 'bh_iframe_click',
       reason: 'High-risk tools require explicit approval boundary'

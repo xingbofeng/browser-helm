@@ -2,7 +2,9 @@ import type { ContentRpcClient } from '../../../page/messaging/content-rpc-clien
 import type { ModelClient } from '../../../agent/model/model-client';
 import type { SettingsStore } from '../../../storage/interfaces/settings-store';
 import type { ExecuteToolInput, RuntimeEvent } from '../../../runtime/runtime-messages';
+import type { RunKind } from '../../../runtime/runtime-messages';
 import type { RunMode } from '../../../shared/schemas/tool.schema';
+import type { Locale } from '../../../i18n/types';
 
 /** Internal record tracking per-run state within the runtime. */
 export type RunRecord = {
@@ -10,7 +12,8 @@ export type RunRecord = {
   mode: RunMode;
   tabId?: number | undefined;
   trace: RuntimeEvent[];
-  skipProviderResponse?: boolean | undefined;
+  runKind?: RunKind;
+  locale?: Locale;
 };
 
 /** Dependencies injected into the runtime facade. */

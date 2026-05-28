@@ -21,6 +21,9 @@ export function validateProviderConfig(config: ProviderConfig): void {
   if (parsed.protocol !== 'https:' && !isLoopbackHost(parsed.hostname)) {
     throw new Error('Invalid provider baseUrl: HTTPS is required');
   }
+  if (parsed.protocol !== 'https:' && isLoopbackHost(parsed.hostname) && config.allowLocalProviderEndpoints === false) {
+    throw new Error('Invalid provider baseUrl: local provider endpoints are disabled');
+  }
   if (/\s/u.test(config.baseUrl)) {
     throw new Error('Invalid provider baseUrl');
   }

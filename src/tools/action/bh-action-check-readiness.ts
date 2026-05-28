@@ -9,37 +9,42 @@ import {
   actionReadinessSchema
 } from '../../shared/schemas/action-readiness.schema';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
+import { t } from '../../i18n/t';
+import type { Locale } from '../../i18n/types';
 import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = actionIntentSchema;
 
 /**
- * 检查拟执行的浏览器动作是否具备有效目标和安全状态。
+ * 检查拟执行动作是否已经可安全执行。
  *
- * 面向 Debug/Act 模式的只读工具，在尝试受控 iframe/page 动作之前使用。解析目标
- * stable ref，报告动作能否执行、预测风险/approval 需求，并告知 Agent 何时需要重新
- * 观察页面。工具本身不修改页面，也不自行创建 ApprovalRequest。
+ * 这是 Debug/Act 模式的低风险只读工具，用于解析目标 ref 并评估点击、输入或提交动作的可见性、disabled 状态、风险和 approval 边界。它不会改变页面状态；返回值描述 canAct、risk、是否需要重新观察以及是否需要 approval。
  */
 export function bhActionCheckReadiness(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
   return {
     name: 'bh_action_check_readiness',
-    // 检查拟执行动作的目标、风险和重新观察需求，不实际修改页面。
+    // 检查拟执行动作是否就绪。
     title: 'Check Action Readiness',
     description: 'Checks whether a proposed action is ready and whether it would require approval',
     modes: ['debug', 'act'],
     risk: 'low',
     argsSchema,
     resultSchema: toolResultSchema,
-    async execute(args) {
+    ui: {
+      titleKey: 'tool.title.bh_action_check_readiness',
+      descriptionKey: 'tool.description.bh_action_check_readiness',
+    },
+    async execute(args, ctx) {
+      const locale: Locale = ctx.locale ?? 'zh';
       const response = await rpc.request({
         type: CONTENT_RPC_MESSAGES.A11Y_RESOLVE_REF,
         refId: args.refId
       });
       const readiness = response.ok && 'ref' in response
         ? checkResolvedActionReadiness(args, normalizeResolvedRef(args.refId, response.ref))
-        : unresolvedReadiness(args, response);
+        : unresolvedReadiness(args, response, locale);
 
       return {
         ok: true,
@@ -74,11 +79,12 @@ function normalizeResolvedRef(refId: string, ref: unknown) {
 
 function unresolvedReadiness(
   args: z.infer<typeof argsSchema>,
-  response: Awaited<ReturnType<ContentRpcClient['request']>>
+  response: Awaited<ReturnType<ContentRpcClient['request']>>,
+  locale: Locale
 ) {
   const code = response.ok ? ERROR_CODES.OBSERVATION_FAILED : response.code;
   const message = response.ok
-    ? 'Content RPC did not return a resolved ref'
+    ? t('tool.summary.bh_a11y_resolve_ref.missing', locale)
     : response.message;
   return {
     canAct: false,

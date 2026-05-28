@@ -20,6 +20,10 @@ export function bhPageReadVisibleText(
     name: TOOL_NAMES.PAGE_READ_VISIBLE_TEXT,
     title: 'Page Read Visible Text',
     description: 'Reads current page visible text with cursor pagination',
+    ui: {
+      titleKey: 'tool.title.bh_page_read_visible_text',
+      descriptionKey: 'tool.description.bh_page_read_visible_text',
+    },
     modes: ['ask', 'debug', 'form'],
     risk: 'safe',
     argsSchema,

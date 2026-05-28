@@ -24,4 +24,8 @@ export const approvalDecisionSchema = z.object({
 });
 
 export type ApprovalRequest = z.infer<typeof approvalRequestSchema>;
+export type ApprovalUiState = ApprovalRequest;
+export type ApprovalAuditRequest = Omit<ApprovalRequest, 'argsPreview'> & {
+  argsPreview: unknown;
+};
 export type ApprovalDecision = z.infer<typeof approvalDecisionSchema>;

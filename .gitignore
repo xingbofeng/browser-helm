@@ -13,3 +13,4 @@ data/
 .playwright/
 .claude/
 .codex/
+.vercel

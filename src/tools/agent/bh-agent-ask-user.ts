@@ -9,24 +9,26 @@ const argsSchema = z.object({
 });
 
 /**
- * 请求用户输入并暂停 Agent run。
+ * 请求用户补充输入。
  *
- * 仅在 Agent 缺少必要人工决策无法继续时调用此安全内部工具。`question` 参数是返回给
- * 用户的可见提示语；该工具不触碰页面状态，永不触发 approval，返回
- * `ASK_USER_REQUIRED` 结果供运行编排层处理。
+ * 这是内部 Agent 工具，只在主 agent loop 需要用户澄清或提供缺失值时使用。它不读取或改变页面状态，风险等级为 safe，不触发 approval；返回 ASK_USER_REQUIRED 让 runtime 停止自动推进并展示问题。
  */
 export const bhAgentAskUser: ToolSpec<
   z.infer<typeof argsSchema>,
   z.infer<typeof toolResultSchema>
 > = {
   name: 'bh_agent_ask_user',
-  // Agent 缺少必要用户决策时调用，用问题暂停当前 run。
+  // 请求用户补充输入。
   title: 'Agent Ask User',
   description: 'Requests user input before continuing',
   modes: ['internal'],
   risk: 'safe',
   argsSchema,
   resultSchema: toolResultSchema,
+  ui: {
+    titleKey: 'tool.title.bh_agent_ask_user',
+    descriptionKey: 'tool.description.bh_agent_ask_user',
+  },
   execute(args) {
     return Promise.resolve({
       ok: false,

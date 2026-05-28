@@ -5,6 +5,7 @@ export type ModelInput = {
   stepIndex: number;
   messages: ModelMessage[];
   responseFormat?: 'json' | 'text';
+  signal?: AbortSignal | undefined;
 };
 
 export type ModelOutput = {

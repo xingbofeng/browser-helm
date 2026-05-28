@@ -21,12 +21,15 @@ describe('content script page health bridge', () => {
     if (!globalScope[PAGE_HEALTH_BRIDGE_MARKER]) {
       globalScope[PAGE_HEALTH_BRIDGE_MARKER] = true;
       globalScope.__browserHelmConsoleErrors = [];
+      globalScope.__browserHelmConsoleMessages = [];
       globalScope.__browserHelmNetworkFailures = [];
     }
 
     expect(Array.isArray(globalScope.__browserHelmConsoleErrors)).toBe(true);
+    expect(Array.isArray(globalScope.__browserHelmConsoleMessages)).toBe(true);
     expect(Array.isArray(globalScope.__browserHelmNetworkFailures)).toBe(true);
     expect((globalScope.__browserHelmConsoleErrors as unknown[]).length).toBe(0);
+    expect((globalScope.__browserHelmConsoleMessages as unknown[]).length).toBe(0);
     expect((globalScope.__browserHelmNetworkFailures as unknown[]).length).toBe(0);
   });
 
@@ -59,11 +62,14 @@ describe('content script page health bridge', () => {
       if (!value || typeof value !== 'object') return false;
       const record = value as Record<string, unknown>;
       return record.channel === PAGE_HEALTH_EVENT &&
-        (record.kind === 'console_error' || record.kind === 'network_failure');
+        (record.kind === 'console_error' ||
+          record.kind === 'console_message' ||
+          record.kind === 'network_failure');
     };
 
     // 合法事件
     expect(isPageHealthEvent({ channel: PAGE_HEALTH_EVENT, kind: 'console_error' })).toBe(true);
+    expect(isPageHealthEvent({ channel: PAGE_HEALTH_EVENT, kind: 'console_message' })).toBe(true);
     expect(isPageHealthEvent({ channel: PAGE_HEALTH_EVENT, kind: 'network_failure' })).toBe(true);
 
     // 非法事件

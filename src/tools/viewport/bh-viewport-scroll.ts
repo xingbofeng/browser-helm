@@ -26,12 +26,27 @@ export function bhViewportScroll(
     name: TOOL_NAMES.VIEWPORT_SCROLL,
     title: 'Viewport Scroll',
     description: 'Scrolls the page or iframe viewport and requires a follow-up observe/read',
+    ui: {
+      titleKey: 'tool.title.bh_viewport_scroll',
+      descriptionKey: 'tool.description.bh_viewport_scroll',
+    },
     modes: ['ask', 'debug', 'form', 'act'],
     risk: 'low',
     argsSchema,
     resultSchema: toolResultSchema,
     async execute(args) {
-      const frameId = parseIframeId(args);
+      const parsedFrameId = parseIframeId(args);
+      if (!parsedFrameId.ok) {
+        return {
+          ok: false,
+          code: ERROR_CODES.IFRAME_ID_INVALID,
+          summary: parsedFrameId.message,
+          error: { message: parsedFrameId.message },
+          changedPage: false,
+          requiresObserve: false
+        };
+      }
+      const frameId = parsedFrameId.frameId;
       const response = await rpc.request({
         type: CONTENT_RPC_MESSAGES.VIEWPORT_SCROLL,
         direction: args.direction,

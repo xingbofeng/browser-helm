@@ -83,7 +83,7 @@ describe('findings-report', () => {
         }
       },
       warnings: []
-    });
+    }, 'zh');
 
     expect(findings.map((finding) => finding.title)).toEqual([
       '必填字段为空',
@@ -119,7 +119,7 @@ describe('findings-report', () => {
       hasForm: false,
       pageStateSummary: '检测到 1 类 console error 和 1 个 network failure',
       limitations: ['CDP deep inspection is not used']
-    });
+    }, 'zh');
 
     expect(findings.map((finding) => finding.title)).toEqual([
       'Console error',

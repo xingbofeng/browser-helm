@@ -39,7 +39,7 @@ describe('toolSpecMetaSchema', () => {
       ask: '询问 / Ask',
       debug: '调试 / Debug',
       form: '表单 / Form',
-      act: '动作准备 / Act'
+      act: '执行 / Act'
     });
   });
 });

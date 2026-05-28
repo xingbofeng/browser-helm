@@ -41,7 +41,7 @@ export class DecisionParser {
       };
     }
 
-    const result = agentDecisionSchema.safeParse(parsed);
+    const result = agentDecisionSchema.safeParse(normalizeProviderDecision(parsed));
     if (!result.success) {
       return {
         ok: false,
@@ -58,6 +58,44 @@ export class DecisionParser {
       decision: result.data
     };
   }
+}
+
+function normalizeProviderDecision(parsed: unknown): unknown {
+  if (!isRecord(parsed)) {
+    return parsed;
+  }
+  if (isRecord(parsed.tool_call)) {
+    return normalizeToolCallDecision({
+      type: 'tool_call',
+      ...parsed.tool_call
+    });
+  }
+  return normalizeToolCallDecision(parsed);
+}
+
+function normalizeToolCallDecision(parsed: Record<string, unknown>): Record<string, unknown> {
+  if (parsed.type !== 'tool_call' || parsed.tool !== 'bh_form_fill' || !isRecord(parsed.args)) {
+    return parsed;
+  }
+  const formFields = parsed.args.formFields;
+  if (!isRecord(formFields)) {
+    return parsed;
+  }
+  return {
+    ...parsed,
+    tool: 'bh_form_fill_many',
+    args: {
+      fields: Object.entries(formFields)
+        .filter((entry): entry is [string, string] =>
+          typeof entry[0] === 'string' && typeof entry[1] === 'string'
+        )
+        .map(([fieldRefId, value]) => ({ fieldRefId, value }))
+    }
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function normalizeZodError(error: ZodError): {

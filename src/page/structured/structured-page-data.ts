@@ -5,20 +5,25 @@ import type {
   StructuredPageContextSummary,
   StructuredPageData
 } from '../../shared/schemas/structured-page-data.schema';
+import type { Locale } from '../../i18n/types';
+import { t } from '../../i18n/t';
 import { EMPTY_STATE_REASONS } from './empty-state-reasons';
 
 export type BuildStructuredPageDataOptions = {
   updatedAt?: string;
+  locale?: Locale;
 };
 
 export type BuildStructuredPageContextSummaryOptions = {
   maxHighlights?: number;
+  locale?: Locale;
 };
 
 export function buildStructuredPageData(
   observation: Observation,
   options: BuildStructuredPageDataOptions = {}
 ): StructuredPageData {
+  const locale = options.locale ?? 'zh';
   const updatedAt = options.updatedAt ?? new Date().toISOString();
   const refs = observation.refSummary;
   const forms = readObservationFormFields(observation.formFields);
@@ -36,7 +41,7 @@ export function buildStructuredPageData(
   return {
     observation: {
       status: 'ready',
-      summary: `当前页面为“${observation.title || observation.url}”`,
+      summary: t('page.structured.currentPage', locale, { title: observation.title || observation.url }),
       count: 1,
       items: [
         {
@@ -53,7 +58,9 @@ export function buildStructuredPageData(
     },
     refs: {
       status: hasRefs ? 'ready' : 'empty',
-      summary: hasRefs ? `检测到 ${refs.length} 个 ref` : '未检测到 ref',
+      summary: hasRefs
+        ? t('page.structured.refsDetected', locale, { count: String(refs.length) })
+        : t('page.structured.noRefs', locale),
       count: refs.length,
       items: refs,
       updatedAt,
@@ -63,8 +70,8 @@ export function buildStructuredPageData(
     interactive: {
       status: hasRefs ? 'ready' : 'empty',
       summary: hasRefs
-        ? `检测到 ${interactiveElements.length} 个交互元素`
-        : '未检测到交互元素',
+        ? t('page.structured.interactiveDetected', locale, { count: String(interactiveElements.length) })
+        : t('page.structured.noInteractive', locale),
       count: interactiveElements.length,
       items: interactiveElements,
       updatedAt,
@@ -78,8 +85,8 @@ export function buildStructuredPageData(
     forms: {
       status: forms?.status ?? 'unsupported',
       summary: forms
-        ? summarizeForms(forms.fields, forms.submit)
-        : '当前观察未包含表单字段数据；请先执行页面观察以获取字段快照',
+        ? summarizeForms(forms.fields, forms.submit, locale)
+        : t('page.structured.formsUnavailable', locale),
       count: forms?.fields.length ?? 0,
       items: forms?.fields ?? [],
       updatedAt,
@@ -93,15 +100,16 @@ export function buildStructuredPageContextSummary(
   structured: StructuredPageData,
   options: BuildStructuredPageContextSummaryOptions = {}
 ): StructuredPageContextSummary {
+  const locale = options.locale ?? 'zh';
   const maxHighlights = options.maxHighlights ?? 8;
   const observation = structured.observation.items[0];
   const highlights = structured.refs.items.slice(0, maxHighlights);
   const formSummary =
     structured.forms.status === 'unsupported'
-      ? 'forms 暂不支持'
+      ? t('page.structured.formsUnsupported', locale)
       : structured.forms.summary;
 
-  const zoneDistribution = summarizeZoneDistribution(structured.refs.items);
+  const zoneDistribution = summarizeZoneDistribution(structured.refs.items, locale);
 
   return {
     url: observation?.url ?? '',
@@ -111,8 +119,8 @@ export function buildStructuredPageContextSummary(
     summary: [
       observation?.pageStateSummary ?? structured.observation.summary,
       zoneDistribution,
-      `refs ${structured.refs.count} 个`,
-      `interactive ${structured.interactive.count} 个`,
+      t('page.structured.refsCount', locale, { count: String(structured.refs.count) }),
+      t('page.structured.interactiveCount', locale, { count: String(structured.interactive.count) }),
       formSummary
     ].filter(Boolean).join('；'),
     counts: {
@@ -125,7 +133,7 @@ export function buildStructuredPageContextSummary(
   };
 }
 
-function summarizeZoneDistribution(refs: StructuredPageData['refs']['items']): string {
+function summarizeZoneDistribution(refs: StructuredPageData['refs']['items'], locale: Locale): string {
   const counts = new Map<PageZone, number>();
   counts.set('nav', 0);
   counts.set('form', 0);
@@ -137,10 +145,10 @@ function summarizeZoneDistribution(refs: StructuredPageData['refs']['items']): s
   }
   const parts: string[] = [];
   const zoneLabels: Record<PageZone, string> = {
-    nav: '导航',
-    form: '表单',
-    content: '内容',
-    other: '其它'
+    nav: t('page.zone.nav', locale),
+    form: t('page.zone.form', locale),
+    content: t('page.zone.content', locale),
+    other: t('page.zone.other', locale)
   };
   for (const zone of ['nav', 'form', 'content', 'other'] as PageZone[]) {
     const count = counts.get(zone) ?? 0;
@@ -234,12 +242,18 @@ function readObservationFormFields(value: unknown): ObservationFormFields | unde
 
 function summarizeForms(
   fields: StructuredPageData['forms']['items'],
-  submit: ObservationFormFields['submit']
+  submit: ObservationFormFields['submit'],
+  locale: Locale
 ): string {
   const requiredCount = fields.filter((field) => field.required).length;
   const invalidCount = fields.filter((field) => !field.validation.valid).length;
   const submitSummary = submit
-    ? `submit ${submit.disabled ? 'disabled' : 'enabled'}`
-    : 'submit 未找到';
-  return `检测到 ${fields.length} 个字段，必填 ${requiredCount} 个，校验错误 ${invalidCount} 个，${submitSummary}`;
+    ? t('page.structured.submitStatus', locale, { status: submit.disabled ? 'disabled' : 'enabled' })
+    : t('page.structured.submitNotFound', locale);
+  return t('page.structured.formFieldsSummary', locale, {
+    total: String(fields.length),
+    required: String(requiredCount),
+    invalid: String(invalidCount),
+    submitSummary
+  });
 }

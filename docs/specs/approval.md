@@ -52,7 +52,7 @@ type ApprovalAuditEvent = {
 - submit、send、delete、payment、upload、clipboard、execute JS、workflow replay 必须 approval。
 - v0.1 只定义 `USER_DENIED_APPROVAL` 错误码和 schema，不实现真实 approve / deny lifecycle。
 - 用户 deny 后返回 `USER_DENIED_APPROVAL` ToolResult 的完整流程放到 v0.33 / v0.4 / v1.0 落地。
-- 完整 ApprovalRequest 写入 trace。
+- trace 只写入脱敏后的 `ApprovalAuditRequest`；UI 使用 `ApprovalUiState`，真实执行参数只保存在 runtime 的 `PendingApprovalAction` 内存映射中。
 - 模型上下文只接收 approval summary。
 - v0.1 只做最小 `ApprovalPolicy` / `RiskClassifier`；正式 `PolicyEngine` 后续统一承接 Skill、MCP、workflow replay、sub-agent 等能力。
 

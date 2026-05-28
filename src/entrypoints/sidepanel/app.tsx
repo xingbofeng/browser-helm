@@ -5,6 +5,9 @@ import './app.css';
 import { ExtensionRuntimePort } from '../../runtime/extension-runtime-port';
 import type { RuntimePort } from '../../runtime/runtime-port';
 import { SIDE_PANEL_MESSAGES } from '../../shared/constants/event-names';
+import { I18nProvider } from '../../i18n/context';
+import { readLocale } from '../../i18n/locale';
+import type { Locale } from '../../i18n/types';
 import { CockpitApp } from '../../ui/sidepanel/cockpit-app';
 
 export function App() {
@@ -16,6 +19,11 @@ export function App() {
     tabId: initialTargetTabId,
     revision: 0
   });
+  const [locale, setLocale] = useState<Locale>();
+
+  useEffect(() => {
+    void readLocale().then(setLocale);
+  }, []);
 
   useEffect(() => {
     if (targetMode !== 'active' || !globalThis.chrome?.runtime?.connect) {
@@ -40,12 +48,14 @@ export function App() {
   }, [targetMode]);
 
   return (
-    <CockpitApp
-      runtime={runtime}
-      targetTabId={target.tabId}
-      targetRevision={target.revision}
-      initialRunId={readStringSearchParam('runId')}
-    />
+    <I18nProvider initialLocale={locale}>
+      <CockpitApp
+        runtime={runtime}
+        targetTabId={target.tabId}
+        targetRevision={target.revision}
+        initialRunId={readStringSearchParam('runId')}
+      />
+    </I18nProvider>
   );
 }
 
@@ -54,22 +64,18 @@ function readCurrentSearch(): string {
 }
 
 function readNumberSearchParam(name: string): number | undefined {
-  if (typeof window === 'undefined') {
-    return undefined;
-  }
-  const raw = new URLSearchParams(window.location.search).get(name);
-  if (!raw) {
-    return undefined;
-  }
-  const parsed = Number(raw);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+  const search = readCurrentSearch();
+  const params = new URLSearchParams(search);
+  const value = params.get(name);
+  if (value === null || value === undefined) return undefined;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : undefined;
 }
 
 function readStringSearchParam(name: string): string | undefined {
-  if (typeof window === 'undefined') {
-    return undefined;
-  }
-  return new URLSearchParams(window.location.search).get(name) ?? undefined;
+  const search = readCurrentSearch();
+  const params = new URLSearchParams(search);
+  return params.get(name) ?? undefined;
 }
 
 export function resolveTargetModeFromSearch(search: string): 'active' | 'pinned' {
@@ -77,17 +83,13 @@ export function resolveTargetModeFromSearch(search: string): 'active' | 'pinned'
   if (params.get('target') === 'active') {
     return 'active';
   }
-  return params.has('tabId') ? 'pinned' : 'active';
+  return params.has('tabId') || params.get('targetMode') === 'pinned' ? 'pinned' : 'active';
 }
 
 export function readTargetTabChangedTabId(message: unknown): number | undefined {
-  if (typeof message !== 'object' || message === null) {
-    return undefined;
-  }
-  const record = message as Record<string, unknown>;
-  return record.type === SIDE_PANEL_MESSAGES.TARGET_TAB_CHANGED &&
-    Number.isInteger(record.tabId) &&
-    Number(record.tabId) > 0
-    ? Number(record.tabId)
-    : undefined;
+  if (!message || typeof message !== 'object') return undefined;
+  const msg = message as Record<string, unknown>;
+  if (msg.type !== SIDE_PANEL_MESSAGES.TARGET_TAB_CHANGED) return undefined;
+  const tabId = msg.tabId;
+  return typeof tabId === 'number' && Number.isFinite(tabId) ? tabId : undefined;
 }

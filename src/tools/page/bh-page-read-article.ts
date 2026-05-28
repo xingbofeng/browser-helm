@@ -23,6 +23,10 @@ export function bhPageReadArticle(
     name: TOOL_NAMES.PAGE_READ_ARTICLE,
     title: 'Page Read Article',
     description: 'Reads article-like main content with optional headings and links',
+    ui: {
+      titleKey: 'tool.title.bh_page_read_article',
+      descriptionKey: 'tool.description.bh_page_read_article',
+    },
     modes: ['ask', 'debug', 'form'],
     risk: 'safe',
     argsSchema,

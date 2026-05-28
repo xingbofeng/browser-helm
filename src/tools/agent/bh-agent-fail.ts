@@ -10,24 +10,26 @@ const argsSchema = z.object({
 });
 
 /**
- * 以结构化失败状态结束当前 Agent run。
+ * 以结构化错误结束当前 Agent 运行。
  *
- * Agent 确认任务无法继续或已失败时调用此安全内部工具。`message` 作为 run 摘要；
- * `code` 可覆写默认失败码。该工具不修改页面状态，永不触发 approval，返回失败
- * ToolResult。
+ * 这是内部 Agent 工具，用于 agent loop 判定任务无法继续、缺少能力或遇到不可恢复错误时返回失败结果。它不读取或改变页面状态，风险等级为 safe，不触发 approval；返回值包含用户可读 message 和错误 code。
  */
 export const bhAgentFail: ToolSpec<
   z.infer<typeof argsSchema>,
   z.infer<typeof toolResultSchema>
 > = {
   name: 'bh_agent_fail',
-  // Agent 无法继续或确认失败时调用，作为一次 run 的失败终止信号。
+  // 以结构化错误结束当前运行。
   title: 'Agent Fail',
   description: 'Fails current run with structured error',
   modes: ['internal'],
   risk: 'safe',
   argsSchema,
   resultSchema: toolResultSchema,
+  ui: {
+    titleKey: 'tool.title.bh_agent_fail',
+    descriptionKey: 'tool.description.bh_agent_fail',
+  },
   execute(args) {
     return Promise.resolve({
       ok: false,

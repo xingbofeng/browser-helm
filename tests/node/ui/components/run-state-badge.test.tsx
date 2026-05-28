@@ -1,20 +1,22 @@
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-
+import { I18nProvider } from '../../../../src/i18n/context';
 import { RunStateBadge } from '../../../../src/ui/components/run-state-badge';
 
 describe('RunStateBadge', () => {
   it('renders run display states with Chinese labels', () => {
     const html = renderToString(
-      <>
-        <RunStateBadge state="observing" />
-        <RunStateBadge state="thinking" />
-        <RunStateBadge state="executing_tool" />
-        <RunStateBadge state="waiting_for_approval" />
-        <RunStateBadge state="waiting_for_user" />
-        <RunStateBadge state="recovering" />
-        <RunStateBadge state="cancelled" />
-      </>
+      <I18nProvider>
+        <>
+          <RunStateBadge state="observing" />
+          <RunStateBadge state="thinking" />
+          <RunStateBadge state="executing_tool" />
+          <RunStateBadge state="waiting_for_approval" />
+          <RunStateBadge state="waiting_for_user" />
+          <RunStateBadge state="recovering" />
+          <RunStateBadge state="cancelled" />
+        </>
+      </I18nProvider>
     );
 
     expect(html).toContain('观察中');

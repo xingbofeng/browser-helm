@@ -3,8 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   bindSidePanelToTab,
   bindSidePanelToActiveTab,
+  floatingPanelPathForTab,
   notifySidePanelsTargetTabChanged,
   sidePanelPathForTab,
+  sidePanelSurfaceFromSender,
+  sidePanelTargetTabIdFromUrl,
   targetTabChangedMessage
 } from '../../../src/background/runtime/side-panel-target';
 import { SIDE_PANEL_MESSAGES } from '../../../src/shared/constants/event-names';
@@ -24,6 +27,46 @@ describe('sidePanelPathForTab', () => {
     expect(a).not.toBe(b);
     expect(a).toContain('tabId=1');
     expect(b).toContain('tabId=999');
+  });
+});
+
+describe('floatingPanelPathForTab', () => {
+  it('生成 floating surface 路径，避免和原生 side panel URL 混淆', () => {
+    expect(floatingPanelPathForTab(42)).toBe('sidepanel.html?target=active&tabId=42&surface=floating');
+  });
+});
+
+describe('sidePanelTargetTabIdFromUrl', () => {
+  it('从 side panel URL 读取目标 tabId', () => {
+    expect(sidePanelTargetTabIdFromUrl('chrome-extension://id/sidepanel.html?target=active&tabId=42')).toBe(42);
+  });
+
+  it('缺少或非法 tabId 时返回 undefined', () => {
+    expect(sidePanelTargetTabIdFromUrl('chrome-extension://id/sidepanel.html')).toBeUndefined();
+    expect(sidePanelTargetTabIdFromUrl('not a url')).toBeUndefined();
+  });
+});
+
+describe('sidePanelSurfaceFromSender', () => {
+  it('识别页面内嵌 floating surface', () => {
+    expect(sidePanelSurfaceFromSender({
+      url: 'chrome-extension://id/sidepanel.html?tabId=42&surface=floating',
+      hasSenderTab: true
+    })).toBe('floating');
+  });
+
+  it('sender.tab 存在且没有 floating 标记时视为调试 tab', () => {
+    expect(sidePanelSurfaceFromSender({
+      url: 'chrome-extension://id/sidepanel.html?tabId=42',
+      hasSenderTab: true
+    })).toBe('debug_tab');
+  });
+
+  it('sender.tab 不存在且没有 floating 标记时视为原生 side panel', () => {
+    expect(sidePanelSurfaceFromSender({
+      url: 'chrome-extension://id/sidepanel.html?target=active&tabId=42',
+      hasSenderTab: false
+    })).toBe('native');
   });
 });
 

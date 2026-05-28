@@ -1,5 +1,7 @@
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import type { StructuredPageWarning } from '../../shared/schemas/structured-page-data.schema';
+import type { Locale } from '../../i18n/types';
+import { t } from '../../i18n/t';
 
 export type FieldLabelSource =
   | 'label-for'
@@ -17,7 +19,7 @@ export type FieldLabelResult = {
   warnings: StructuredPageWarning[];
 };
 
-export function resolveFieldLabel(element: HTMLElement): FieldLabelResult {
+export function resolveFieldLabel(element: HTMLElement, locale: Locale = 'zh'): FieldLabelResult {
   const candidates: Array<[FieldLabelSource, string | undefined]> = [
     ['label-for', readForLabel(element)],
     ['parent-label', readParentLabel(element)],
@@ -44,7 +46,7 @@ export function resolveFieldLabel(element: HTMLElement): FieldLabelResult {
     warnings: [
       {
         code: ERROR_CODES.FIELD_LABEL_MISSING,
-        message: '无法解析字段 label'
+        message: t('dom.field.labelUnresolved', locale)
       }
     ]
   };

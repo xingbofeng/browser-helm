@@ -48,11 +48,15 @@ export class CockpitPanel {
   }
 
   async expectStreamingMergedResponse(expectedText: string): Promise<void> {
-    await expect(this.page.getByText(expectedText, { exact: true })).toBeVisible();
+    await expect(
+      this.page.getByLabel('BrowserHelm Agent 消息').getByText(expectedText, { exact: true })
+    ).toBeVisible();
     await this.openDebugTab('Streaming');
     await expect(this.page.locator('.bh-streamingMetrics').getByText('true').first()).toBeVisible();
     await expect(this.page.locator('.bh-streamingMetrics')).toContainText('3');
-    await expect(this.page.getByText(expectedText, { exact: true }).first()).toBeVisible();
+    await expect(
+      this.page.getByLabel('BrowserHelm Agent 消息').getByText(expectedText, { exact: true })
+    ).toBeVisible();
   }
 
   async inspectElement(label: string): Promise<void> {

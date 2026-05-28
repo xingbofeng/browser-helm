@@ -7,18 +7,21 @@ import { readAccessibleName } from '../a11y/accessible-name';
 import { isDisabledElement, isVisibleElement } from '../a11y/element-finder';
 import type { RefMap } from '../a11y/ref-map';
 import { resolveRole } from '../a11y/role-resolver';
+import type { Locale } from '../../i18n/types';
+import { t } from '../../i18n/t';
 
 export function detectSubmitSummary(
   form: HTMLFormElement,
   fields: FormFieldSnapshot[],
-  refMap: RefMap
+  refMap: RefMap,
+  locale: Locale = 'zh'
 ): FormSubmitSummary {
   const submit = findSubmitButton(form);
   const disabled = submit ? isDisabledElement(submit) : false;
   return {
     disabled,
     ...(submit ? { refId: registerSubmitRef(submit, refMap) } : {}),
-    ...(disabled ? { reason: detectDisabledReason(submit, fields) } : {})
+    ...(disabled ? { reason: detectDisabledReason(submit, fields, locale) } : {})
   };
 }
 
@@ -43,7 +46,8 @@ export function findSubmitButton(form: HTMLFormElement): HTMLElement | undefined
 
 function detectDisabledReason(
   submit: HTMLElement | undefined,
-  fields: FormFieldSnapshot[]
+  fields: FormFieldSnapshot[],
+  locale: Locale
 ): DisabledSubmitReason {
   const validationMessageField = fields.find(
     (field) => typeof field.validation.message === 'string' && field.validation.message.length > 0
@@ -65,14 +69,14 @@ function detectDisabledReason(
   if (invalidField) {
     return {
       kind: 'inferred',
-      message: '提交按钮禁用，可能与必填、校验错误或禁用字段有关',
+      message: t('dom.submit.disabledReason.inferred', locale),
       fieldRefId: invalidField.refId
     };
   }
 
   return {
     kind: 'unknown',
-    message: '提交按钮处于禁用状态，但只读页面信号无法判断原因'
+    message: t('dom.submit.disabledReason.unknown', locale)
   };
 }
 

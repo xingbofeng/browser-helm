@@ -90,6 +90,41 @@ describe('streamingStateFromTrace', () => {
     expect(state.finishedAt).toBe(2000);
   });
 
+  it('extracts token and cost estimate metadata from finished provider events', () => {
+    const trace: RuntimeEvent[] = [
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.MODEL_STREAM_STARTED,
+        timestamp: 1000,
+        payload: { streamingEnabled: true }
+      },
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.MODEL_STREAM_FINISHED,
+        timestamp: 2000,
+        payload: {
+          chunkCount: 2,
+          charCount: 40,
+          usage: {
+            inputTokensEstimate: 25,
+            outputTokensEstimate: 10,
+            totalTokensEstimate: 35,
+            costUsdEstimate: null,
+            costEstimateStatus: 'unpriced'
+          }
+        }
+      }
+    ];
+    const state = streamingStateFromTrace(trace);
+    expect(state.usage).toEqual({
+      inputTokensEstimate: 25,
+      outputTokensEstimate: 10,
+      totalTokensEstimate: 35,
+      costUsdEstimate: null,
+      costEstimateStatus: 'unpriced'
+    });
+  });
+
   it('returns fallbackReason when stream failed', () => {
     const trace: RuntimeEvent[] = [
       {

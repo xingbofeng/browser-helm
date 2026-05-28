@@ -8,6 +8,8 @@ import {
   planStateSchema
 } from '../../shared/schemas/goal-plan.schema';
 import type { RunMode } from '../../shared/schemas/tool.schema';
+import { t } from '../../i18n/t';
+import type { Locale } from '../../i18n/types';
 import type { ToolResult } from '../../shared/schemas/tool-result.schema';
 
 type BuildPlanInput = {
@@ -15,6 +17,7 @@ type BuildPlanInput = {
   mode: RunMode;
   task: string;
   updatedAt: number;
+  locale?: Locale;
 };
 
 type UpdatePlanForToolResultInput = {
@@ -22,6 +25,7 @@ type UpdatePlanForToolResultInput = {
   tool: string;
   result: ToolResult;
   updatedAt: number;
+  locale?: Locale;
 };
 
 type UpdatePlanForInterruptInput = {
@@ -34,13 +38,15 @@ type UpdatePlanForRevisedGoalInput = {
   plan: PlanState;
   goal: string;
   updatedAt: number;
+  locale?: Locale;
 };
 
 export function buildPlanState(input: BuildPlanInput): PlanState {
+  const locale = input.locale ?? 'zh';
   return planStateSchema.parse({
     id: input.id,
     mode: input.mode,
-    steps: templateSteps(input.mode),
+    steps: templateSteps(input.mode, locale),
     updatedAt: input.updatedAt
   });
 }
@@ -84,7 +90,8 @@ export function updatePlanForToolResult(
     });
   }
 
-  const blockedEvidence = blockedReason(input.result);
+  const locale = input.locale ?? 'zh';
+  const blockedEvidence = blockedReason(input.result, locale);
   return planStateSchema.parse({
     ...input.plan,
     steps: input.plan.steps.map((step, index) => {
@@ -137,42 +144,42 @@ export function updatePlanForRevisedGoal(
     steps: input.plan.steps.map((step, index) => ({
       ...step,
       status: index === 0 ? 'current' : 'pending',
-      evidence: index === 0 ? [`目标已修改：${input.goal}`] : undefined
+      evidence: index === 0 ? [t('plan.evidence.goalRevised', input.locale ?? 'zh', { goal: input.goal })] : undefined
     })),
     updatedAt: input.updatedAt
   });
 }
 
-function templateSteps(mode: RunMode): PlanStep[] {
+function templateSteps(mode: RunMode, locale: Locale): PlanStep[] {
   if (mode === 'form') {
     return [
-      step('observe', '观察页面', 'current', 'bh_page_observe'),
-      step('read_fields', '读取表单字段', 'pending', 'bh_form_read_fields'),
-      step('diagnose', '诊断缺失字段、校验错误和提交状态', 'pending'),
-      step('report', '输出表单诊断报告', 'pending')
+      step('observe', t('plan.step.observe', locale), 'current', 'bh_page_observe'),
+      step('read_fields', t('plan.step.readFields', locale), 'pending', 'bh_form_read_fields'),
+      step('diagnose', t('plan.step.diagnose', locale), 'pending'),
+      step('report', t('plan.step.reportForm', locale), 'pending')
     ];
   }
   if (mode === 'debug') {
     return [
-      step('observe', '观察页面', 'current', 'bh_page_observe'),
-      step('page_health', '收集页面健康摘要', 'pending', 'bh_debug_collect_page_health'),
-      step('report', '输出页面诊断报告', 'pending')
+      step('observe', t('plan.step.observe', locale), 'current', 'bh_page_observe'),
+      step('page_health', t('plan.step.collectPageHealth', locale), 'pending', 'bh_debug_collect_page_health'),
+      step('report', t('plan.step.reportPage', locale), 'pending')
     ];
   }
   if (mode === 'act') {
     return [
-      step('observe', '观察页面', 'current', 'bh_page_observe'),
-      step('readiness', '检查动作目标和风险', 'pending', 'bh_action_check_readiness'),
-      step('approval_boundary', '说明审批边界', 'pending')
+      step('observe', t('plan.step.observe', locale), 'current', 'bh_page_observe'),
+      step('readiness', t('plan.step.checkReadiness', locale), 'pending', 'bh_action_check_readiness'),
+      step('approval_boundary', t('plan.step.explainApproval', locale), 'pending')
     ];
   }
   return [
-    step('observe', '观察页面', 'current', 'bh_page_observe'),
-    step('answer', '回答用户问题', 'pending')
+    step('observe', t('plan.step.observe', locale), 'current', 'bh_page_observe'),
+    step('answer', t('plan.step.answer', locale), 'pending')
   ];
 }
 
-function blockedReason(result: ToolResult): string | undefined {
+function blockedReason(result: ToolResult, locale: Locale): string | undefined {
   if (!result.ok) {
     return result.summary;
   }
@@ -183,7 +190,7 @@ function blockedReason(result: ToolResult): string | undefined {
     'status' in data &&
     data.status === 'empty'
   ) {
-    return '未发现可诊断的表单字段';
+    return t('plan.blocked.noFormFields', locale);
   }
   if (
     typeof data === 'object' &&
@@ -191,7 +198,7 @@ function blockedReason(result: ToolResult): string | undefined {
     'count' in data &&
     data.count === 0
   ) {
-    return '未发现可诊断的表单字段';
+    return t('plan.blocked.noFormFields', locale);
   }
   return undefined;
 }

@@ -33,6 +33,10 @@ export function bhFormVerify(
     // 验证表单准备状态。
     title: 'Verify Form',
     description: 'Verifies form readiness before submit.',
+    ui: {
+      titleKey: 'tool.title.bh_form_verify',
+      descriptionKey: 'tool.description.bh_form_verify',
+    },
     modes: ['form', 'debug'],
     risk: 'low',
     argsSchema,
@@ -52,7 +56,7 @@ export function bhFormVerify(
         return { ok: false, code: ERROR_CODES.TOOL_EXECUTION_FAILED, summary: 'unexpected RPC response', error: { message: 'unexpected RPC response' }, changedPage: false, requiresObserve: false };
       }
       const result: FormVerifyResult = formVerifyResultSchema.parse(resp.verifyResult);
-      return { ok: true, code: result.allValid ? ERROR_CODES.OK : ERROR_CODES.FORM_VERIFY_FAILED, summary: result.status === 'pass' ? 'Form verification passed' : `Form verification failed: ${result.missingRequired.length} required fields missing`, data: result, changedPage: false, requiresObserve: false };
+      return { ok: true, code: ERROR_CODES.OK, summary: result.status === 'pass' ? 'Form verification passed' : `Form verification failed: ${result.missingRequired.length} required fields missing`, data: result, changedPage: false, requiresObserve: false };
     },
   };
 }

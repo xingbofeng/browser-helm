@@ -35,7 +35,7 @@ describe('tool documentation standard', () => {
     const source = readFileSync(resolve(process.cwd(), file), 'utf8');
 
     expect(source).toMatch(
-      /\/\*\*[\s\S]*?\*\/\nexport (function|const) [A-Za-z0-9]+/
+      /\/\*\*[\s\S]*?\*\/\n(?:import [\s\S]*?\n)*export (function|const) [A-Za-z0-9]+/
     );
   });
 

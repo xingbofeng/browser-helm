@@ -1,5 +1,6 @@
 import { buildA11ySnapshot } from '../a11y/a11y-snapshot';
 import { RefMap } from '../a11y/ref-map';
+import type { Locale } from '../../i18n/types';
 import { resolveRef, type ResolvedRefElement } from '../a11y/ref-resolver';
 import { checkResolvedActionReadiness } from '../dom/action-readiness';
 import { buildObservation } from '../observe/build-observation';
@@ -14,21 +15,38 @@ import {
 } from './content-rpc.schema';
 
 type IframeActionKind = 'click' | 'type';
+type FormActionKind = 'fill' | 'submit';
 type IframeActionGrant = {
   action: IframeActionKind;
   refId: string;
   expiresAt: number;
 };
+type FormActionGrant = {
+  action: FormActionKind;
+  fieldRefIds: Set<string>;
+  submitTargetRefId?: string | undefined;
+  expiresAt: number;
+};
 
 const IFRAME_ACTION_TOKEN_TTL_MS = 30_000;
+const FORM_ACTION_TOKEN_TTL_MS = 30_000;
 
 export class ContentRpcHandler {
   private refMap: RefMap | undefined;
   private readonly iframeActionGrants = new Map<string, IframeActionGrant>();
+  private readonly formActionGrants = new Map<string, FormActionGrant>();
+  private readonly locale: Locale;
 
-  constructor(private readonly document: Document) {}
-
-  handle(rawMessage: unknown): ContentRpcResponse {
+  constructor(private readonly document: Document, locale: Locale = 'zh') {
+    this.locale = locale;
+  }
+  handle<T extends ContentRpcRequest>(
+    rawMessage: T
+  ): T extends { type: typeof CONTENT_RPC_MESSAGES.PAGE_WAIT_UNTIL_STABLE }
+    ? Promise<ContentRpcResponse>
+    : ContentRpcResponse;
+  handle(rawMessage: unknown): ContentRpcResponse | Promise<ContentRpcResponse>;
+  handle(rawMessage: unknown): ContentRpcResponse | Promise<ContentRpcResponse> {
     const parsed = contentRpcRequestSchema.safeParse(rawMessage);
     if (!parsed.success) {
       return {
@@ -50,13 +68,13 @@ export class ContentRpcHandler {
     }
   }
 
-  private handleParsed(message: ContentRpcRequest): ContentRpcResponse {
+  private handleParsed(message: ContentRpcRequest): ContentRpcResponse | Promise<ContentRpcResponse> {
     switch (message.type) {
       case CONTENT_RPC_MESSAGES.PAGE_OBSERVE: {
         const refMap = this.ensureRefMap(true);
         return {
           ok: true,
-          observation: buildObservation(this.document, { refMap })
+          observation: buildObservation(this.document, { refMap, locale: this.locale })
         };
       }
       case CONTENT_RPC_MESSAGES.PAGE_READ_VISIBLE_TEXT: {
@@ -83,12 +101,7 @@ export class ContentRpcHandler {
         };
       }
       case CONTENT_RPC_MESSAGES.PAGE_WAIT_UNTIL_STABLE: {
-        return {
-          ok: true,
-          stable: true,
-          readyState: this.document.readyState,
-          waitedMs: 0
-        };
+        return waitUntilStable(this.document, message.quietMs ?? 250);
       }
       case CONTENT_RPC_MESSAGES.VIEWPORT_GET_INFO: {
         return {
@@ -257,15 +270,31 @@ export class ContentRpcHandler {
         };
       }
       // form fill actions
+      case CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE: {
+        return {
+          ok: true,
+          actionToken: this.createFormActionToken(
+            message.action,
+            message.fieldRefIds ?? [],
+            message.submitTargetRefId
+          )
+        };
+      }
       case CONTENT_RPC_MESSAGES.FORM_FILL_FIELD: {
-        const fr = fillSingleField(this.document, this.ensureRefMap(), { fieldRefId: message.fieldRefId, value: message.value, clear: message.clear });
+        if (!this.consumeFormActionToken(message.actionToken, 'fill', [message.fieldRefId])) {
+          return formActionUnauthorized();
+        }
+        const fr = fillSingleField(this.document, this.ensureRefMap(), { fieldRefId: message.fieldRefId, value: message.value, clear: message.clear }, this.locale);
         if (fr.status === 'failed') {
           return { ok: false, code: ERROR_CODES.TOOL_EXECUTION_FAILED, message: 'fill field failed' };
         }
         return { ok: true, fillFieldResult: fr } as unknown as ContentRpcResponse;
       }
       case CONTENT_RPC_MESSAGES.FORM_FILL_MANY: {
-        const mr = fillManyFields(this.document, this.ensureRefMap(), message.targets);
+        if (!this.consumeFormActionToken(message.actionToken, 'fill', message.targets.map((target) => target.fieldRefId))) {
+          return formActionUnauthorized();
+        }
+        const mr = fillManyFields(this.document, this.ensureRefMap(), message.targets, this.locale);
         return { ok: true, fillManyResult: mr } as unknown as ContentRpcResponse;
       }
       case CONTENT_RPC_MESSAGES.FORM_VERIFY: {
@@ -278,10 +307,15 @@ export class ContentRpcHandler {
             fm.set(message.submitRefId, submit.element);
           }
         }
-        return { ok: true, verifyResult: verifyForm(this.document, fm, message.submitRefId) } as unknown as ContentRpcResponse;
+        return { ok: true, verifyResult: verifyForm(this.document, fm, message.submitRefId, this.locale) } as unknown as ContentRpcResponse;
       }
       case CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT: {
-        const sr = executeSubmit(this.document, this.ensureRefMap(), message.submitTargetRefId);
+        if (!this.consumeFormActionToken(message.actionToken, 'submit', [], message.submitTargetRefId)) {
+          return formActionUnauthorized();
+        }
+        const sr = executeSubmit(this.document, this.ensureRefMap(), message.submitTargetRefId, {
+          allowDisabledSubmit: message.allowDisabledSubmit === true
+        });
         if (sr === 'submitted') {
           return { ok: true, submitResult: sr } as unknown as ContentRpcResponse;
         }
@@ -308,7 +342,7 @@ export class ContentRpcHandler {
 
   private createIframeActionToken(refId: string, action: IframeActionKind): string {
     this.pruneExpiredIframeActionTokens();
-    const token = createOpaqueToken();
+    const token = createOpaqueToken('bh_iframe');
     this.iframeActionGrants.set(token, {
       refId,
       action,
@@ -349,6 +383,52 @@ export class ContentRpcHandler {
     for (const [token, grant] of this.iframeActionGrants) {
       if (grant.expiresAt < now) {
         this.iframeActionGrants.delete(token);
+      }
+    }
+  }
+
+  private createFormActionToken(
+    action: FormActionKind,
+    fieldRefIds: string[],
+    submitTargetRefId?: string
+  ): string {
+    this.pruneExpiredFormActionTokens();
+    const token = createOpaqueToken('bh_form');
+    this.formActionGrants.set(token, {
+      action,
+      fieldRefIds: new Set(fieldRefIds),
+      submitTargetRefId,
+      expiresAt: Date.now() + FORM_ACTION_TOKEN_TTL_MS
+    });
+    return token;
+  }
+
+  private consumeFormActionToken(
+    token: string | undefined,
+    action: FormActionKind,
+    fieldRefIds: string[],
+    submitTargetRefId?: string
+  ): boolean {
+    this.pruneExpiredFormActionTokens();
+    if (!token) {
+      return false;
+    }
+    const grant = this.formActionGrants.get(token);
+    this.formActionGrants.delete(token);
+    if (!grant || grant.action !== action || grant.expiresAt <= Date.now()) {
+      return false;
+    }
+    if (action === 'fill') {
+      return fieldRefIds.every((refId) => grant.fieldRefIds.has(refId));
+    }
+    return grant.submitTargetRefId === submitTargetRefId;
+  }
+
+  private pruneExpiredFormActionTokens(): void {
+    const now = Date.now();
+    for (const [token, grant] of this.formActionGrants.entries()) {
+      if (grant.expiresAt <= now) {
+        this.formActionGrants.delete(token);
       }
     }
   }
@@ -624,6 +704,96 @@ function scrollViewport(document: Document, direction: string, amount: ScrollAmo
   element.scrollTop += top;
 }
 
+async function waitUntilStable(document: Document, quietMs: number): Promise<ContentRpcResponse> {
+  const startedAt = Date.now();
+  await new Promise<void>((resolve) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const observer = new MutationObserver(() => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+      timer = setTimeout(finish, quietMs);
+    });
+    const finish = () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+      observer.disconnect();
+      resolve();
+    };
+    observer.observe(document.documentElement, {
+      attributes: true,
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+    timer = setTimeout(finish, quietMs);
+  });
+  const layoutStableFrames = await waitForStableLayoutFrames(document, 2);
+  const fontsReady = await waitForFonts(document);
+  return {
+    ok: true,
+    stable: true,
+    readyState: document.readyState,
+    layoutStableFrames,
+    fontsReady,
+    networkIdle: 'unavailable',
+    waitedMs: Date.now() - startedAt
+  };
+}
+
+async function waitForStableLayoutFrames(document: Document, targetFrames: number): Promise<number> {
+  let stableFrames = 0;
+  let previous = layoutSignature(document);
+  for (let index = 0; index < targetFrames * 3 && stableFrames < targetFrames; index += 1) {
+    await nextAnimationFrame(document);
+    const current = layoutSignature(document);
+    if (current === previous) {
+      stableFrames += 1;
+    } else {
+      stableFrames = 0;
+      previous = current;
+    }
+  }
+  return stableFrames;
+}
+
+function layoutSignature(document: Document): string {
+  const element = document.scrollingElement ?? document.documentElement;
+  const bodyRect = document.body?.getBoundingClientRect();
+  return [
+    element.scrollWidth,
+    element.scrollHeight,
+    element.clientWidth,
+    element.clientHeight,
+    bodyRect ? Math.round(bodyRect.width) : 0,
+    bodyRect ? Math.round(bodyRect.height) : 0
+  ].join(':');
+}
+
+function nextAnimationFrame(document: Document): Promise<void> {
+  const view = document.defaultView;
+  return new Promise((resolve) => {
+    if (view?.requestAnimationFrame) {
+      view.requestAnimationFrame(() => resolve());
+      return;
+    }
+    setTimeout(resolve, 16);
+  });
+}
+
+async function waitForFonts(document: Document): Promise<boolean> {
+  const fonts = (document as Document & { fonts?: { ready?: Promise<unknown> } }).fonts;
+  if (typeof fonts?.ready?.then !== 'function') {
+    return false;
+  }
+  await Promise.race([
+    fonts.ready,
+    new Promise((resolve) => setTimeout(resolve, 250))
+  ]);
+  return true;
+}
+
 function iframeActionUnauthorized(): ContentRpcResponse {
   return {
     ok: false,
@@ -632,19 +802,27 @@ function iframeActionUnauthorized(): ContentRpcResponse {
   };
 }
 
-function createOpaqueToken(): string {
+function formActionUnauthorized(): ContentRpcResponse {
+  return {
+    ok: false,
+    code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED,
+    message: 'Form mutations must be routed through the runtime tool boundary'
+  };
+}
+
+function createOpaqueToken(prefix: string): string {
   const cryptoObject = globalThis.crypto;
   if (cryptoObject && typeof cryptoObject.randomUUID === 'function') {
-    return `bh_iframe_${cryptoObject.randomUUID()}`;
+    return `${prefix}_${cryptoObject.randomUUID()}`;
   }
   if (cryptoObject && typeof cryptoObject.getRandomValues === 'function') {
     const bytes = new Uint8Array(16);
     cryptoObject.getRandomValues(bytes);
-    return `bh_iframe_${Array.from(bytes, (byte) =>
+    return `${prefix}_${Array.from(bytes, (byte) =>
       byte.toString(16).padStart(2, '0')
     ).join('')}`;
   }
-  return `bh_iframe_${Date.now().toString(36)}_${Math.random()
+  return `${prefix}_${Date.now().toString(36)}_${Math.random()
     .toString(36)
     .slice(2)}`;
 }

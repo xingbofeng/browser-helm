@@ -17,6 +17,18 @@ describe('page-health-reader', () => {
           source: 'app.js'
         }
       ],
+      __browserHelmConsoleMessages: [
+        {
+          level: 'warn',
+          message: 'Slow response',
+          source: 'console.warn'
+        },
+        {
+          level: 'warn',
+          message: 'Slow response',
+          source: 'console.warn'
+        }
+      ],
       __browserHelmNetworkFailures: [
         {
           url: 'https://api.example.com/users',
@@ -36,6 +48,14 @@ describe('page-health-reader', () => {
         count: 2
       }
     ]);
+    expect(result.consoleMessages).toEqual([
+      {
+        level: 'warn',
+        message: 'Slow response',
+        source: 'console.warn',
+        count: 2
+      }
+    ]);
     expect(result.networkFailures).toHaveLength(1);
     expect(result.hasForm).toBe(true);
     expect(result.limitations).toContain('CDP deep inspection is not available in this mode');
@@ -44,6 +64,7 @@ describe('page-health-reader', () => {
   it('returns healthy empty state when no shallow signals exist', () => {
     Object.assign(window, {
       __browserHelmConsoleErrors: [],
+      __browserHelmConsoleMessages: [],
       __browserHelmNetworkFailures: []
     });
     document.body.innerHTML = '<main>Hello</main>';
@@ -51,6 +72,7 @@ describe('page-health-reader', () => {
     const result = readPageHealthSummary(document);
 
     expect(result.consoleErrors).toEqual([]);
+    expect(result.consoleMessages).toEqual([]);
     expect(result.networkFailures).toEqual([]);
     expect(result.hasForm).toBe(false);
     expect(result.pageStateSummary).toContain('未发现明显页面异常');

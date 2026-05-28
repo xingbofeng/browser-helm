@@ -2,14 +2,37 @@ import { describe, expect, it } from 'vitest';
 
 import type { ContentRpcClient } from '../../../../src/page/messaging/content-rpc-client';
 import { bhIframeClick } from '../../../../src/tools/frame/bh-iframe-click';
+import { bhIframeList } from '../../../../src/tools/frame/bh-iframe-list';
 import { bhIframeRead } from '../../../../src/tools/frame/bh-iframe-read';
 import { bhIframeType } from '../../../../src/tools/frame/bh-iframe-type';
 import { ToolRegistry } from '../../../../src/tools/core/tool-registry';
 import { ToolRouter } from '../../../../src/tools/core/tool-router';
 import { CONTENT_RPC_MESSAGES } from '../../../../src/shared/constants/event-names';
+import { ERROR_CODES } from '../../../../src/shared/constants/error-codes';
 import { TOOL_NAMES } from '../../../../src/shared/constants/tool-names';
 
 describe('iframe tools', () => {
+  it('marks iframe readability as unknown until a read is attempted', async () => {
+    const tool = bhIframeList(rpcClient(async () => ({
+      ok: true,
+      frames: [
+        { frameId: 0, url: 'https://host.example', isTop: true },
+        { frameId: 7, url: 'https://frame.example', parentFrameId: 0, isTop: false }
+      ]
+    })));
+
+    const result = await tool.execute({}, { runId: 'run_1', stepId: 'step_1', runMode: 'ask' });
+
+    expect(result.data).toMatchObject({
+      iframes: [
+        {
+          iframeId: 'frame_7',
+          readable: 'unknown'
+        }
+      ]
+    });
+  });
+
   it('reads iframe target refs and exposes iframe reading in ask/debug/act modes', async () => {
     const rpc = rpcClient(async (message) => {
       expect(message).toMatchObject({
@@ -87,6 +110,25 @@ describe('iframe tools', () => {
       code: 'FRAME_NOT_FOUND',
       changedPage: false,
       requiresObserve: true
+    });
+  });
+
+  it('returns a specific error for invalid iframeId instead of throwing', async () => {
+    const tool = bhIframeRead(rpcClient(async () => ({
+      ok: false,
+      code: ERROR_CODES.OBSERVATION_FAILED,
+      message: 'unexpected'
+    })));
+
+    const result = await tool.execute(
+      { iframeId: 'bad', mode: 'visible_text' },
+      { runId: 'run_1', stepId: 'step_1', runMode: 'ask' }
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.IFRAME_ID_INVALID,
+      requiresObserve: false
     });
   });
 

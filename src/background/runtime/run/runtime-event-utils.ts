@@ -1,7 +1,11 @@
-import type { RuntimeEvent } from '../../../runtime/runtime-messages';
+import type { RuntimeEvent, RuntimeEventType } from '../../../runtime/runtime-messages';
+import type { ApprovalAuditRequest, ApprovalRequest } from '../../../shared/schemas/approval.schema';
 import { maskProviderSecret } from '../../../shared/redaction';
 
-type NormalizableTraceEvent = RuntimeEvent & {
+type NormalizableTraceEvent = {
+  runId: string;
+  type: RuntimeEventType | (string & {});
+  payload?: unknown;
   [key: string]: unknown;
 };
 
@@ -107,7 +111,7 @@ export function normalizeAgentTraceEvents(runId: string, trace: NormalizableTrac
   }));
 }
 
-function withAgentRunId(payload: unknown, agentRunId: string): unknown {
+function withAgentRunId(payload: unknown, agentRunId: string): Record<string, unknown> {
   if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
     return {
       ...(payload as Record<string, unknown>),
@@ -123,7 +127,11 @@ function withAgentRunId(payload: unknown, agentRunId: string): unknown {
 /**
  * Redacts `valuePreview` fields in approval args for trace recording.
  */
-export function approvalRequestForTrace<T extends { argsPreview: unknown }>(request: T): T {
+export function approvalRequestForTrace(request: ApprovalRequest): ApprovalAuditRequest;
+export function approvalRequestForTrace<T extends { argsPreview: unknown }>(request: T): Omit<T, 'argsPreview'> & { argsPreview: unknown };
+export function approvalRequestForTrace<T extends { argsPreview: unknown }>(
+  request: T
+): Omit<T, 'argsPreview'> & { argsPreview: unknown } {
   return {
     ...request,
     argsPreview: redactApprovalArgsPreview(request.argsPreview)
