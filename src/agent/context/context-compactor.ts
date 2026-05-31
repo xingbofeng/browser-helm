@@ -1,4 +1,4 @@
-import type { LoopTurn } from '../kernel/agent-step';
+import type { LoopTurn } from './loop-turn';
 import { DEFAULT_CONTEXT_POLICY, type ContextPolicy } from './context-policy';
 
 export type CompactedStep = {

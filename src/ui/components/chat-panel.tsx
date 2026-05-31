@@ -16,7 +16,7 @@ type ChatPanelProps = {
   onStop: () => void;
 };
 
-const primaryRunModes = ['ask', 'act'] as const;
+const primaryRunModes = ['ask', 'act', 'full'] as const;
 
 export function ChatPanel(props: ChatPanelProps) {
   const t = useT();
@@ -29,6 +29,7 @@ export function ChatPanel(props: ChatPanelProps) {
     switch (mode) {
       case 'ask': return t('chat.mode.ask');
       case 'act': return t('chat.mode.act');
+      case 'full': return t('chat.mode.full');
       case 'form': return t('chat.mode.form');
       case 'debug': return t('chat.mode.debug');
     }

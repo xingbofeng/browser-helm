@@ -22,7 +22,7 @@
     "test:e2e:real": "npm run build && BROWSER_HELM_REAL_SITE_E2E=1 playwright test tests/e2e/specs/real-sites --timeout=120000",
     "debug:extension": "npm run build && tsx scripts/debug-extension.ts",
     "debug:extension:watch": "BROWSER_HELM_DEBUG_WATCH=1 npm run debug:extension",
-    "agent:dev": "npm run build && tsx scripts/run-agent-dev.ts",
+    "agent:dev": "npm run debug:extension",
     "check:tool-docs": "npx tsx scripts/check-tool-docs.ts",
     "check:release-hygiene": "npx tsx scripts/check-release-hygiene.ts",
     "check:manifest-permissions": "npx tsx scripts/check-manifest-permissions.ts",

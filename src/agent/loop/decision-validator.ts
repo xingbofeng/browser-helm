@@ -1,11 +1,12 @@
-import type { AgentDecision } from '../../../shared/schemas/agent-decision.schema';
-import type { ModelMessage } from '../../../shared/schemas/model-message.schema';
-import type { RunSnapshot } from '../../../runtime/runtime-messages';
-import type { RunRecord } from './runtime-service-types';
-import { ERROR_CODES } from '../../../shared/constants/error-codes';
-import { TOOL_NAMES } from '../../../shared/constants/tool-names';
-import { redactTextForModelContext } from '../../../shared/redaction';
-import type { ToolPromptContract } from './runtime-service-types';
+import type { AgentDecision } from '../../shared/schemas/agent-decision.schema';
+import type { ModelMessage } from '../../shared/schemas/model-message.schema';
+import type { RunSnapshot } from '../../runtime/runtime-messages';
+import type { RunRecord } from './types';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
+import { TRACE_EVENT_NAMES } from '../../shared/constants/event-names';
+import { TOOL_NAMES } from '../../shared/constants/tool-names';
+import { redactTextForModelContext } from '../../shared/redaction';
+import type { ToolPromptContract } from '../../tools/core/tool-router';
 import { buildRecentToolActions } from './recent-tool-actions';
 import {
   isFormFillTool,
@@ -14,8 +15,8 @@ import {
   isExplicitAllowedFieldValue,
   isExistingValueBlocked
 } from './form-fill-augmenter';
-import type { Locale } from '../../../i18n/types';
-import { t } from '../../../i18n/t';
+import type { Locale } from '../../i18n/types';
+import { t } from '../../i18n/t';
 
 // ── Types ──
 
@@ -23,6 +24,7 @@ type ToolCallDecision = Extract<AgentDecision, { type: 'tool_call' }>;
 
 export type ModelDecisionKind =
   | 'existing_value_overwrite'
+  | 'repeated_action_readiness'
   | 'tool_not_found'
   | 'repeated_form_fill'
   | 'repeated_form_verify'
@@ -81,6 +83,18 @@ export function validateRepairDecision(
         `Do not call tools such as ${decision.tool} during this repair.`
       ].join(' '),
       kind: 'repeated_form_fill',
+      detail: lastRepairError.detail
+    };
+  }
+  if (lastRepairError.kind === 'repeated_action_readiness') {
+    return {
+      code: ERROR_CODES.TOOL_ARGS_INVALID,
+      message: [
+        lastRepairError.message,
+        'Repeated action readiness repair must return finish, ask_user, or fail.',
+        `Do not call tools such as ${decision.tool} during this repair.`
+      ].join(' '),
+      kind: 'repeated_action_readiness',
       detail: lastRepairError.detail
     };
   }
@@ -150,6 +164,10 @@ export function repeatedToolDecisionError(
   if (decision.type !== 'tool_call') {
     return undefined;
   }
+  const repeatedActionReadiness = repeatedActionReadinessDecisionError(decision, record);
+  if (repeatedActionReadiness) {
+    return repeatedActionReadiness;
+  }
   if (snapshot.toolResult?.ok !== true) {
     return repeatedTraceToolDecisionError(decision, record);
   }
@@ -176,6 +194,72 @@ export function repeatedToolDecisionError(
     };
   }
   return repeatedTraceToolDecisionError(decision, record);
+}
+
+function repeatedActionReadinessDecisionError(
+  decision: ToolCallDecision,
+  record: RunRecord
+): ModelDecisionError | undefined {
+  if (decision.tool !== TOOL_NAMES.ACTION_CHECK_READINESS) {
+    return undefined;
+  }
+  const intent = actionReadinessIntentFromArgs(decision.args);
+  if (!intent || !hasPriorSuccessfulActionReadiness(record, intent)) {
+    return undefined;
+  }
+  return {
+    code: ERROR_CODES.TOOL_ARGS_INVALID,
+    message: [
+      `Action readiness for ${intent.kind} ${intent.refId} already succeeded on the unchanged page.`,
+      'bh_action_check_readiness is read-only and does not execute the action.',
+      'Do not repeat readiness for the same target; return finish with the readiness result, ask_user if user input is needed, or fail if the requested action cannot be completed with available tools.'
+    ].join(' '),
+    kind: 'repeated_action_readiness',
+    detail: {
+      kind: 'repeated_action_readiness',
+      actionKind: intent.kind,
+      refId: intent.refId
+    }
+  };
+}
+
+function hasPriorSuccessfulActionReadiness(
+  record: RunRecord,
+  intent: { kind: string; refId: string }
+): boolean {
+  let pendingArgs: unknown;
+  let sawMatchingReadiness = false;
+  for (const event of record.trace ?? []) {
+    const payload = eventPayload(event);
+    if (event.type === TRACE_EVENT_NAMES.TOOL_STARTED) {
+      pendingArgs = stringField(payload, 'tool') === TOOL_NAMES.ACTION_CHECK_READINESS
+        ? payload.args
+        : undefined;
+      continue;
+    }
+    if (event.type !== TRACE_EVENT_NAMES.TOOL_RESULT) {
+      continue;
+    }
+    const tool = stringField(payload, 'tool');
+    if (
+      payload.changedPage === true ||
+      tool === TOOL_NAMES.PAGE_OBSERVE ||
+      tool === TOOL_NAMES.A11Y_REFRESH_REFS
+    ) {
+      sawMatchingReadiness = false;
+      pendingArgs = undefined;
+      continue;
+    }
+    if (
+      tool === TOOL_NAMES.ACTION_CHECK_READINESS &&
+      payload.ok === true &&
+      sameActionReadinessIntent(actionReadinessIntentFromArgs(pendingArgs), intent)
+    ) {
+      sawMatchingReadiness = true;
+    }
+    pendingArgs = undefined;
+  }
+  return sawMatchingReadiness;
 }
 
 function repeatedTraceToolDecisionError(
@@ -263,6 +347,22 @@ function readDecisionFieldRefIds(decision: ToolCallDecision): string[] {
   return readDecisionFillFields(decision)?.map((field) => field.fieldRefId) ?? [];
 }
 
+function actionReadinessIntentFromArgs(args: unknown): { kind: string; refId: string } | undefined {
+  if (!isRecord(args)) {
+    return undefined;
+  }
+  const kind = stringField(args, 'kind');
+  const refId = stringField(args, 'refId');
+  return kind && refId ? { kind, refId } : undefined;
+}
+
+function sameActionReadinessIntent(
+  left: { kind: string; refId: string } | undefined,
+  right: { kind: string; refId: string }
+): boolean {
+  return Boolean(left && left.kind === right.kind && left.refId === right.refId);
+}
+
 function sameStringSet(left: string[], right: string[]): boolean {
   if (left.length !== right.length) {
     return false;
@@ -319,6 +419,23 @@ export function buildRepairMessages(
       }
     ];
   }
+  if (error.kind === 'repeated_action_readiness') {
+    return [
+      ...messages,
+      {
+        role: 'user' as const,
+        content: [
+          '═══ REPAIR (1 of 1) ═══',
+          `Error: ${error.message}`,
+          'The readiness check already ran for this unchanged target.',
+          'You must NOT call any tool for this repair.',
+          'Return finish with the readiness result and action boundary, ask_user only for missing user input, or fail if the request cannot be completed with available tools.',
+          'System policy, tool list, approval rules, and output schema are unchanged.',
+          'Return one JSON AgentDecision only — no markdown, no explanation.'
+        ].join('\n')
+      }
+    ];
+  }
   // parse_failure, tool_not_found, and other errors
   return [
     ...messages,
@@ -341,4 +458,13 @@ export function buildRepairMessages(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function eventPayload(event: RunRecord['trace'][number]): Record<string, unknown> {
+  return isRecord(event.payload) ? event.payload : {};
+}
+
+function stringField(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === 'string' && value.trim() ? value : undefined;
 }

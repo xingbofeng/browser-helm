@@ -1,28 +1,10 @@
 import type { ContentRpcClient } from '../../../page/messaging/content-rpc-client';
 import type { ModelClient } from '../../../agent/model/model-client';
 import type { SettingsStore } from '../../../storage/interfaces/settings-store';
-import type { ExecuteToolInput, RuntimeEvent, RuntimeTaskState } from '../../../runtime/runtime-messages';
-import type { RunKind } from '../../../runtime/runtime-messages';
-import type { RunMode, ToolMode } from '../../../shared/schemas/tool.schema';
-import type { ToolRisk } from '../../../shared/schemas/tool-result.schema';
-import type { Locale } from '../../../i18n/types';
-import type { AgentMessageRole } from '../../../shared/schemas/agent-message.schema';
-
-/** Internal record tracking per-run state within the runtime. */
-export type RunRecord = {
-  task: string;
-  mode: RunMode;
-  tabId?: number | undefined;
-  trace: RuntimeEvent[];
-  runKind?: RunKind;
-  locale?: Locale;
-  taskState?: RuntimeTaskState | undefined;
-  conversationHistory?: Array<{
-    role: AgentMessageRole;
-    title?: string | undefined;
-    content: string;
-  }> | undefined;
-};
+import type { ExecuteToolInput, RuntimeEvent } from '../../../runtime/runtime-messages';
+import type { RunMode } from '../../../shared/schemas/tool.schema';
+export type { RunRecord } from '../../../agent/loop/types';
+export type { ToolPromptContract } from '../../../tools/core/tool-router';
 
 /** Dependencies injected into the runtime facade. */
 export type RunManagerDeps = {
@@ -50,19 +32,3 @@ export type ProviderRecord = {
 
 /** Pending approval action stored for post-approval execution. */
 export type PendingApprovalAction = ExecuteToolInput;
-
-/** Contract describing a tool available to the model prompt. */
-export type ToolPromptContract = {
-  name: string;
-  title: string;
-  description: string;
-  modes: ToolMode[];
-  risk: ToolRisk;
-  argsSchema: unknown;
-  /** Whether the tool is read-only (does not mutate page state). */
-  readOnly: boolean;
-  /** Whether the tool always requires user approval before execution. */
-  requiresApproval: boolean;
-  /** How tool results should be presented in the model context. */
-  contextVisibility: 'summary' | 'hidden' | 'full';
-};

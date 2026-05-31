@@ -58,8 +58,7 @@ export function bhFormSubmitWithApproval(
     risk: 'high',
     argsSchema,
     resultSchema: toolResultSchema,
-		// eslint-disable-next-line @typescript-eslint/require-await
-		async execute(args) {
+    execute(args) {
       const snapshotDigest = buildSubmitApprovalSnapshotDigest({
         formRefId: args.formRefId,
         fieldRefIds: args.fields.map((f) => f.fieldRefId),
@@ -92,7 +91,7 @@ export function bhFormSubmitWithApproval(
         snapshotDigest
       };
 
-      return {
+      return Promise.resolve({
         ok: false,
         code: ERROR_CODES.APPROVAL_REQUIRED,
         summary: args.verifyFailed ? `High-risk submit confirmation: "${args.formName}"` : `Awaiting approval to submit form "${args.formName}"`,
@@ -105,7 +104,7 @@ export function bhFormSubmitWithApproval(
           risk: 'high',
           actionPreview: `Submit form: ${args.formName}`,
         },
-      };
+      });
     },
   };
 }

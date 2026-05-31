@@ -126,6 +126,9 @@ export function isToolAvailableInRunMode(
   if (runMode === 'form') {
     return toolModes.includes('ask') || toolModes.includes('form');
   }
+  if (runMode === 'full') {
+    return toolModes.some((mode) => mode !== 'memory');
+  }
   return (
     toolModes.includes('act') ||
     toolModes.includes('form') ||

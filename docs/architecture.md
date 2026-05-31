@@ -110,7 +110,7 @@ src/entrypoints/
   options/            Settings surface
 
 src/agent/
-  kernel/             Agent decision loop, run state, context
+  loop/               Agent decision loop, run state, prompt and decision repair
   context/            ContextBuilder, ContextCompactor, ContextPolicy
   modes/              Ask, Debug, Form, Act mode policies
   task/               TaskClassifier and task typing
@@ -236,7 +236,7 @@ page = 底层页面能力
 tools = Agent 可调用的工具外壳
 ```
 
-UI 与 Core 通过 `RuntimePort` 隔离。React 组件不直接 new `AgentLoop`、`ToolRouter` 或 `OpenAICompatibleClient`，只调用 runtime port：
+UI 与 Core 通过 `RuntimePort` 隔离。React 组件不直接 new runtime loop、`ToolRouter` 或 `OpenAICompatibleClient`，只调用 runtime port：
 
 ```ts
 export type RuntimePort = {
@@ -251,12 +251,12 @@ export type RuntimePort = {
 };
 ```
 
-真实 extension 使用 `ExtensionRuntimePort`，UI 单测和组件测试使用 `FakeRuntimePort`。这样 UI 测试不需要真实 AgentLoop，core 测试也不需要 React 或浏览器。
+真实 extension 使用 `ExtensionRuntimePort`，UI 单测和组件测试使用 `FakeRuntimePort`。这样 UI 测试不需要真实 runtime loop，core 测试也不需要 React 或浏览器。
 
 额外 import 规则：
 
 - `src/core` / `src/agent` 不允许 import `src/ui`。
-- `src/ui` 不允许 import `src/agent/kernel` 的具体实现。
+- `src/ui` 不允许 import background runtime loop 的具体实现。
 - `src/ui` 不允许 import `src/tools/core/ToolRouter` 的具体实现。
 - `src/ui` 只能依赖 `src/runtime/RuntimePort` 类型和 `src/shared` schema/type。
 - `src/ui/stores` 只保存视图状态，不执行模型调用、tool 执行、prompt 构造或 agent loop。
@@ -274,7 +274,7 @@ CockpitApp / DevRunner
   -> timeline / tabs / inspector render
 ```
 
-UI 测试只替换 `RuntimePort`，不替换 AgentLoop 内部对象。
+UI 测试只替换 `RuntimePort`，不替换 runtime loop 内部对象。
 
 ### 普通任务
 
@@ -464,7 +464,7 @@ Agent 不能假设权限存在；没有 debugger 权限时不能暴露 CDP tools
 
 ### 子 Agent 策略
 
-v0.1 到 v1.0 不实现真正 sub-agent / agent-as-tool / delegate_to_agent。早期只做单 AgentLoop + mode / task runner。子 agent 至少等 Memory + Workflow Replay 稳定之后再评估。
+v0.1 到 v1.0 不实现真正 sub-agent / agent-as-tool / delegate_to_agent。早期只做单 runtime loop + mode / task runner。子 agent 至少等 Memory + Workflow Replay 稳定之后再评估。
 
 原因：
 
@@ -482,7 +482,7 @@ runtime/approval   ApprovalManager、ApprovalRequest lifecycle、pause/resume
 ui/approval        ApprovalDialog、ApprovalCard、user decision
 ```
 
-AgentLoop 不弹窗，只知道 run 需要暂停并等待 runtime 恢复。
+Runtime loop 不弹窗，只知道 run 需要暂停并等待 runtime 恢复。
 
 ```txt
 LLM: bh_form_submit_with_approval(formRef)
@@ -523,7 +523,7 @@ browser-helm/
 │   │   ├── popup/
 │   │   └── options/
 │   ├── agent/
-│   │   ├── kernel/
+│   │   ├── loop/
 │   │   ├── context/
 │   │   ├── modes/
 │   │   ├── task/
@@ -659,9 +659,9 @@ browser-helm/
 - v0.1 只预留 goal/current step/trace，不做 planner；v1.0 才做 mode-based lightweight plan。
 - Prompt/schema/context policy versioning 和 raw model output trace 从 v0.1 开始记录。
 - Prompt injection fixtures 从 v0.2 开始，v1.3+ 纳入 eval。
-- 子 agent 延后到 Memory + Workflow Replay 稳定之后，v1.0 前只做单 AgentLoop + mode。
+- 子 agent 延后到 Memory + Workflow Replay 稳定之后，v1.0 前只做单 runtime loop + mode。
 - UI 是产品核心，不是 debug 附件。
-- UI 只消费 RuntimePort 和 RuntimeEvent，不直接调用 AgentLoop。
+- UI 只消费 RuntimePort 和 RuntimeEvent，不直接调用 runtime loop。
 - Core 测试、UI 测试、Extension 测试按运行环境分离。
 - Trace 从第一天就记录。
 
@@ -683,7 +683,7 @@ browser-helm/
 目录: tests/dom/page/
 环境: jsdom 或 happy-dom
 依赖: HTML fixtures
-禁止: React / AgentLoop / real model
+禁止: React / runtime loop / real model
 覆盖: observation、ref map、interactive elements、form fields
 ```
 
@@ -693,7 +693,7 @@ browser-helm/
 目录: tests/dom/ui/
 环境: jsdom
 依赖: FakeRuntimePort / fake runtime events
-禁止: real AgentLoop / real model / real Chrome API
+禁止: real runtime loop / real model / real Chrome API
 覆盖: side panel 组件、tabs、timeline、tool inspector、settings、stores
 ```
 

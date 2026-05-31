@@ -48,11 +48,14 @@ export function resolveRunMode(input: ResolveRunModeInput): ResolvedRunMode {
 }
 
 function toProductMode(mode: RunMode): 'ask' | 'act' {
-  if (mode === 'act' || mode === 'form') return 'act';
+  if (mode === 'act' || mode === 'form' || mode === 'full') return 'act';
   return 'ask';
 }
 
 function boundaryReason(mode: RunMode, locale: Locale): string {
+  if (mode === 'full') {
+    return t('mode.boundary.full', locale);
+  }
   if (mode === 'act') {
     return t('mode.boundary.act', locale);
   }

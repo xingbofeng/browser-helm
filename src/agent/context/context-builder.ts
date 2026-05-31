@@ -1,4 +1,4 @@
-import type { LoopTurn } from '../kernel/agent-step';
+import type { LoopTurn } from './loop-turn';
 import { ContextCompactor } from './context-compactor';
 import {
   DEFAULT_CONTEXT_POLICY,

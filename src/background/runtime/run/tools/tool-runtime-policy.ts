@@ -1,4 +1,5 @@
 import { PolicyEngine } from '../../../../agent/policy/policy-engine';
+import type { RunMode } from '../../../../shared/schemas/tool.schema';
 import type { ToolRisk } from '../../../../shared/schemas/tool-result.schema';
 
 export type PolicyCheckResult = {
@@ -11,7 +12,15 @@ export type PolicyCheckResult = {
 export class ToolRuntimePolicy {
   private readonly engine = new PolicyEngine();
 
-  evaluate(risk: string): PolicyCheckResult {
+  evaluate(risk: string, runMode?: RunMode): PolicyCheckResult {
+    if (runMode === 'full' && risk === 'high') {
+      return {
+        allow: true,
+        requiresApproval: false,
+        reason: 'Full mode allows high-risk tools without approval interception',
+        risk
+      };
+    }
     const policy = this.engine.evaluate({ risk: risk as ToolRisk, wouldRequireApproval: false });
     return {
       allow: policy.allow,

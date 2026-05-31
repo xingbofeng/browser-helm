@@ -16,7 +16,7 @@ import { t } from '../../../i18n/t';
 import type { Locale } from '../../../i18n/types';
 import { GoalRevisionService } from './goal-revision-service';
 import { redactTextForModelContext } from '../../../shared/redaction';
-import { UnifiedRuntimeAgentLoop } from './unified-runtime-agent-loop';
+import { AgentLoop } from '../../../agent/loop/agent-loop';
 
 export type LifecycleStore = {
   createRunId: () => string;
@@ -51,12 +51,12 @@ export type LifecycleDeps = {
 export class RunLifecycleService {
   public onDiagnosticsResolved?: (runId: string, enriched: RunSnapshot) => void;
   private readonly goalRevision: GoalRevisionService;
-  private readonly unifiedAgentLoop: UnifiedRuntimeAgentLoop | undefined;
+  private readonly agentLoop: AgentLoop | undefined;
 
   constructor(private readonly deps: LifecycleDeps) {
     this.goalRevision = new GoalRevisionService(deps.store);
     if (deps.settingsStore) {
-      this.unifiedAgentLoop = new UnifiedRuntimeAgentLoop({
+      this.agentLoop = new AgentLoop({
         settingsStore: deps.settingsStore,
         createProviderModelClient: deps.createProviderModelClient,
         getSnapshot: (runId) => deps.store.getSnapshot(runId),
@@ -248,8 +248,8 @@ export class RunLifecycleService {
         canInterrupt: true, canReviseGoal: true
       };
       this.deps.store.setSnapshot(runId, fallback);
-      if (record.runKind !== 'observe_only' && this.unifiedAgentLoop) {
-        await this.unifiedAgentLoop.run({ runId, record, maxSteps: 8 });
+      if (record.runKind !== 'observe_only' && this.agentLoop) {
+        await this.agentLoop.run({ runId, record, maxSteps: 8 });
         return;
       }
     } catch {
@@ -273,12 +273,12 @@ export class RunLifecycleService {
       canInterrupt: true, canReviseGoal: true
     };
     if (result.ok &&
-      (record.mode === 'ask' || record.mode === 'act' || record.mode === 'form' || record.mode === 'debug') &&
+      (record.mode === 'ask' || record.mode === 'act' || record.mode === 'form' || record.mode === 'debug' || record.mode === 'full') &&
       record.runKind !== 'observe_only' &&
-      this.unifiedAgentLoop
+      this.agentLoop
     ) {
       this.deps.store.setSnapshot(runId, this.deps.withRunMessages(nextSnapshot, record));
-      await this.unifiedAgentLoop.run({ runId, record, maxSteps: 8 });
+      await this.agentLoop.run({ runId, record, maxSteps: 8 });
       return;
     }
     nextSnapshot = this.deps.withRunMessages(nextSnapshot, record);
@@ -286,7 +286,7 @@ export class RunLifecycleService {
   }
 
   cancelRun(runId: string): { runId: string; status: 'cancelled' } {
-    this.unifiedAgentLoop?.abortRun(runId);
+    this.agentLoop?.abortRun(runId);
     const current = this.deps.store.getSnapshot(runId);
     const record = this.deps.store.getRecord(runId);
     if (record) {

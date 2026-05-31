@@ -71,7 +71,7 @@ describe('runtime provider boundary', () => {
             files: ['src/entrypoints/sidepanel/**/*.ts*', 'src/ui/**/*.ts*'],
             imports: [
               'src/agent/model',
-              'src/agent/kernel',
+              'src/agent/loop',
               'src/tools/core/tool-router'
             ]
           },

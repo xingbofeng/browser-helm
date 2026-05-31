@@ -359,7 +359,7 @@ function prefixFormResponseFrameRefs(
   if ('fillFieldResult' in response) {
     return {
       ...response,
-      fillFieldResult: prefixFillFieldResult(response.fillFieldResult, frameId)
+      fillFieldResult: prefixFieldRefResult(response.fillFieldResult, frameId)
     };
   }
   if ('fillManyResult' in response) {
@@ -371,7 +371,7 @@ function prefixFormResponseFrameRefs(
           ? prefixRefId(response.fillManyResult.formRefId, frameId)
           : undefined,
         fields: response.fillManyResult.fields.map((field) =>
-          prefixFillFieldResult(field, frameId)
+          prefixFieldRefResult(field, frameId)
         )
       }
     };
@@ -385,13 +385,13 @@ function prefixFormResponseFrameRefs(
           ? prefixRefId(response.verifyResult.formRefId, frameId)
           : undefined,
         missingRequired: response.verifyResult.missingRequired.map((field) =>
-          prefixVerifyFieldResult(field, frameId)
+          prefixFieldRefResult(field, frameId)
         ),
         invalidFields: response.verifyResult.invalidFields.map((field) =>
-          prefixVerifyFieldResult(field, frameId)
+          prefixFieldRefResult(field, frameId)
         ),
         fieldResults: response.verifyResult.fieldResults.map((field) =>
-          prefixVerifyFieldResult(field, frameId)
+          prefixFieldRefResult(field, frameId)
         ),
         disabledSubmitReason: response.verifyResult.disabledSubmitReason
           ? {
@@ -407,17 +407,7 @@ function prefixFormResponseFrameRefs(
   return response;
 }
 
-function prefixFillFieldResult<T extends { fieldRefId: string }>(
-  field: T,
-  frameId: number
-): T {
-  return {
-    ...field,
-    fieldRefId: prefixRefId(field.fieldRefId, frameId)
-  };
-}
-
-function prefixVerifyFieldResult<T extends { fieldRefId: string }>(
+function prefixFieldRefResult<T extends { fieldRefId: string }>(
   field: T,
   frameId: number
 ): T {
@@ -501,17 +491,16 @@ function mergeFormFields(
   warnings: StructuredPageWarning[];
   emptyReason?: string | undefined;
 } {
-  const fields = responses.flatMap((item) => {
+  const frameForms = responses.map((item) => {
     const formFields = readFormFields(item.response.observation.formFields);
-    return formFields.fields.map((field) => prefixFormField(field, item.frameId));
+    return { frameId: item.frameId, formFields };
   });
-  const warnings = responses.flatMap((item) =>
-    readFormFields(item.response.observation.formFields).warnings
+  const fields = frameForms.flatMap(({ frameId, formFields }) =>
+    formFields.fields.map((field) => prefixFormField(field, frameId))
   );
-  const submit = responses
-    .map((item) =>
-      prefixSubmit(readFormFields(item.response.observation.formFields).submit, item.frameId)
-    )
+  const warnings = frameForms.flatMap(({ formFields }) => formFields.warnings);
+  const submit = frameForms
+    .map(({ frameId, formFields }) => prefixSubmit(formFields.submit, frameId))
     .find(Boolean);
 
   if (fields.length === 0) {

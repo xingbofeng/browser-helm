@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { validateRuntimeToolDecision } from '../../../../src/background/runtime/run/form-fill-augmenter';
-import type { RunRecord } from '../../../../src/background/runtime/run/runtime-service-types';
+import { validateRuntimeToolDecision } from '../../../../src/agent/loop/form-fill-augmenter';
+import type { RunRecord } from '../../../../src/agent/loop/types';
 import type { RunSnapshot } from '../../../../src/runtime/runtime-messages';
 import type { AgentDecision } from '../../../../src/shared/schemas/agent-decision.schema';
 

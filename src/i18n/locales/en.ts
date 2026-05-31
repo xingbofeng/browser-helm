@@ -27,6 +27,7 @@ export const en = {
   'chat.startAria': 'Start task',
   'chat.mode.ask': 'Ask',
   'chat.mode.act': 'Act',
+  'chat.mode.full': 'Full',
   'chat.mode.form': 'Execute / Form Strategy',
   'chat.mode.debug': 'Advanced Debug',
 
@@ -127,6 +128,7 @@ export const en = {
   'approval.revealShow': 'Show field values',
   'approval.fieldSkipped': 'Skipped',
   'approval.filledSkipped': '{filled}/{total} filled, {skipped} skipped',
+  'approval.verifyStatus': 'verify {status}',
 
   // ── Settings / Model Config ──
   'settings.title': 'Settings',
@@ -197,6 +199,8 @@ export const en = {
   'debug.detail.validation': 'Validation',
   'debug.detail.submitReason': 'Submit reason',
   'debug.detail.noBlock': 'No blocker',
+  'debug.detail.visibleDisabled': 'visible={visible} disabled={disabled}',
+  'debug.detail.required': 'required={required}',
 
   // ── Debug Streaming Tab ──
   'debug.streaming.title': 'Streaming Status',
@@ -314,11 +318,13 @@ export const en = {
   'runMode.debug': 'Debug',
   'runMode.form': 'Form',
   'runMode.act': 'Act',
+  'runMode.full': 'Full',
   'tool.description.bh_a11y_find_interactive': 'Returns read-only interactive elements with refs and state',
   'tool.description.bh_a11y_refresh_refs': 'Refreshes the current page ref map',
   'tool.description.bh_a11y_resolve_ref': 'Resolves a stable ref_id to the current page element summary',
   'tool.description.bh_a11y_snapshot': 'Returns an accessibility-like snapshot with stable refs',
-  'tool.description.bh_action_check_readiness': 'Checks whether a proposed action is ready and whether it would require approval',
+  'tool.description.bh_action_check_readiness': 'Read-only check for whether a proposed action is ready and would require approval; it does not execute the action',
+  'tool.description.bh_action_click': 'Clicks a ready non-high-risk target by stable ref_id; high-risk targets are not clicked automatically',
   'tool.description.bh_agent_ask_user': 'Requests user input before continuing',
   'tool.description.bh_agent_fail': 'Fails current run with structured error',
   'tool.description.bh_agent_finish': 'Completes current run with final summary',
@@ -682,6 +688,7 @@ export const en = {
   // ── Mode system ──
   'mode.reason.userSelected': 'User explicitly selected {mode} mode; {boundary}',
   'mode.boundary.act': 'Act can fill and verify low-sensitivity fields; final actions like send, submit, and publish require confirmation and are not auto-submitted.',
+  'mode.boundary.full': 'Full can combine reading, debug, form, and action tools; high-risk actions are not intercepted for approval.',
   'mode.boundary.default': 'Default: diagnose first, then act.',
 
   // ── Task Classification ──
@@ -843,6 +850,7 @@ export const en = {
   'tool.title.bh_a11y_resolve_ref': 'Resolve Ref',
   'tool.title.bh_a11y_snapshot': 'Accessibility Snapshot',
   'tool.title.bh_action_check_readiness': 'Check Action Readiness',
+  'tool.title.bh_action_click': 'Click Target',
   'tool.title.bh_agent_ask_user': 'Ask User',
   'tool.title.bh_agent_fail': 'Fail Task',
   'tool.title.bh_agent_finish': 'Finish Task',

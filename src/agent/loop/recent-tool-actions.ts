@@ -1,6 +1,6 @@
-import type { RuntimeEvent } from '../../../runtime/runtime-messages';
-import { TRACE_EVENT_NAMES } from '../../../shared/constants/event-names';
-import { TOOL_NAMES } from '../../../shared/constants/tool-names';
+import type { RuntimeEvent } from '../../runtime/runtime-messages';
+import { TRACE_EVENT_NAMES } from '../../shared/constants/event-names';
+import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { isFormFillTool } from './form-fill-augmenter';
 
 const MAX_RECENT_ACTION_HISTORY = 8;

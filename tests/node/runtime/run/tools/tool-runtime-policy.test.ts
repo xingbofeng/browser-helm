@@ -19,6 +19,13 @@ describe('ToolRuntimePolicy', () => {
     expect(result.reason).toBeDefined();
   });
 
+  it('allows high risk tools without approval in full mode', () => {
+    const result = policy.evaluate('high', 'full');
+    expect(result.allow).toBe(true);
+    expect(result.requiresApproval).toBe(false);
+    expect(result.risk).toBe('high');
+  });
+
   it('allows medium risk', () => {
     const result = policy.evaluate('medium');
     expect(result.allow).toBe(true);

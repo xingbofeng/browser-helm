@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { ContextBuilder } from '../../../../src/agent/context/context-builder';
-import type { LoopTurn } from '../../../../src/agent/kernel/agent-step';
+import type { LoopTurn } from '../../../../src/agent/context/loop-turn';
 
 describe('context-builder', () => {
   it('builds model messages with task, goal and compact context', () => {

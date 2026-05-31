@@ -30,7 +30,7 @@ export type ToolExecutionDeps = {
   snapshotToolResult: (tool: string, result: ToolResult) => RuntimeToolResultSnapshot;
   adapters?: ToolRuntimeAdapter[];
   adapter?: ToolRuntimeAdapter;
-  toolPolicy: { evaluate: (risk: string) => { allow: boolean; requiresApproval: boolean; reason: string; risk: string } };
+  toolPolicy: { evaluate: (risk: string, runMode?: RunMode) => { allow: boolean; requiresApproval: boolean; reason: string; risk: string } };
   approvalManager: ApprovalManager;
   approvalRequestForTrace: typeof approvalRequestForTrace;
   approvalRequiredResultFn: typeof approvalRequiredResult;
@@ -103,7 +103,7 @@ export class ToolExecutionService {
     }
 
     if (contract && adapter.shouldBypassPolicyApproval?.(input.tool) !== true) {
-      const policy = this.deps.toolPolicy.evaluate(contract.risk);
+      const policy = this.deps.toolPolicy.evaluate(contract.risk, record.mode);
       if (!policy.allow && policy.requiresApproval) {
         const result = this.deps.approvalRequiredResultFn({
           reason: policy.reason,

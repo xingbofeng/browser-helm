@@ -5,6 +5,8 @@ import type { ApprovalUiState } from '../../shared/schemas/approval.schema';
 import { jsonPreview } from '../lib/format-tool';
 import { ApprovalRiskBadge } from './approval-risk-badge';
 import { StreamingMarkdown } from '../components/streaming-markdown';
+import type { SubmitApprovalFieldPreview, SubmitApprovalPreviewData } from './submit-approval-preview';
+import { readSubmitApprovalPreview } from './submit-approval-preview';
 
 type ApprovalDrawerProps = {
   request?: ApprovalUiState | undefined;
@@ -60,29 +62,6 @@ export function ApprovalDrawer(props: ApprovalDrawerProps) {
   );
 }
 
-type SubmitApprovalFieldPreview = {
-  fieldRefId: string;
-  label: string;
-  name?: string | undefined;
-  type: string;
-  valuePreview: string;
-  isSensitive: boolean;
-  skipped: boolean;
-};
-
-type SubmitApprovalPreviewData = {
-  formName: string;
-  submitMethod: string;
-  verifyStatus: string;
-  fieldCount: number;
-  filledCount: number;
-  skippedCount: number;
-  riskExplanation: string;
-  highRisk: boolean;
-  fields: SubmitApprovalFieldPreview[];
-  warnings: string[];
-};
-
 function SubmitApprovalPreview({
   preview,
   onFieldValueChange
@@ -96,15 +75,16 @@ function SubmitApprovalPreview({
   const [applyingField, setApplyingField] = useState<string>();
   const [editError, setEditError] = useState<string>();
   const fieldText = t('approval.filledSkipped', { filled: String(preview.filledCount), total: String(preview.fieldCount), skipped: String(preview.skippedCount) });
+  const verifyText = t('approval.verifyStatus', { status: preview.verifyStatus });
 
   return (
     <section className={preview.highRisk ? 'bh-submitApproval is-highRisk' : 'bh-submitApproval'}>
       <div className="bh-submitApprovalSummary">
         <strong>{preview.formName}</strong>
-        <span>{preview.submitMethod} · verify {preview.verifyStatus}</span>
+        <span>{preview.submitMethod} · {verifyText}</span>
         <span>{fieldText}</span>
       </div>
-      <p>{preview.riskExplanation}</p>
+      {preview.riskExplanation ? <p>{preview.riskExplanation}</p> : null}
       <button
         type="button"
         className="bh-submitApprovalReveal"
@@ -179,57 +159,4 @@ function formatFieldValue(
   if (field.skipped) return t('approval.fieldSkipped');
   if (!revealed || field.isSensitive) return '******';
   return field.valuePreview;
-}
-
-function readSubmitApprovalPreview(value: unknown): SubmitApprovalPreviewData | undefined {
-  if (!isRecord(value) || !Array.isArray(value.fields)) return undefined;
-
-  const formName = readString(value.formName);
-  const submitMethod = readString(value.submitMethod);
-  const verifyStatus = readString(value.verifyStatus);
-  const riskExplanation = readString(value.riskExplanation);
-  if (!formName || !submitMethod || !verifyStatus || !riskExplanation) return undefined;
-
-  return {
-    formName,
-    submitMethod,
-    verifyStatus,
-    fieldCount: readNumber(value.fieldCount),
-    filledCount: readNumber(value.filledCount),
-    skippedCount: readNumber(value.skippedCount),
-    riskExplanation,
-    highRisk: value.highRisk === true,
-    fields: value.fields.flatMap(readSubmitApprovalField),
-    warnings: Array.isArray(value.warnings) ? value.warnings.flatMap((warning) => readString(warning) ?? []) : []
-  };
-}
-
-function readSubmitApprovalField(value: unknown): SubmitApprovalFieldPreview[] {
-  if (!isRecord(value)) return [];
-  const label = readString(value.label);
-  const fieldRefId = readString(value.fieldRefId);
-  const type = readString(value.type);
-  const valuePreview = readString(value.valuePreview);
-  if (!fieldRefId || !label || !type || !valuePreview) return [];
-  return [{
-    fieldRefId,
-    label,
-    name: readString(value.name),
-    type,
-    valuePreview,
-    isSensitive: value.isSensitive === true,
-    skipped: value.skipped === true
-  }];
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function readNumber(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }

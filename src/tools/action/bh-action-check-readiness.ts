@@ -27,7 +27,7 @@ export function bhActionCheckReadiness(
   return {
     name: 'bh_action_check_readiness',
     // 检查拟执行动作是否就绪。
-    ...toolMeta('Check Action Readiness', 'Checks whether a proposed action is ready and whether it would require approval', 'tool.title.bh_action_check_readiness', 'tool.description.bh_action_check_readiness'),
+    ...toolMeta('Check Action Readiness', 'Read-only check for whether a proposed action is ready and would require approval; it does not execute the action', 'tool.title.bh_action_check_readiness', 'tool.description.bh_action_check_readiness'),
     modes: ['debug', 'act'],
     risk: 'low',
     argsSchema,
@@ -42,16 +42,17 @@ export function bhActionCheckReadiness(
         ? checkResolvedActionReadiness(args, normalizeResolvedRef(args.refId, response.ref))
         : unresolvedReadiness(args, response, locale);
 
+      const summary = `${readiness.reason}; no action was executed`;
       return {
         ok: true,
         code: ERROR_CODES.OK,
-        summary: readiness.reason,
+        summary,
         data: actionReadinessSchema.parse(readiness),
         changedPage: false,
         requiresObserve: readiness.requiresObserve,
         context: {
           visibility: 'summary',
-          summary: `${readiness.code}: ${readiness.reason}`
+          summary: `${readiness.code}: ${summary}`
         }
       };
     }
@@ -69,7 +70,10 @@ function normalizeResolvedRef(refId: string, ref: unknown) {
     name: typeof record.name === 'string' ? record.name : undefined,
     tagName: typeof record.tagName === 'string' ? record.tagName : 'unknown',
     visible: typeof record.visible === 'boolean' ? record.visible : false,
-    disabled: typeof record.disabled === 'boolean' ? record.disabled : false
+    disabled: typeof record.disabled === 'boolean' ? record.disabled : false,
+    inputType: typeof record.inputType === 'string' ? record.inputType : undefined,
+    autocomplete: typeof record.autocomplete === 'string' ? record.autocomplete : undefined,
+    isSensitive: typeof record.isSensitive === 'boolean' ? record.isSensitive : undefined
   };
 }
 

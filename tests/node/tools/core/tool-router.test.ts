@@ -166,6 +166,13 @@ describe('ToolRouter', () => {
       'bh_act',
       'bh_internal'
     ]);
+    expect(router.listToolContracts('full').map((tool) => tool.name)).toEqual([
+      'bh_ask',
+      'bh_debug',
+      'bh_form',
+      'bh_act',
+      'bh_internal'
+    ]);
   });
 
   it('uses an explicit Act mode allow-list instead of exposing every ask tool', () => {

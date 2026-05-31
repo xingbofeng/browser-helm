@@ -1,15 +1,16 @@
-import type { ModelMessage } from '../../../shared/schemas/model-message.schema';
-import type { RunMode } from '../../../shared/schemas/tool.schema';
-import type { RunSnapshot, RuntimeTaskState } from '../../../runtime/runtime-messages';
-import type { RunRecord } from './runtime-service-types';
-import type { ToolPromptContract } from './runtime-service-types';
-import { redactTextForModelContext } from '../../../shared/redaction';
-import { truncateJson } from '../../../shared/truncate-json';
-import { TOOL_NAMES } from '../../../shared/constants/tool-names';
+import type { ModelMessage } from '../../shared/schemas/model-message.schema';
+import type { RunMode } from '../../shared/schemas/tool.schema';
+import type { RunSnapshot } from '../../runtime/runtime-messages';
+import type { RunRecord } from './types';
+import type { ToolPromptContract } from '../../tools/core/tool-router';
+import { redactTextForModelContext } from '../../shared/redaction';
+import { truncateJson } from '../../shared/truncate-json';
+import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { isFormFillTool } from './form-fill-augmenter';
 import { buildRecentToolActions } from './recent-tool-actions';
-import { buildStablePolicyPrefix } from '../../../agent/prompts/safety-policy-prompt';
-import type { Locale } from '../../../i18n/types';
+import { compactTaskState, createInitialTaskState } from './runtime-task-state';
+import { buildStablePolicyPrefix } from '../prompts/safety-policy-prompt';
+import type { Locale } from '../../i18n/types';
 
 // ── Context budget limits ──
 const MAX_OBSERVATION_CHARS = 8000;
@@ -26,8 +27,6 @@ const MAX_HISTORY_LINE_CHARS = 1200;
 const MAX_PREVIOUS_TRACE_HISTORY_EVENTS = 12;
 const MAX_TRACE_HISTORY_SUMMARY_CHARS = 80;
 const PROMPT_BUDGET_MARGIN_CHARS = 500;
-const MAX_TASK_STATE_ITEMS = 12;
-const MAX_TASK_STATE_TEXT_CHARS = 160;
 
 // ── Types ──
 
@@ -245,7 +244,7 @@ export function getPromptToolContracts(
 function compactObservation(obs: RunSnapshot['observation'], maxChars: number): unknown {
   if (!obs) return undefined;
   const { url, title, currentDomain, origin, visibleTextSummary, pageStateSummary, interactiveCount, warnings } = obs;
-  return truncateStrings({
+  return {
     url: redactTextForModelContext(url),
     title,
     currentDomain,
@@ -254,24 +253,24 @@ function compactObservation(obs: RunSnapshot['observation'], maxChars: number): 
     pageStateSummary,
     interactiveCount,
     warnings
-  });
+  };
 }
 
 function compactStructuredPageData(data: RunSnapshot['structuredPageData']): unknown {
   if (!data) return undefined;
-  return redactEmbeddedUrls(truncateItems({
+  return redactEmbeddedUrls({
     ...data,
     refs: Array.isArray(data.refs) ? data.refs.slice(0, MAX_STRUCTURED_DATA_ITEMS) : data.refs,
     forms: data.forms ? {
       ...data.forms,
       items: Array.isArray(data.forms.items) ? data.forms.items.slice(0, MAX_STRUCTURED_DATA_ITEMS) : data.forms.items
     } : data.forms
-  }));
+  });
 }
 
 function compactStructuredPageDataSummary(data: RunSnapshot['structuredPageData']): unknown {
   if (!data) return undefined;
-  return redactEmbeddedUrls(truncateItems({
+  return redactEmbeddedUrls({
     observation: {
       summary: data.observation.summary,
       count: data.observation.count
@@ -282,7 +281,7 @@ function compactStructuredPageDataSummary(data: RunSnapshot['structuredPageData'
     },
     interactive: data.interactive ? { summary: data.interactive.summary } : undefined,
     forms: data.forms ? { summary: data.forms.summary } : undefined
-  }));
+  });
 }
 
 function compactToolResult(result: NonNullable<RunSnapshot['toolResult']>): unknown {
@@ -301,6 +300,9 @@ function compactToolResult(result: NonNullable<RunSnapshot['toolResult']>): unkn
 }
 
 function compactToolResultDetails(result: NonNullable<RunSnapshot['toolResult']>): Record<string, unknown> {
+  if (result.tool === TOOL_NAMES.ACTION_CHECK_READINESS) {
+    return compactActionReadinessToolResultDetails(result);
+  }
   if (isPageContentReadTool(result.tool)) {
     return compactPageReadToolResultDetails(result);
   }
@@ -331,6 +333,32 @@ function compactToolResultDetails(result: NonNullable<RunSnapshot['toolResult']>
     .filter(Boolean)
     .slice(0, 12);
   return compactFields.length ? { fields: compactFields } : {};
+}
+
+function compactActionReadinessToolResultDetails(result: NonNullable<RunSnapshot['toolResult']>): Record<string, unknown> {
+  const data = toolResultData(result);
+  if (!data) {
+    return {};
+  }
+  const target = isRecord(data.target)
+    ? {
+        refId: stringField(data.target, 'refId'),
+        role: stringField(data.target, 'role'),
+        name: stringField(data.target, 'name'),
+        tagName: stringField(data.target, 'tagName')
+      }
+    : undefined;
+  return {
+    actionReadiness: {
+      canAct: data.canAct === true,
+      code: stringField(data, 'code'),
+      reason: stringField(data, 'reason'),
+      risk: stringField(data, 'risk'),
+      wouldRequireApproval: data.wouldRequireApproval === true,
+      requiresObserve: data.requiresObserve === true,
+      ...(target?.refId ? { target } : {})
+    }
+  };
 }
 
 function compactPageReadToolResultDetails(result: NonNullable<RunSnapshot['toolResult']>): Record<string, unknown> {
@@ -390,6 +418,22 @@ function buildDecisionGuidance(
       'If the user asked to submit, request the submit approval tool instead of finishing.',
       'Do not call bh_form_verify again unless page state changed.'
     ].join(' ');
+  }
+  if (result.tool === TOOL_NAMES.ACTION_CHECK_READINESS) {
+    const data = toolResultData(result);
+    const canAct = data?.canAct === true;
+    const wouldRequireApproval = data?.wouldRequireApproval === true;
+    return [
+      'The latest action readiness check was read-only; it did not execute the click, type, select, submit, or focus action.',
+      'Do not repeat bh_action_check_readiness for the same target unless the page changed or refs were refreshed.',
+      canAct
+        ? 'The target is ready from a readiness perspective.'
+        : 'The target is not ready; explain the readiness result instead of pretending the action ran.',
+      wouldRequireApproval
+        ? 'The checked action would require approval before any separate execution tool could run it.'
+        : undefined,
+      'If a separate action-execution tool is available for the requested action and the target does not require approval, use it next; otherwise return finish and clearly explain the boundary.'
+    ].filter(Boolean).join(' ');
   }
   if (isPageContentReadTool(result.tool)) {
     const data = toolResultData(result);
@@ -508,48 +552,6 @@ function compactLink(value: unknown): { text?: string; href?: string } | undefin
   };
 }
 
-// ── Task state helpers ──
-
-function createInitialTaskState(goal: string): RuntimeTaskState {
-  return {
-    goal,
-    completed: [],
-    remaining: [goal],
-    filledFieldRefs: [],
-    verifiedFieldRefs: [],
-    runtimeCompleted: [],
-    runtimeFactsOverrideModelNotes: true,
-    updatedBy: 'runtime',
-    updatedAt: Date.now()
-  };
-}
-
-function compactTaskState(state: RuntimeTaskState): RuntimeTaskState {
-  return {
-    goal: safeTaskStateText(state.goal),
-    completed: safeTaskStateList(state.completed).slice(-MAX_TASK_STATE_ITEMS),
-    remaining: safeTaskStateList(state.remaining).slice(0, MAX_TASK_STATE_ITEMS),
-    ...(state.recommendedNextDecision ? { recommendedNextDecision: state.recommendedNextDecision } : {}),
-    ...(state.reason ? { reason: safeTaskStateText(state.reason) } : {}),
-    filledFieldRefs: uniqueStrings(state.filledFieldRefs).slice(-MAX_TASK_STATE_ITEMS),
-    verifiedFieldRefs: uniqueStrings(state.verifiedFieldRefs).slice(-MAX_TASK_STATE_ITEMS),
-    runtimeCompleted: safeTaskStateList(state.runtimeCompleted).slice(-MAX_TASK_STATE_ITEMS),
-    runtimeFactsOverrideModelNotes: true,
-    updatedBy: state.updatedBy,
-    updatedAt: state.updatedAt
-  };
-}
-
-function safeTaskStateList(values: string[]): string[] {
-  return values
-    .map(safeTaskStateText)
-    .filter((value, index, all) => value.length > 0 && all.indexOf(value) === index);
-}
-
-function safeTaskStateText(value: string): string {
-  return truncateStr(redactTextForModelContext(value), MAX_TASK_STATE_TEXT_CHARS) ?? '';
-}
-
 function uniqueStrings(values: string[]): string[] {
   return values.filter((value, index, all) => all.indexOf(value) === index);
 }
@@ -574,27 +576,6 @@ function truncateStr(value: string | undefined, maxChars: number): string | unde
   if (!value) return value;
   if (value.length <= maxChars) return value;
   return value.slice(0, maxChars) + '…[truncated]';
-}
-
-function truncateStrings(obj: unknown): unknown {
-  if (typeof obj === 'string') {
-    return obj;
-  }
-  if (Array.isArray(obj)) {
-    return obj.map(truncateStrings);
-  }
-  if (typeof obj === 'object' && obj !== null) {
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(obj)) {
-      result[key] = truncateStrings(value);
-    }
-    return result;
-  }
-  return obj;
-}
-
-function truncateItems(obj: unknown): unknown {
-  return truncateStrings(obj);
 }
 
 /**

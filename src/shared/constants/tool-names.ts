@@ -4,6 +4,7 @@ export const TOOL_NAMES = {
   A11Y_RESOLVE_REF: 'bh_a11y_resolve_ref',
   A11Y_SNAPSHOT: 'bh_a11y_snapshot',
   ACTION_CHECK_READINESS: 'bh_action_check_readiness',
+  ACTION_CLICK: 'bh_action_click',
   AGENT_ASK_USER: 'bh_agent_ask_user',
   AGENT_FAIL: 'bh_agent_fail',
   AGENT_FINISH: 'bh_agent_finish',

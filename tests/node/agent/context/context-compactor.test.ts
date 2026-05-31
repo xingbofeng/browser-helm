@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { ContextCompactor } from '../../../../src/agent/context/context-compactor';
-import type { LoopTurn } from '../../../../src/agent/kernel/agent-step';
+import type { LoopTurn } from '../../../../src/agent/context/loop-turn';
 
 describe('context-compactor', () => {
   it('keeps only latest summaries according to maxRecentSteps', () => {

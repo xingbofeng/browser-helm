@@ -764,7 +764,7 @@ describe('RunManager', () => {
     ]);
   });
 
-  it('auto-fills reply text tasks in act mode through the unified AgentLoop', async () => {
+  it('auto-fills reply text tasks in act mode through the AgentLoop', async () => {
     const fillManyCalls: unknown[] = [];
     const manager = new RunManager({
       getActiveTabId: async () => 42,
@@ -963,7 +963,7 @@ describe('RunManager', () => {
     ]);
   });
 
-  it('fills Google search query tasks through unified AgentLoop tool calls in act mode', async () => {
+  it('fills Google search query tasks through AgentLoop tool calls in act mode', async () => {
     const fillManyCalls: unknown[] = [];
     const modelOutputs = [
       {
@@ -2201,7 +2201,7 @@ describe('RunManager', () => {
     expect(finalMessage?.content).toContain('已有值');
   });
 
-  it('allows explicit select option labels to map to DOM option values in unified AgentLoop', async () => {
+  it('allows explicit select option labels to map to DOM option values in AgentLoop', async () => {
     const fillManyCalls: unknown[] = [];
     const modelOutputs = [
       {
@@ -2342,7 +2342,7 @@ describe('RunManager', () => {
     ]);
   });
 
-  it('allows explicit checkbox opt-out values for marketing fields in unified AgentLoop', async () => {
+  it('allows explicit checkbox opt-out values for marketing fields in AgentLoop', async () => {
     const fillManyCalls: unknown[] = [];
     const modelOutputs = [
       {
@@ -2621,6 +2621,254 @@ describe('RunManager', () => {
     ]);
   });
 
+  it('repairs repeated action readiness checks for the same unchanged target', async () => {
+    const decisions = [
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.ACTION_CHECK_READINESS,
+        args: { kind: 'click', refId: 'ref_quickstart', source: 'agent' },
+        reason: '检查 Quickstart 链接是否可点击'
+      },
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.ACTION_CHECK_READINESS,
+        args: { kind: 'click', refId: 'ref_quickstart', source: 'agent' },
+        reason: '再次检查 Quickstart 链接'
+      },
+      {
+        type: 'finish',
+        message: 'Quickstart 链接已确认可点击，但动作就绪检查不会执行点击。'
+      }
+    ];
+    const complete = vi.fn(async () => ({
+      text: JSON.stringify(decisions.shift() ?? {
+        type: 'finish',
+        message: 'done'
+      })
+    }));
+    const providerClient: ModelClient = { complete };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.A11Y_RESOLVE_REF) {
+          return {
+            ok: true,
+            ref: {
+              refId: 'ref_quickstart',
+              role: 'link',
+              name: 'Quickstart',
+              tagName: 'a',
+              visible: true,
+              disabled: false
+            }
+          };
+        }
+        return observationResponse({
+          title: 'OpenAI Docs',
+          currentDomain: 'developers.openai.com',
+          visibleTextSummary: 'Docs navigation Quickstart Guides API reference',
+          pageStateSummary: '页面包含 Quickstart 导航链接',
+          refSummary: [
+            {
+              refId: 'ref_quickstart',
+              role: 'link',
+              name: 'Quickstart',
+              tagName: 'a',
+              visible: true,
+              disabled: false
+            }
+          ],
+          formFields: {
+            status: 'ready',
+            fields: [],
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '帮我搜索下这个文档的快速开始怎么搞',
+      mode: 'act'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'finished');
+    const trace = snapshot.trace ?? [];
+
+    expect(complete).toHaveBeenCalledTimes(3);
+    expect(trace.filter((event) =>
+      event.type === TRACE_EVENT_NAMES.TOOL_RESULT &&
+      payloadRecord(event.payload).tool === TOOL_NAMES.ACTION_CHECK_READINESS
+    )).toHaveLength(1);
+    expect(trace.some((event) =>
+      event.type === TRACE_EVENT_NAMES.DECISION_PARSE_FAILED &&
+      String(payloadRecord(payloadRecord(event.payload).parseError).message).includes('readiness')
+    )).toBe(true);
+    expect(snapshot.messages?.some((message) =>
+      message.role === 'agent' &&
+      message.status === 'complete' &&
+      message.content.includes('不会执行点击')
+    )).toBe(true);
+  });
+
+  it('orders tool status before ask_user replies from the same run', async () => {
+    const providerClient: ModelClient = {
+      complete: vi.fn()
+        .mockResolvedValueOnce({
+          text: JSON.stringify({
+            type: 'tool_call',
+            tool: TOOL_NAMES.ACTION_CHECK_READINESS,
+            args: { kind: 'click', refId: 'ref_quickstart', source: 'agent' },
+            reason: '检查 Quickstart 链接'
+          })
+        })
+        .mockResolvedValueOnce({
+          text: JSON.stringify({
+            type: 'ask_user',
+            question: '当前无法通过工具直接点击链接。是否愿意手动打开？'
+          })
+        })
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.A11Y_RESOLVE_REF) {
+          return {
+            ok: true,
+            ref: {
+              refId: 'ref_quickstart',
+              role: 'link',
+              name: 'Quickstart',
+              tagName: 'a',
+              visible: true,
+              disabled: false
+            }
+          };
+        }
+        return observationResponse({
+          title: 'OpenAI Docs',
+          currentDomain: 'developers.openai.com',
+          visibleTextSummary: 'Quickstart',
+          pageStateSummary: '页面包含 Quickstart 导航链接',
+          refSummary: [
+            {
+              refId: 'ref_quickstart',
+              role: 'link',
+              name: 'Quickstart',
+              tagName: 'a',
+              visible: true,
+              disabled: false
+            }
+          ]
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({ task: '帮我点击', mode: 'act' });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'waiting_for_user');
+    const messages = snapshot.messages ?? [];
+    const toolIndex = messages.findIndex((message) =>
+      message.id.includes(':tool-status:') &&
+      message.content.includes('no action was executed')
+    );
+    const askIndex = messages.findIndex((message) => message.id.endsWith(':ask-user-required'));
+
+    expect(toolIndex).toBeGreaterThan(-1);
+    expect(askIndex).toBeGreaterThan(-1);
+    expect(toolIndex).toBeLessThan(askIndex);
+  });
+
+  it('lets act-mode agents execute a normal click instead of stopping at readiness', async () => {
+    const clickedMessages: unknown[] = [];
+    const providerClient: ModelClient = {
+      complete: vi.fn()
+        .mockResolvedValueOnce({
+          text: JSON.stringify({
+            type: 'tool_call',
+            tool: TOOL_NAMES.ACTION_CLICK,
+            args: { refId: 'ref_quickstart' },
+            reason: '点击 Quickstart 链接'
+          })
+        })
+        .mockResolvedValueOnce({
+          text: JSON.stringify({
+            type: 'finish',
+            message: '已点击 Quickstart。'
+          })
+        })
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.A11Y_RESOLVE_REF) {
+          return {
+            ok: true,
+            ref: {
+              refId: 'ref_quickstart',
+              role: 'link',
+              name: 'Quickstart',
+              tagName: 'a',
+              visible: true,
+              disabled: false
+            }
+          };
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE) {
+          return {
+            ok: true,
+            actionToken: 'click-token'
+          };
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.IFRAME_CLICK) {
+          clickedMessages.push(message);
+          return {
+            ok: true,
+            ref: {
+              refId: 'ref_quickstart',
+              role: 'link',
+              name: 'Quickstart'
+            },
+            changedPage: true
+          };
+        }
+        return observationResponse({
+          title: 'OpenAI Docs',
+          currentDomain: 'developers.openai.com',
+          visibleTextSummary: 'Quickstart',
+          pageStateSummary: '页面包含 Quickstart 导航链接',
+          refSummary: [
+            {
+              refId: 'ref_quickstart',
+              role: 'link',
+              name: 'Quickstart',
+              tagName: 'a',
+              visible: true,
+              disabled: false
+            }
+          ]
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({ task: '帮我点击 Quickstart', mode: 'act' });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'finished');
+
+    expect(clickedMessages).toEqual([
+      {
+        type: CONTENT_RPC_MESSAGES.IFRAME_CLICK,
+        frameId: 0,
+        refId: 'ref_quickstart',
+        actionToken: 'click-token'
+      }
+    ]);
+    expect(hasTraceTool(snapshot.trace ?? [], TRACE_EVENT_NAMES.TOOL_RESULT, TOOL_NAMES.ACTION_CLICK, true)).toBe(true);
+  });
+
   it('asks for explicit form values instead of rendering a run error when model invents values', async () => {
     const fillManyCalls: unknown[] = [];
     const providerClient: ModelClient = {
@@ -2797,13 +3045,13 @@ describe('RunManager', () => {
     expect(explicitValuesMessage?.content).toContain('电子邮件');
   });
 
-  it('answers ask tasks through unified AgentLoop terminal decisions instead of provider-only response messages', async () => {
+  it('answers ask tasks through AgentLoop terminal decisions instead of provider-only response messages', async () => {
     const providerClient: ModelClient = {
       async complete() {
         return {
           text: JSON.stringify({
             type: 'finish',
-            message: '这是统一 AgentLoop 生成的页面总结。'
+            message: '这是 AgentLoop 生成的页面总结。'
           })
         };
       }
@@ -2842,13 +3090,13 @@ describe('RunManager', () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: `${started.runId}:agent-final`,
-          content: '这是统一 AgentLoop 生成的页面总结。'
+          content: '这是 AgentLoop 生成的页面总结。'
         })
       ])
     );
   });
 
-  it('uses unified AgentLoop tool calls to choose the field when form fill candidates are ambiguous', async () => {
+  it('uses AgentLoop tool calls to choose the field when form fill candidates are ambiguous', async () => {
     const fillManyCalls: unknown[] = [];
     const completeCalls: string[] = [];
     const modelOutputs = [
@@ -3234,7 +3482,7 @@ describe('RunManager', () => {
     )).toBe(false);
   });
 
-  it('includes full chat conversation history in unified AgentLoop prompts', async () => {
+  it('includes full chat conversation history in AgentLoop prompts', async () => {
     let providerInput: Parameters<NonNullable<ModelClient['complete']>>[0] | undefined;
     const providerClient: ModelClient = {
       async complete(input) {
@@ -4269,7 +4517,7 @@ describe('RunManager', () => {
         expect.objectContaining({
           kind: 'error',
           title: '运行出错',
-          content: 'Provider settings are required for the unified agent loop'
+          content: 'Provider settings are required for the agent loop'
         })
       ])
     );
@@ -4295,7 +4543,7 @@ describe('RunManager', () => {
     const snapshot = await waitForSubscribedSnapshot(manager, started.runId, (nextSnapshot) =>
       nextSnapshot.messages?.some((message) =>
         message.kind === 'error' &&
-        message.content === 'Provider settings are required for the unified agent loop'
+        message.content === 'Provider settings are required for the agent loop'
       ) === true
     );
 
@@ -4303,7 +4551,7 @@ describe('RunManager', () => {
       expect.arrayContaining([
         expect.objectContaining({
           kind: 'error',
-          content: 'Provider settings are required for the unified agent loop'
+          content: 'Provider settings are required for the agent loop'
         })
       ])
     );

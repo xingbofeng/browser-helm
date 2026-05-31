@@ -121,6 +121,39 @@ describe('CockpitApp interaction', () => {
     container.remove();
   });
 
+  it('lets users start a run in Full mode from the composer', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const runtime = new FakeRuntimePort();
+    const startRun = vi.spyOn(runtime, 'startRun');
+
+    await act(async () => {
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} /></I18nProvider>);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      button('询问 / Ask').click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      button('完整 / Full').click();
+      changeInput('任务', '完整调试并执行必要动作');
+      button('启动任务').click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(startRun).toHaveBeenCalledWith({
+      task: '完整调试并执行必要动作',
+      mode: 'full',
+      tabId: undefined
+    });
+    root.unmount();
+    container.remove();
+  });
+
   it('clears the current session from the header action', async () => {
     const container = document.createElement('div');
     document.body.append(container);

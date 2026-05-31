@@ -5,7 +5,6 @@ import { Button } from 'animal-island-ui';
 import type { RuntimeToolExecutionResult, RunSnapshot } from '../../runtime/runtime-messages';
 import type { RuntimePort } from '../../runtime/runtime-port';
 import type { AgentMessage } from '../../shared/schemas/agent-message.schema';
-import type { StructuredPageData } from '../../shared/schemas/structured-page-data.schema';
 import type { RunMode } from '../../shared/schemas/tool.schema';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { useT } from '../../i18n/context';
@@ -13,6 +12,11 @@ import { useLocale } from '../../i18n/context';
 import { readLocale, writeLocale } from '../../i18n/locale';
 import { createAppSettingsStore } from '../stores/app-settings-store';
 import { ApprovalDrawer } from '../approval/approval-drawer';
+import {
+  isRecord,
+  readEditableSubmitApprovalArgs,
+  readString
+} from '../approval/submit-approval-preview';
 import { AdvancedDebugPanel } from '../components/advanced-debug-drawer';
 import { AgentMessageList } from '../components/agent-message-list';
 import { ChatPanel } from '../components/chat-panel';
@@ -22,8 +26,19 @@ import { createApprovalStore } from '../stores/approval-store';
 import { createPageDataStore } from '../stores/page-data-store';
 import { createSettingsStore } from '../stores/settings-store';
 import { createTraceStore } from '../stores/trace-store';
-import type { RunDisplayState } from '../stores/agent-store';
 import type { SimpleStore } from '../stores/store-core';
+import {
+  conversationHistoryFromMessages,
+  emptyStructuredPageData,
+  isRunActiveForGoalRevision,
+  localErrorMessage,
+  mergeAgentMessages,
+  readTaskMessageContent,
+  shouldRetryAutoObserve,
+  statusLabel,
+  statusToDisplayState,
+  toDrawerDecision
+} from './cockpit-state';
 
 const browserHelmLogoUrl = new URL('../assets/browserhelm-logo.png', import.meta.url).href;
 
@@ -336,7 +351,7 @@ export function CockpitApp({
   }) => {
     const currentSnapshot = snapshot;
     const pendingApproval = currentSnapshot?.pendingApproval;
-    const submitArgs = readSubmitApprovalArgs(pendingApproval?.argsPreview);
+    const submitArgs = readEditableSubmitApprovalArgs(pendingApproval?.argsPreview);
     if (!currentSnapshot || !submitArgs) {
       throw new Error(t('runtime.error.noModifiableApproval'));
     }
@@ -553,276 +568,6 @@ export function CockpitApp({
   );
 }
 
-function mergeAgentMessages(
-  existingMessages: AgentMessage[],
-  nextMessages: AgentMessage[]
-): AgentMessage[] {
-  if (nextMessages.length === 0) {
-    return existingMessages;
-  }
-  const messagesById = new Map(existingMessages.map((message) => [message.id, message]));
-  const orderedIds = existingMessages.map((message) => message.id);
-  for (const message of nextMessages) {
-    if (!messagesById.has(message.id)) {
-      orderedIds.push(message.id);
-    }
-    messagesById.set(message.id, message);
-  }
-  return orderedIds
-    .map((id) => messagesById.get(id))
-    .filter((message): message is AgentMessage => Boolean(message));
-}
-
 function useStore<T extends object>(store: SimpleStore<T>): T {
   return useSyncExternalStore(store.subscribe, store.getState, store.getState);
-}
-
-function toDrawerDecision(
-  decision: 'pending' | 'approved' | 'denied' | 'expired' | undefined
-): 'approved' | 'denied' | undefined {
-  return decision === 'approved' || decision === 'denied' ? decision : undefined;
-}
-
-function shouldRetryAutoObserve(snapshot: RunSnapshot): boolean {
-  if (snapshot.status === 'observing' || snapshot.status === 'executing_tool') {
-    return true;
-  }
-  if (snapshot.status !== 'observed' && snapshot.status !== 'empty') {
-    return false;
-  }
-  const observationText = [
-    snapshot.observation?.url,
-    snapshot.observation?.title,
-    snapshot.observation?.visibleTextSummary,
-    snapshot.structuredPageData?.observation.summary
-  ].join(' ');
-  const forms = snapshot.structuredPageData?.forms;
-  return /iframe|frame/i.test(observationText) && forms?.status !== 'ready';
-}
-
-function statusToDisplayState(
-  status: RunSnapshot['status'] | undefined,
-  busy: boolean
-): RunDisplayState {
-  if (busy) {
-    return 'starting';
-  }
-  if (status === 'waiting_for_approval') {
-    return 'waiting_for_approval';
-  }
-  if (
-    status === 'observing' ||
-    status === 'thinking' ||
-    status === 'executing_tool' ||
-    status === 'waiting_for_user' ||
-    status === 'recovering' ||
-    status === 'finished'
-  ) {
-    return status;
-  }
-  if (status === 'failed' || status === 'error') {
-    return 'failed';
-  }
-  if (status === 'cancelled') {
-    return 'cancelled';
-  }
-  if (status === 'observed' || status === 'empty') {
-    return 'finished';
-  }
-  return 'idle';
-}
-
-function statusLabel(
-  status: RunDisplayState,
-  t: ReturnType<typeof useT>
-): string {
-  const labels: Record<RunDisplayState, string> = {
-    idle: t('status.ready'),
-    starting: t('status.starting'),
-    observing: t('status.observing'),
-    thinking: t('status.thinking'),
-    executing_tool: t('status.running'),
-    waiting_for_approval: t('status.approval'),
-    waiting_for_user: t('status.waiting'),
-    recovering: t('status.recovering'),
-    finished: t('status.done'),
-    failed: t('status.error'),
-    cancelled: t('status.stopped')
-  };
-  return labels[status];
-}
-
-function isRunActiveForGoalRevision(status: RunSnapshot['status'] | undefined): boolean {
-  return status === 'observing' ||
-    status === 'thinking' ||
-    status === 'executing_tool' ||
-    status === 'waiting_for_user' ||
-    status === 'recovering' ||
-    status === 'waiting_for_approval';
-}
-
-function readTaskMessageContent(snapshot: RunSnapshot | undefined): string | undefined {
-  const taskMessage = [...(snapshot?.messages ?? [])]
-    .reverse()
-    .find((message) => message.kind === 'task' && message.role === 'user');
-  const task = taskMessage?.content.trim();
-  return task ? task : undefined;
-}
-
-function conversationHistoryFromMessages(
-  messages: AgentMessage[],
-  snapshot?: RunSnapshot
-): NonNullable<Parameters<RuntimePort['startRun']>[0]['conversationHistory']> | undefined {
-  const sourceMessages = snapshot?.messages
-    ? mergeAgentMessages(messages, snapshot.messages)
-    : messages;
-  const history = sourceMessages
-    .filter((message) =>
-      message.content.trim().length > 0
-    )
-    .map((message) => ({
-      role: message.role,
-      ...(message.title ? { title: message.title } : {}),
-      content: message.content
-    }));
-  if (snapshot?.trace?.length) {
-    history.push({
-      role: 'system',
-      title: 'Previous run trace',
-      content: JSON.stringify(snapshot.trace)
-    });
-  }
-  return history.length ? history : undefined;
-}
-
-function localErrorMessage(id: string, title: string, content: string): AgentMessage {
-  const now = Date.now();
-  return {
-    id,
-    role: 'agent',
-    kind: 'error',
-    status: 'error',
-    title,
-    content,
-    createdAt: now,
-    updatedAt: now
-  };
-}
-
-function emptyStructuredPageData(): StructuredPageData {
-  const updatedAt = '2026-05-25T00:00:00.000Z';
-
-  return {
-    observation: {
-      items: [],
-      warnings: [],
-      count: 0,
-      status: 'empty',
-      updatedAt,
-      summary: ''
-    },
-    refs: {
-      items: [],
-      warnings: [],
-      count: 0,
-      status: 'empty',
-      updatedAt,
-      summary: ''
-    },
-    interactive: {
-      items: [],
-      warnings: [],
-      count: 0,
-      status: 'empty',
-      updatedAt,
-      summary: ''
-    },
-    forms: {
-      items: [],
-      warnings: [],
-      count: 0,
-      status: 'empty',
-      updatedAt,
-      summary: ''
-    }
-  };
-}
-
-type SubmitApprovalArgsPreview = {
-  formName: string;
-  fieldCount: number;
-  filledCount: number;
-  skippedCount: number;
-  fields: SubmitApprovalFieldPreview[];
-  verifyStatus: string;
-  submitMethod: string;
-  riskExplanation?: string;
-  warnings: string[];
-  submitTargetRefId?: string;
-  highRisk: boolean;
-};
-
-type SubmitApprovalFieldPreview = {
-  label: string;
-  name?: string;
-  valuePreview: string;
-  fieldRefId: string;
-  isSensitive: boolean;
-  skipped: boolean;
-};
-
-function readSubmitApprovalArgs(value: unknown): SubmitApprovalArgsPreview | undefined {
-  if (!isRecord(value)) return undefined;
-  const fields = readSubmitApprovalField(value.fields);
-  if (!fields.length) return undefined;
-  const riskExplanation = readString(value.riskExplanation);
-  const submitTargetRefId = readString(value.submitTargetRefId);
-  return {
-    formName: readString(value.formName) ?? 'Unknown form',
-    fieldCount: readNumber(value.fieldCount),
-    filledCount: readNumber(value.filledCount),
-    skippedCount: readNumber(value.skippedCount),
-    fields,
-    verifyStatus: readString(value.verifyStatus) ?? 'unknown',
-    submitMethod: readSubmitMethod(value.submitMethod) ?? 'unknown',
-    warnings: Array.isArray(value.warnings)
-      ? value.warnings.filter((w): w is string => typeof w === 'string')
-      : [],
-    highRisk: Boolean(value.highRisk),
-    ...(riskExplanation ? { riskExplanation } : {}),
-    ...(submitTargetRefId ? { submitTargetRefId } : {})
-  };
-}
-
-function readSubmitApprovalField(value: unknown): SubmitApprovalFieldPreview[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter(isRecord)
-    .map((item) => {
-      const name = readString(item.name);
-      return {
-        label: readString(item.label) ?? 'Unknown field',
-        valuePreview: readString(item.valuePreview) ?? '',
-        fieldRefId: readString(item.fieldRefId) ?? '',
-        isSensitive: Boolean(item.isSensitive),
-        skipped: Boolean(item.skipped),
-        ...(name ? { name } : {})
-      };
-    });
-}
-
-function readSubmitMethod(value: unknown): SubmitApprovalArgsPreview['submitMethod'] | undefined {
-  return value === 'button-click' || value === 'enter-submit' ? value : undefined;
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function readNumber(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }

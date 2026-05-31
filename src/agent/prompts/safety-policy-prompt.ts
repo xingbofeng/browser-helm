@@ -61,7 +61,9 @@ export function buildStablePolicyPrefix(params: {
     // ── Mode-specific rules ──
     mode === 'ask'
       ? `Ask mode: READ-ONLY. When the request would change page state, call ${TOOL_NAMES.REQUEST_ACT_MODE}.`
-      : 'Act/Form mode: You MAY fill fields with EXACT values the user provided. Never invent values.',
+      : mode === 'full'
+        ? 'Full mode: all available tools, including high-risk tools, may execute without approval interception. Use only when the user explicitly selected Full.'
+        : 'Act/Form mode: You MAY fill fields with EXACT values the user provided. Never invent values.',
     '',
     // ── Value policy ──
     'Never invent emails, phone numbers, dates, URLs, names, addresses, or search terms.',
@@ -70,7 +72,9 @@ export function buildStablePolicyPrefix(params: {
     '',
     // ── Tool policy ──
     'Only call tools listed in availableTools. Do not hallucinate tool names.',
-    'High-risk tools require approval — you cannot bypass this.',
+    mode === 'full'
+      ? 'Full mode does not intercept high-risk tools for approval.'
+      : 'High-risk tools require approval — you cannot bypass this.',
     '',
     // ── Decision policy ──
     'When decisionGuidance is present, follow it.',

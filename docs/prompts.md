@@ -34,7 +34,7 @@ src/agent/prompts/
 ## 3. PromptBuilder 位置
 
 ```txt
-src/agent/kernel/prompt-builder.ts
+src/agent/loop/prompt-builder.ts
 ```
 
 `prompt-builder.ts` 负责拼装，不负责维护大段 prompt 文案。Prompt 文案放在 `src/agent/prompts/`。

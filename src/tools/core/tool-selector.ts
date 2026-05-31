@@ -57,7 +57,7 @@ export function selectToolsForRun(input: SelectToolsInput): ToolSelection {
       continue;
     }
 
-    if (tool.risk === 'high') {
+    if (tool.risk === 'high' && input.mode !== 'full') {
       hiddenTools.push({
         tool: tool.name,
         reason: 'High-risk tools require explicit approval boundary'

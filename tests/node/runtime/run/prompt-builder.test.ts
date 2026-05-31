@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildMessages } from '../../../../src/background/runtime/run/prompt-builder';
+import { buildMessages } from '../../../../src/agent/loop/prompt-builder';
 import { TRACE_EVENT_NAMES } from '../../../../src/shared/constants/event-names';
 import { TOOL_NAMES } from '../../../../src/shared/constants/tool-names';
 import type { RunSnapshot, RuntimeEvent } from '../../../../src/runtime/runtime-messages';
-import type {
-  RunRecord,
-  ToolPromptContract
-} from '../../../../src/background/runtime/run/runtime-service-types';
+import type { RunRecord } from '../../../../src/agent/loop/types';
+import type { ToolPromptContract } from '../../../../src/tools/core/tool-router';
 
 describe('runtime prompt builder', () => {
   it('keeps page read text in prompt even when page context is large', () => {
@@ -96,6 +94,50 @@ describe('runtime prompt builder', () => {
     expect(prompt).toContain('Potential repeated tool loop detected');
     expect(prompt).toContain('finish');
     expect(prompt).toContain(TOOL_NAMES.PAGE_READ_ARTICLE);
+  });
+
+  it('adds read-only boundary guidance after an action readiness check', () => {
+    const messages = buildMessages({
+      record: recordWithTrace([]),
+      snapshot: {
+        ...snapshotWithLastToolResult(TOOL_NAMES.ACTION_CHECK_READINESS),
+        toolResult: {
+          tool: TOOL_NAMES.ACTION_CHECK_READINESS,
+          ok: true,
+          code: 'OK',
+          summary: 'Action target is ready; no action was executed',
+          detail: {
+            data: {
+              canAct: true,
+              code: 'OK',
+              reason: 'Action target is ready',
+              risk: 'high',
+              staleRefs: false,
+              changedPage: false,
+              requiresObserve: false,
+              wouldRequireApproval: true,
+              target: {
+                refId: 'ref_quickstart',
+                role: 'link',
+                name: 'Quickstart',
+                tagName: 'a'
+              }
+            }
+          },
+          changedPage: false,
+          requiresObserve: false
+        }
+      },
+      toolsContracts: [
+        toolContract(TOOL_NAMES.ACTION_CHECK_READINESS)
+      ],
+      locale: 'zh'
+    });
+
+    const prompt = messages.at(-1)?.content ?? '';
+    expect(prompt).toContain('actionReadiness');
+    expect(prompt).toContain('did not execute');
+    expect(prompt).toContain('Do not repeat bh_action_check_readiness');
   });
 
   it('does not add loop guard guidance when the page changed between reads', () => {

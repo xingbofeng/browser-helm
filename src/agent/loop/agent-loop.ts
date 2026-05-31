@@ -1,32 +1,31 @@
-import { DecisionParser } from '../../../agent/parser/decision-parser';
-import type { ModelClient } from '../../../agent/model/model-client';
-import type { SettingsStore } from '../../../storage/interfaces/settings-store';
-import type { ExecuteToolInput, RunSnapshot, RuntimeEvent, RuntimeTaskState } from '../../../runtime/runtime-messages';
-import type { RunRecord } from './runtime-service-types';
-import { createProviderClient } from '../provider-client-factory';
-import { ERROR_CODES } from '../../../shared/constants/error-codes';
-import { TRACE_EVENT_NAMES } from '../../../shared/constants/event-names';
-import { TOOL_NAMES } from '../../../shared/constants/tool-names';
-import type { AgentDecision } from '../../../shared/schemas/agent-decision.schema';
-import type { ModelMessage } from '../../../shared/schemas/model-message.schema';
-import type { RunMode } from '../../../shared/schemas/tool.schema';
-import type { AgentMessage } from '../../../shared/schemas/agent-message.schema';
-import { streamingStateFromTrace } from './streaming-state';
+import { DecisionParser } from '../parser/decision-parser';
+import type { ModelClient } from '../model/model-client';
+import type { SettingsStore } from '../../storage/interfaces/settings-store';
+import type { ExecuteToolInput, RunSnapshot, RuntimeEvent } from '../../runtime/runtime-messages';
+import type { RunRecord } from './types';
+import { createProviderClient } from '../../background/runtime/provider-client-factory';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
+import { TRACE_EVENT_NAMES } from '../../shared/constants/event-names';
+import { TOOL_NAMES } from '../../shared/constants/tool-names';
+import type { AgentDecision } from '../../shared/schemas/agent-decision.schema';
+import type { ModelMessage } from '../../shared/schemas/model-message.schema';
+import type { RunMode } from '../../shared/schemas/tool.schema';
+import type { AgentMessage } from '../../shared/schemas/agent-message.schema';
+import { streamingStateFromTrace } from '../../background/runtime/run/streaming-state';
 import {
   redactTextForModelContext,
   sanitizeSensitiveDetail
-} from '../../../shared/redaction';
-import type { Locale } from '../../../i18n/types';
-import { t, tZh } from '../../../i18n/t';
-import { modeSwitchRequestMessage } from './mode-switch-message';
-import type { ToolPromptContract } from './runtime-service-types';
+} from '../../shared/redaction';
+import type { Locale } from '../../i18n/types';
+import { t, tZh } from '../../i18n/t';
+import { modeSwitchRequestMessage } from '../../background/runtime/run/mode-switch-message';
+import type { ToolPromptContract } from '../../tools/core/tool-router';
 import { buildMessages, getPromptToolContracts } from './prompt-builder';
 import {
   augmentRuntimeToolDecision,
   normalizeModelDecision,
   runtimeFormCandidates,
-  validateRuntimeToolDecision,
-  isFormFillTool
+  validateRuntimeToolDecision
 } from './form-fill-augmenter';
 import {
   validateModelDecision,
@@ -36,18 +35,20 @@ import {
   buildRepairMessages
 } from './decision-validator';
 import type { ModelDecisionError } from './decision-validator';
+import {
+  applyModelTaskStateUpdate,
+  syncTaskStateFromToolResult
+} from './runtime-task-state';
 
 // ── Runtime constants ──
 const MAX_REPAIR_ATTEMPTS = 1;
 const MODEL_DECISION_TIMEOUT_MS = 10 * 60 * 1000;
 const MODEL_DECISION_TIMEOUT_MESSAGE = tZh('runtime.error.modelTimeout');
 const MODEL_TIMEOUT = Symbol('model_timeout');
-const MAX_TASK_STATE_ITEMS = 12;
-const MAX_TASK_STATE_TEXT_CHARS = 160;
 
 // ── Types ──
 
-type UnifiedRuntimeAgentLoopDeps = {
+type AgentLoopDeps = {
   settingsStore: SettingsStore;
   createProviderModelClient?: ((settings: {
     baseUrl: string;
@@ -64,7 +65,7 @@ type UnifiedRuntimeAgentLoopDeps = {
   getToolContracts: (runMode: RunMode) => ToolPromptContract[];
 };
 
-type UnifiedRuntimeAgentLoopInput = {
+type AgentLoopInput = {
   runId: string;
   record: RunRecord & { tabId: number };
   maxSteps?: number | undefined;
@@ -72,18 +73,18 @@ type UnifiedRuntimeAgentLoopInput = {
 
 // ── Class ──
 
-export class UnifiedRuntimeAgentLoop {
+export class AgentLoop {
   private readonly parser = new DecisionParser();
   private readonly abortControllers = new Map<string, AbortController>();
 
-  constructor(private readonly deps: UnifiedRuntimeAgentLoopDeps) {}
+  constructor(private readonly deps: AgentLoopDeps) {}
 
   abortRun(runId: string): void {
     this.abortControllers.get(runId)?.abort();
     this.abortControllers.delete(runId);
   }
 
-  async run(input: UnifiedRuntimeAgentLoopInput): Promise<RunSnapshot> {
+  async run(input: AgentLoopInput): Promise<RunSnapshot> {
     const settings = await this.deps.settingsStore.getProviderSettings();
     if (!settings?.baseUrl || !settings.apiKey || !settings.model) {
       const current = this.deps.getSnapshot(input.runId);
@@ -92,7 +93,7 @@ export class UnifiedRuntimeAgentLoop {
         status: 'waiting_for_user',
         error: {
           code: ERROR_CODES.PROVIDER_NOT_CONFIGURED,
-          message: 'Provider settings are required for the unified agent loop'
+          message: 'Provider settings are required for the agent loop'
         },
         streaming: {
           enabled: false,
@@ -316,7 +317,7 @@ export class UnifiedRuntimeAgentLoop {
       status: 'failed',
       error: {
         code: ERROR_CODES.MAX_STEPS_EXCEEDED,
-        message: 'Unified agent loop exceeded max steps'
+        message: 'Agent loop exceeded max steps'
       },
       trace: input.record.trace
     };
@@ -332,7 +333,7 @@ export class UnifiedRuntimeAgentLoop {
   private async requestModelDecision(ctx: {
     client: ModelClient;
     settings: { baseUrl: string; model: string; streamingEnabled?: boolean | undefined };
-    loopInput: UnifiedRuntimeAgentLoopInput;
+    loopInput: AgentLoopInput;
     stepIndex: number;
     messages: ModelMessage[];
   }): Promise<{ text: string } | undefined> {
@@ -449,7 +450,7 @@ export class UnifiedRuntimeAgentLoop {
 
   private modelTimeoutDecision(ctx: {
     settings: { model: string };
-    loopInput: UnifiedRuntimeAgentLoopInput;
+    loopInput: AgentLoopInput;
     stepIndex: number;
   }, charCount: number): { text: string } {
     this.deps.appendTrace(ctx.loopInput.record, {
@@ -482,10 +483,11 @@ export class UnifiedRuntimeAgentLoop {
   }
 
   private async handleDecision(
-    input: UnifiedRuntimeAgentLoopInput,
+    input: AgentLoopInput,
     decision: AgentDecision
   ): Promise<{ done: boolean; snapshot: RunSnapshot }> {
     if (decision.type === 'finish') {
+      const current = this.deps.getSnapshot(input.runId);
       this.deps.appendTrace(input.record, {
         runId: input.runId,
         type: TRACE_EVENT_NAMES.RUN_FINISHED,
@@ -495,11 +497,11 @@ export class UnifiedRuntimeAgentLoop {
         }
       });
       const snapshot: RunSnapshot = {
-        ...this.deps.getSnapshot(input.runId),
+        ...current,
         status: 'finished',
         taskState: input.record.taskState,
         messages: upsertFinalMessage(
-          this.deps.getSnapshot(input.runId).messages,
+          current.messages,
           input.runId,
           decision.message
         ),
@@ -543,12 +545,13 @@ export class UnifiedRuntimeAgentLoop {
     }
 
     if (decision.tool === TOOL_NAMES.REQUEST_ACT_MODE) {
+      const current = this.deps.getSnapshot(input.runId);
       const snapshot: RunSnapshot = {
-        ...this.deps.getSnapshot(input.runId),
+        ...current,
         status: 'waiting_for_user',
         taskState: input.record.taskState,
         messages: [
-          ...(this.deps.getSnapshot(input.runId).messages ?? []),
+          ...(current.messages ?? []),
           modeSwitchRequestMessage(input.runId, input.record.locale ?? 'zh')
         ],
         trace: input.record.trace
@@ -719,146 +722,6 @@ function explicitValueFieldLabels(
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
-}
-
-// ── Task state management ──
-
-function ensureTaskState(record: RunRecord): RuntimeTaskState {
-  record.taskState ??= createInitialTaskState(redactTextForModelContext(record.task));
-  return record.taskState;
-}
-
-function createInitialTaskState(goal: string): RuntimeTaskState {
-  return {
-    goal,
-    completed: [],
-    remaining: [goal],
-    filledFieldRefs: [],
-    verifiedFieldRefs: [],
-    runtimeCompleted: [],
-    runtimeFactsOverrideModelNotes: true,
-    updatedBy: 'runtime',
-    updatedAt: Date.now()
-  };
-}
-
-function applyModelTaskStateUpdate(record: RunRecord, decision: AgentDecision): void {
-  const update = decision.taskStateUpdate;
-  if (!update) {
-    return;
-  }
-  const state = ensureTaskState(record);
-  if (update.goal) {
-    state.goal = safeTaskStateText(update.goal);
-  }
-  if (update.completed) {
-    state.completed = uniqueStrings([
-      ...state.completed,
-      ...safeTaskStateList(update.completed)
-    ]).slice(-MAX_TASK_STATE_ITEMS);
-  }
-  if (update.remaining) {
-    state.remaining = safeTaskStateList(update.remaining).slice(0, MAX_TASK_STATE_ITEMS);
-  }
-  if (update.recommendedNextDecision) {
-    state.recommendedNextDecision = update.recommendedNextDecision;
-  }
-  if (update.reason) {
-    state.reason = safeTaskStateText(update.reason);
-  }
-  state.updatedBy = mergeTaskStateSource(state.updatedBy, 'model');
-  state.updatedAt = Date.now();
-}
-
-function syncTaskStateFromToolResult(
-  record: RunRecord,
-  result: RunSnapshot['toolResult']
-): void {
-  if (!result?.ok) {
-    return;
-  }
-  if (!isFormFillTool(result.tool) && result.tool !== TOOL_NAMES.FORM_VERIFY) {
-    return;
-  }
-  const fieldRefIds = fieldRefIdsFromToolResult(result);
-  if (!fieldRefIds.length) {
-    return;
-  }
-  const state = ensureTaskState(record);
-  if (isFormFillTool(result.tool)) {
-    state.filledFieldRefs = uniqueStrings([...state.filledFieldRefs, ...fieldRefIds]);
-    state.runtimeCompleted = uniqueStrings([
-      ...state.runtimeCompleted,
-      `form_fill succeeded for ${fieldRefIds.join(', ')}`
-    ]).slice(-MAX_TASK_STATE_ITEMS);
-    state.recommendedNextDecision = 'finish';
-    state.reason = 'The latest form fill succeeded. If the user did not ask to submit/send/continue, finish instead of repeating the fill.';
-  } else {
-    state.verifiedFieldRefs = uniqueStrings([...state.verifiedFieldRefs, ...fieldRefIds]);
-    state.runtimeCompleted = uniqueStrings([
-      ...state.runtimeCompleted,
-      `form_verify succeeded for ${fieldRefIds.join(', ')}`
-    ]).slice(-MAX_TASK_STATE_ITEMS);
-    state.recommendedNextDecision = 'finish';
-    state.reason = 'The latest form verification succeeded. If the user did not ask to submit, finish now.';
-  }
-  state.updatedBy = mergeTaskStateSource(state.updatedBy, 'runtime');
-  state.updatedAt = Date.now();
-}
-
-function fieldRefIdsFromToolResult(result: NonNullable<RunSnapshot['toolResult']>): string[] {
-  const data = isRecord(result.detail) && isRecord(result.detail.data)
-    ? result.detail.data
-    : undefined;
-  const fields = Array.isArray(data?.fields)
-    ? data.fields
-    : Array.isArray(data?.fieldResults)
-      ? data.fieldResults
-      : undefined;
-  if (!fields) {
-    return [];
-  }
-  return uniqueStrings(fields
-    .map((field) => isRecord(field) ? stringField(field, 'fieldRefId') : undefined)
-    .filter((value): value is string => Boolean(value)));
-}
-
-function mergeTaskStateSource(
-  current: RuntimeTaskState['updatedBy'],
-  incoming: 'runtime' | 'model'
-): RuntimeTaskState['updatedBy'] {
-  return current === incoming ? current : 'runtime_and_model';
-}
-
-function safeTaskStateList(values: string[]): string[] {
-  return values
-    .map(safeTaskStateText)
-    .filter((value, index, all) => value.length > 0 && all.indexOf(value) === index);
-}
-
-function safeTaskStateText(value: string): string {
-  return truncateStr(redactTextForModelContext(value), MAX_TASK_STATE_TEXT_CHARS) ?? '';
-}
-
-function uniqueStrings(values: string[]): string[] {
-  return values.filter((value, index, all) => all.indexOf(value) === index);
-}
-
-// ── Utility functions ──
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function stringField(record: Record<string, unknown>, key: string): string | undefined {
-  const value = record[key];
-  return typeof value === 'string' && value.trim() ? value : undefined;
-}
-
-function truncateStr(value: string | undefined, maxChars: number): string | undefined {
-  if (!value) return value;
-  if (value.length <= maxChars) return value;
-  return value.slice(0, maxChars) + '…[truncated]';
 }
 
 function providerHost(baseUrl: string): string {

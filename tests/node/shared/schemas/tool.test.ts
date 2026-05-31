@@ -26,11 +26,12 @@ describe('toolSpecMetaSchema', () => {
     ).toThrowError();
   });
 
-  it('accepts user-selectable run modes including act', () => {
+  it('accepts user-selectable run modes including full', () => {
     expect(runModeSchema.parse('ask')).toBe('ask');
     expect(runModeSchema.parse('debug')).toBe('debug');
     expect(runModeSchema.parse('form')).toBe('form');
     expect(runModeSchema.parse('act')).toBe('act');
+    expect(runModeSchema.parse('full')).toBe('full');
     expect(() => runModeSchema.parse('admin')).toThrowError();
   });
 
@@ -39,7 +40,8 @@ describe('toolSpecMetaSchema', () => {
       ask: 'ask',
       debug: 'debug',
       form: 'form',
-      act: 'act'
+      act: 'act',
+      full: 'full'
     });
   });
 });

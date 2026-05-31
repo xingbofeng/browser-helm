@@ -119,6 +119,30 @@ describe('selectToolsForRun', () => {
     });
   });
 
+  it('exposes high-risk action tools in full mode while preserving capability gates', () => {
+    const result = selectToolsForRun({
+      mode: 'full',
+      task: '完整调试并执行必要动作',
+      tools,
+      capabilities: {
+        hasActiveTab: true,
+        hasDebuggerPermission: false,
+        hasClipboardPermission: false,
+        hasDownloadsPermission: false,
+        hostPermissions: [],
+        shallowDebugAvailable: true,
+        cdp: 'reserved'
+      }
+    });
+
+    expect(result.visibleTools).toEqual([
+      'bh_page_observe',
+      'bh_debug_collect_page_health',
+      'bh_form_read_fields',
+      'bh_iframe_click'
+    ]);
+  });
+
   it('hides page-dependent tools when active tab capability is unavailable', () => {
     const result = selectToolsForRun({
       mode: 'form',

@@ -29,6 +29,7 @@ export const zh = {
   'chat.startAria': '启动任务',
   'chat.mode.ask': '询问 / Ask',
   'chat.mode.act': '执行 / Act',
+  'chat.mode.full': '完整 / Full',
   'chat.mode.form': '执行 / 表单策略',
   'chat.mode.debug': '高级调试',
 
@@ -129,6 +130,7 @@ export const zh = {
   'approval.revealShow': '显示字段值',
   'approval.fieldSkipped': '已跳过',
   'approval.filledSkipped': '{filled}/{total} 已填写，{skipped} 跳过',
+  'approval.verifyStatus': '校验 {status}',
 
   // ── Settings / Model Config ──
   'settings.title': '设置',
@@ -199,6 +201,8 @@ export const zh = {
   'debug.detail.validation': '校验',
   'debug.detail.submitReason': '提交原因',
   'debug.detail.noBlock': '无阻塞',
+  'debug.detail.visibleDisabled': '可见={visible} 禁用={disabled}',
+  'debug.detail.required': '必填={required}',
 
   // ── Debug Streaming Tab ──
   'debug.streaming.title': 'Streaming 状态',
@@ -316,11 +320,13 @@ export const zh = {
   'runMode.debug': '调试',
   'runMode.form': '表单',
   'runMode.act': '执行',
+  'runMode.full': '完整',
   'tool.description.bh_a11y_find_interactive': '读取当前页面可交互元素及其稳定引用和状态。',
   'tool.description.bh_a11y_refresh_refs': '刷新当前页面的稳定引用映射。',
   'tool.description.bh_a11y_resolve_ref': '把稳定 ref_id 解析为当前页面元素摘要。',
   'tool.description.bh_a11y_snapshot': '返回带稳定引用的类无障碍树快照。',
-  'tool.description.bh_action_check_readiness': '检查拟执行动作是否就绪，以及是否需要用户确认。',
+  'tool.description.bh_action_check_readiness': '只读检查拟执行动作是否就绪、是否需要用户确认；不会执行该动作。',
+  'tool.description.bh_action_click': '点击已就绪且非高风险的稳定引用目标；高风险目标不会自动点击。',
   'tool.description.bh_agent_ask_user': '在继续执行前请求用户补充输入。',
   'tool.description.bh_agent_fail': '用结构化错误结束当前运行。',
   'tool.description.bh_agent_finish': '用最终摘要完成当前运行。',
@@ -683,6 +689,7 @@ export const zh = {
   // ── Mode system ──
   'mode.reason.userSelected': '用户显式选择 {mode} mode；{boundary}',
   'mode.boundary.act': 'Act 可执行低敏字段填入和验证；发送、提交、发布等最终动作必须确认，不自动提交。',
+  'mode.boundary.full': 'Full 可综合使用读取、调试、表单和动作工具；高风险动作不再被审批拦截。',
   'mode.boundary.default': '默认先诊断，再行动。',
 
   // ── Task Classification ──
@@ -795,6 +802,7 @@ export const zh = {
   'tool.title.bh_a11y_snapshot': '无障碍快照',
   'tool.error.formNoDisabledSubmitReason': '未找到禁用提交原因',
   'tool.title.bh_action_check_readiness': '检查动作就绪状态',
+  'tool.title.bh_action_click': '点击目标',
 
   'tool.title.bh_agent_ask_user': '询问用户',
   // ── Fill Plan Inference ──

@@ -158,70 +158,97 @@ export function fillSingleField(
   const label = resolveFieldLabel(el, locale);
   const validation = readFieldValidation(el, locale);
   const fieldType = elementType(el);
+  const fieldLabel = label.label || undefined;
 
   // guard checks
   if (validation.disabled) {
-    return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, t('formFill.skip.disabled', locale));
+    return skippedField(target, el, fieldType, fieldLabel, t('formFill.skip.disabled', locale));
   }
   if (isSensitiveField(el)) {
-    return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, t('formFill.skip.sensitive', locale));
+    return skippedField(target, el, fieldType, fieldLabel, t('formFill.skip.sensitive', locale));
   }
   if (!isVisibleElement(el) && !hasVisibleControlLabel(el)) {
-    return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, t('formFill.skip.notVisible', locale));
+    return skippedField(target, el, fieldType, fieldLabel, t('formFill.skip.notVisible', locale));
   }
   if (el.getAttribute('readonly') !== null) {
-    return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, t('formFill.skip.readonly', locale));
+    return skippedField(target, el, fieldType, fieldLabel, t('formFill.skip.readonly', locale));
   }
 
   try {
     if (el instanceof HTMLInputElement) {
       const inputType = (el.getAttribute('type') ?? 'text').toLowerCase();
       if (inputType === 'file') {
-        return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, t('formFill.skip.fileUpload', locale));
+        return skippedField(target, el, fieldType, fieldLabel, t('formFill.skip.fileUpload', locale));
       }
       if (inputType === 'hidden') {
-        return mkField(target, 'skipped', el, fieldType, label.label || undefined, undefined, t('formFill.skip.hidden', locale));
+        return skippedField(target, el, fieldType, fieldLabel, t('formFill.skip.hidden', locale));
       }
       if (inputType === 'checkbox') {
         const want = target.value === 'true' || target.value === 'checked' || target.value === 'on';
         setCheckboxState(el, want);
-        return mkField(target, 'filled', el, fieldType, label.label || undefined, el.checked ? 'checked' : 'unchecked');
+        return mkField(target, 'filled', el, fieldType, fieldLabel, el.checked ? 'checked' : 'unchecked');
       }
       if (inputType === 'radio') {
         setRadioChecked(el, target.value);
         const checked = document.querySelector<HTMLInputElement>(
           `input[type="radio"][name="${CSS.escape(el.name)}"]:checked`
         );
-        return mkField(target, 'filled', el, fieldType, label.label || undefined, checked?.value ?? target.value);
+        return mkField(target, 'filled', el, fieldType, fieldLabel, checked?.value ?? target.value);
       }
-      // generic text-like input
-      setFieldText(el, target.clear ? '' : target.value);
-      return mkField(target, target.clear ? 'cleared' : 'filled', el, fieldType, label.label || undefined, el.value);
+      return fillTextControl(target, el, fieldType, fieldLabel);
     }
 
     if (el instanceof HTMLTextAreaElement) {
-      setFieldText(el, target.clear ? '' : target.value);
-      return mkField(target, target.clear ? 'cleared' : 'filled', el, fieldType, label.label || undefined, el.value);
+      return fillTextControl(target, el, fieldType, fieldLabel);
     }
 
     if (el instanceof HTMLSelectElement) {
       const ok = setSelectOption(el, target.value);
       return {
-        ...mkField(target, ok ? 'filled' : 'failed', el, fieldType, label.label || undefined, ok ? el.value : undefined),
+        ...mkField(target, ok ? 'filled' : 'failed', el, fieldType, fieldLabel, ok ? el.value : undefined),
         error: ok ? undefined : t('formFill.skip.noMatch', locale, { value: target.value }),
       };
     }
 
     if (el.getAttribute('contenteditable')?.toLowerCase() === 'true') {
-      setContentEditableText(el, target.clear ? '' : target.value);
-      return mkField(target, target.clear ? 'cleared' : 'filled', el, fieldType, label.label || undefined, el.textContent ?? '');
+      return fillContentEditable(target, el, fieldType, fieldLabel);
     }
 
-    return mkField(target, 'failed', el, fieldType, label.label || undefined, undefined, t('formFill.skip.unsupportedType', locale));
+    return mkField(target, 'failed', el, fieldType, fieldLabel, undefined, t('formFill.skip.unsupportedType', locale));
   } catch (err) {
-    return mkField(target, 'failed', el, fieldType, label.label || undefined, undefined,
+    return mkField(target, 'failed', el, fieldType, fieldLabel, undefined,
       err instanceof Error ? err.message : t('formFill.skip.failed', locale));
   }
+}
+
+function skippedField(
+  target: FillFieldTarget,
+  el: HTMLElement,
+  type: string,
+  label: string | undefined,
+  reason: string
+): FillFieldResult {
+  return mkField(target, 'skipped', el, type, label, undefined, reason);
+}
+
+function fillTextControl(
+  target: FillFieldTarget,
+  el: HTMLInputElement | HTMLTextAreaElement,
+  type: string,
+  label: string | undefined
+): FillFieldResult {
+  setFieldText(el, target.clear ? '' : target.value);
+  return mkField(target, target.clear ? 'cleared' : 'filled', el, type, label, el.value);
+}
+
+function fillContentEditable(
+  target: FillFieldTarget,
+  el: HTMLElement,
+  type: string,
+  label: string | undefined
+): FillFieldResult {
+  setContentEditableText(el, target.clear ? '' : target.value);
+  return mkField(target, target.clear ? 'cleared' : 'filled', el, type, label, el.textContent ?? '');
 }
 
 function hasVisibleControlLabel(element: HTMLElement): boolean {
@@ -240,10 +267,10 @@ function mkField(
   status: FillFieldResult['status'],
   el: HTMLElement,
   type: string,
-  label?: string  ,
-  actual?: string  ,
-  skipReason?: string  ,
-  error?: string  ,
+  label?: string,
+  actual?: string,
+  skipReason?: string,
+  error?: string,
 ): FillFieldResult {
   return {
     fieldRefId: target.fieldRefId,

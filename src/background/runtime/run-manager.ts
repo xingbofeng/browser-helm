@@ -17,6 +17,7 @@ import type { SettingsStore } from '../../storage/interfaces/settings-store';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
+import type { AgentMessage } from '../../shared/schemas/agent-message.schema';
 import type { ToolResult } from '../../shared/schemas/tool-result.schema';
 import { createToolRegistry } from '../../tools';
 import { ToolRouter } from '../../tools/core/tool-router';
@@ -254,7 +255,7 @@ export class RunManager {
       upsertMessage(messages, errorMessage(snapshot.runId, t('runtime.error.runError', locale), snapshot.error.message));
     }
     if (snapshot.toolResult && snapshot.toolResult.tool !== TOOL_NAMES.PAGE_OBSERVE) {
-      upsertMessage(
+      upsertToolStatusMessage(
         messages,
         toolStatusMessage(
           snapshot.runId,
@@ -276,4 +277,47 @@ export class RunManager {
         : snapshot.streaming
     };
   }
+}
+
+function upsertToolStatusMessage(messages: AgentMessage[], message: AgentMessage): void {
+  const index = messages.findIndex((item) => item.id === message.id);
+  if (index >= 0) {
+    messages[index] = {
+      ...messages[index],
+      ...message,
+      createdAt: messages[index]?.createdAt ?? message.createdAt
+    };
+    return;
+  }
+  const replyIndex = messages.findIndex((item) =>
+    runIdFromMessageId(item.id) === runIdFromMessageId(message.id) &&
+    isCurrentRunReplyMessage(item)
+  );
+  if (replyIndex >= 0) {
+    messages.splice(replyIndex, 0, message);
+    return;
+  }
+  messages.push(message);
+}
+
+function isCurrentRunReplyMessage(message: AgentMessage): boolean {
+  if (message.role !== 'agent') {
+    return false;
+  }
+  if (
+    message.kind === 'page_summary' ||
+    message.id.includes(':tool-status:') ||
+    message.id.endsWith(':observe-status')
+  ) {
+    return false;
+  }
+  return message.kind === 'recommendation' ||
+    message.kind === 'error' ||
+    message.id.endsWith(':agent-final') ||
+    message.id.endsWith(':provider-response');
+}
+
+function runIdFromMessageId(id: string): string {
+  const index = id.indexOf(':');
+  return index >= 0 ? id.slice(0, index) : id;
 }

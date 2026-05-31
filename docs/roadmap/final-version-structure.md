@@ -73,7 +73,7 @@
 | Long page reading | v1.0.2 | `src/tools/page`, `src/page/observe` | 分页读取可见文本与正文，避免长页面只看摘要 |
 | Iframe reading | v1.0.2 | `src/tools/iframe`, `src/page/messaging` | 列出和读取 iframe 页面内容与滚动状态 |
 | Viewport scroll context | v1.0.2 | `src/tools/viewport`, `src/page/observe` | 统一滚动 top page / iframe，不单独新增 iframe scroll |
-| AgentLoop user task path | v1.0.2 | `src/background/runtime`, `src/agent/kernel` | 用户任务进入真实 tool-calling loop，而不是只基于 snapshot provider answer |
+| AgentLoop user task path | v1.0.2 | `src/background/runtime/run` | 用户任务进入真实 tool-calling loop，而不是只基于 snapshot provider answer |
 | Assisted form fill | v1.1 | `src/tools/form`, `src/page/dom` | fill/verify/submit approval |
 | AgentLoop security hardening | v1.1.2 | `src/agent/prompts`, `src/agent/context`, `src/runtime/approval`, `src/i18n` | Tools Contract、KV-cache stable prompt、ContextPolicy、stale approval、parse repair、locale bootstrap、非表单 high-risk action 收口 |
 | Public release readiness | v1.1.3 | `.github/workflows`, `scripts`, `docs`, `package.json` | release、tag、checksum、coverage/security gates、README 隐私声明、工具文档一致性 |

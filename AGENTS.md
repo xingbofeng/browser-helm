@@ -15,7 +15,7 @@ BrowserHelm 是一个 local-first、a11y-first 的浏览器 Agent 扩展，技�
 - `npm run test:e2e`：先构建扩展，再运行 Playwright E2E。
 - `npm run debug:extension`：构建并启动可见 Chrome for Testing 扩展调试会话。
 - `npm run debug:extension:watch`：构建并启动可见 Chrome for Testing 扩展调试会话，源码变更后自动 rebuild 并重启会话。
-- `npm run agent:dev`：运行本地 Agent 调试脚本。
+- `npm run agent:dev`：兼容入口，等同于 `npm run debug:extension`，使用统一 runtime 调试扩展。
 
 完成代码改动前，至少根据影响范围运行 `npm run typecheck`、`npm run lint` 和相关单测；涉及扩展、side panel、content script 或真实页面行为时，还要运行 `npm run test:e2e`。
 

@@ -65,6 +65,23 @@ describe('ToolExecutionService', () => {
     const result = await svc.execute(baseInput);
     expect(result.code).toBe(ERROR_CODES.APPROVAL_REQUIRED);
   });
+  it('passes full mode into policy so high-risk tools can run without approval interception', async () => {
+    const execute = vi.fn().mockResolvedValue({ ok: true, code: ERROR_CODES.OK, summary: 'ok', changedPage: false, requiresObserve: false });
+    const evaluate = vi.fn().mockReturnValue({ allow: true, requiresApproval: false, reason: '', risk: 'high' });
+    const d = deps({
+      getRecord: vi.fn().mockReturnValue({ task: 'test', mode: 'full' as RunMode, tabId: 42, trace: [] }),
+      toolPolicy: { evaluate },
+      createToolRouter: vi.fn().mockReturnValue({
+        execute,
+        getToolContract: vi.fn().mockReturnValue({ risk: 'high', title: 'Test Tool' })
+      })
+    });
+    const svc = new ToolExecutionService(d as unknown as ToolExecutionDeps);
+    const result = await svc.execute(baseInput);
+    expect(evaluate).toHaveBeenCalledWith('high', 'full');
+    expect(execute).toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+  });
   it('returns waiting_for_approval when result.requiresApproval', async () => {
     const d = deps();
     d.createToolRouter = vi.fn().mockReturnValue({

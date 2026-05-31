@@ -308,8 +308,7 @@ function buildCurrentDigest(
   const fields = Array.isArray(verifyResult.fields) ? verifyResult.fields.filter(isRecord) : [];
   if (!fields.length) return undefined;
   const digests: FieldPresenceDigest[] = fields.map((f) => ({
-    // eslint-disable-next-line @typescript-eslint/no-base-to-string -- guarded by typeof checks
-    refId: typeof f.fieldRefId === 'string' ? f.fieldRefId : String(f.fieldRefId ?? ''),
+    refId: readPrimitiveString(f.fieldRefId),
     label: typeof f.label === 'string' ? f.label : undefined,
     type: typeof f.type === 'string' ? f.type : undefined,
     presence: f.status === 'filled' || f.filled === true || (typeof f.valuePreview === 'string' && f.valuePreview !== 'empty' && f.valuePreview !== '')
@@ -328,6 +327,12 @@ function buildCurrentDigest(
     formAction: originalDigest?.formAction ? readOptionalString(verifyResult.formAction) : undefined,
     formMethod: originalDigest?.formMethod ? readOptionalString(verifyResult.formMethod) : undefined
   });
+}
+
+function readPrimitiveString(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
 }
 
 function readOptionalString(value: unknown): string | undefined {

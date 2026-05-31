@@ -23,6 +23,7 @@ export const formInferFillPlanArgsSchema = z.object({
 });
 
 export type FormInferFillPlanArgs = z.infer<typeof formInferFillPlanArgsSchema>;
+type SkippedField = FillPlan['skippedFields'][number];
 
 interface FieldInput {
   refId: string;
@@ -48,15 +49,18 @@ export function inferLocalFillPlan(args: FormInferFillPlanArgs, locale: Locale =
     : undefined;
   for (const field of args.fields) {
     if (field.disabled) {
-      skipped.push({ fieldRefId: field.refId, label: field.label, name: field.name, type: field.type, reason: t('fillPlan.skip.disabled', locale) });
+      skipped.push(skippedField(field, t('fillPlan.skip.disabled', locale)));
       continue;
     }
     if (field.sensitive) {
-      skipped.push({ fieldRefId: field.refId, label: field.label, name: field.name, type: field.type, reason: t('fillPlan.skip.sensitive', locale) });
+      skipped.push(skippedField(field, t('fillPlan.skip.sensitive', locale)));
       continue;
     }
     if (field.type === 'file' || field.type === 'hidden') {
-      skipped.push({ fieldRefId: field.refId, label: field.label, name: field.name, type: field.type, reason: field.type === 'file' ? t('fillPlan.skip.fileUpload', locale) : t('fillPlan.skip.hidden', locale) });
+      const reason = field.type === 'file'
+        ? t('fillPlan.skip.fileUpload', locale)
+        : t('fillPlan.skip.hidden', locale);
+      skipped.push(skippedField(field, reason));
       continue;
     }
     const ti = inferField(field, task, rawTask, {
@@ -70,21 +74,62 @@ export function inferLocalFillPlan(args: FormInferFillPlanArgs, locale: Locale =
       field.valuePreview !== 'empty' &&
       field.valuePreview !== 'unchecked'
     ) {
-      skipped.push({ fieldRefId: field.refId, label: field.label, name: field.name, type: field.type, reason: t('fillPlan.skip.existingValue', locale) });
+      skipped.push(skippedField(field, t('fillPlan.skip.existingValue', locale)));
       targets.push(mk(field, undefined, 'empty', 'low', t('fillPlan.skip.existingValueReason', locale), t('fillPlan.skip.existingValue', locale), locale));
       continue;
     }
     if (ti.skipReason) {
-      skipped.push({ fieldRefId: field.refId, label: field.label, name: field.name, type: field.type, reason: ti.skipReason });
+      skipped.push(skippedField(field, ti.skipReason));
     }
     targets.push(ti);
   }
 
-  return { formRefId: args.formRefId, formSummary: args.formSummary, userTask: args.userTask, fields: targets, skippedFields: skipped };
+  return {
+    formRefId: args.formRefId,
+    formSummary: args.formSummary,
+    userTask: args.userTask,
+    fields: targets,
+    skippedFields: skipped
+  };
 }
-function mk(field: FieldInput, value: string | undefined, source: FillTarget['source'], confidence: FillTarget['confidence'], reason: string, skipReason?: string, _locale?: Locale): FillTarget {
+
+function skippedField(field: FieldInput, reason: string): SkippedField {
+  return {
+    fieldRefId: field.refId,
+    label: field.label,
+    name: field.name,
+    type: field.type,
+    reason
+  };
+}
+
+function mk(
+  field: FieldInput,
+  value: string | undefined,
+  source: FillTarget['source'],
+  confidence: FillTarget['confidence'],
+  reason: string,
+  skipReason?: string,
+  _locale?: Locale
+): FillTarget {
   const locale = _locale ?? 'zh';
-  return { fieldRefId: field.refId, label: field.label, name: field.name, type: field.type, requestedValue: value, source, confidence, reason, maskedValuePreview: skipReason ? t('fillPlan.mask.skipped', locale) : value ? mask(value) : t('fillPlan.mask.cleared', locale), ...(skipReason ? { skipReason } : {}) };
+  const maskedValuePreview = skipReason
+    ? t('fillPlan.mask.skipped', locale)
+    : value
+      ? mask(value)
+      : t('fillPlan.mask.cleared', locale);
+  return {
+    fieldRefId: field.refId,
+    label: field.label,
+    name: field.name,
+    type: field.type,
+    requestedValue: value,
+    source,
+    confidence,
+    reason,
+    maskedValuePreview,
+    ...(skipReason ? { skipReason } : {})
+  };
 }
 
 function inferField(field: FieldInput, task: string, rawTask: string, context: {

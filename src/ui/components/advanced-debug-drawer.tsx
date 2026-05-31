@@ -268,6 +268,13 @@ function ElementsFormsTab({
 
 function ElementDetail({ row }: { row: ElementsFormsRow }) {
   const t = useT();
+  const stateText = t('debug.detail.visibleDisabled', {
+    visible: String(row.visible),
+    disabled: String(row.disabled)
+  });
+  const constraintsText = t('debug.detail.required', {
+    required: String(row.required ?? false)
+  });
   return (
     <article className="bh-detailPanel">
       <header>
@@ -276,8 +283,8 @@ function ElementDetail({ row }: { row: ElementsFormsRow }) {
       </header>
       <dl>
         <div><dt>{t('debug.detail.name')}</dt><dd>{row.label}</dd></div>
-        <div><dt>{t('debug.detail.state')}</dt><dd>visible={String(row.visible)} disabled={String(row.disabled)}</dd></div>
-        <div><dt>{t('debug.detail.constraints')}</dt><dd>required={String(row.required ?? false)}</dd></div>
+        <div><dt>{t('debug.detail.state')}</dt><dd>{stateText}</dd></div>
+        <div><dt>{t('debug.detail.constraints')}</dt><dd>{constraintsText}</dd></div>
         <div><dt>{t('debug.detail.validation')}</dt><dd>{row.validationMessage ?? row.validation}</dd></div>
         <div><dt>{t('debug.detail.submitReason')}</dt><dd>{row.submitReason ?? t('debug.detail.noBlock')}</dd></div>
       </dl>

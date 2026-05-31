@@ -8,6 +8,7 @@ export const TOOL_DESCRIPTION_KEYS: Record<ToolName, TranslationKey> = {
   [TOOL_NAMES.A11Y_RESOLVE_REF]: 'tool.description.bh_a11y_resolve_ref',
   [TOOL_NAMES.A11Y_SNAPSHOT]: 'tool.description.bh_a11y_snapshot',
   [TOOL_NAMES.ACTION_CHECK_READINESS]: 'tool.description.bh_action_check_readiness',
+  [TOOL_NAMES.ACTION_CLICK]: 'tool.description.bh_action_click',
   [TOOL_NAMES.AGENT_ASK_USER]: 'tool.description.bh_agent_ask_user',
   [TOOL_NAMES.AGENT_FAIL]: 'tool.description.bh_agent_fail',
   [TOOL_NAMES.AGENT_FINISH]: 'tool.description.bh_agent_finish',

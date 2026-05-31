@@ -15,7 +15,7 @@ import type { StructuredPageData } from '../../../../src/shared/schemas/structur
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 describe('agent side panel components', () => {
-  it('only exposes ask and act modes in the primary composer', async () => {
+  it('exposes ask, act, and full modes in the primary composer', async () => {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
@@ -48,7 +48,7 @@ describe('agent side panel components', () => {
 
       const options = [...container.querySelectorAll('[role="option"]')]
         .map((option) => option.textContent ?? '');
-      expect(options).toEqual(['询问 / Ask', '执行 / Act']);
+      expect(options).toEqual(['询问 / Ask', '执行 / Act', '完整 / Full']);
       expect(container.textContent).not.toContain('表单 / Form');
       expect(container.textContent).not.toContain('调试 / Debug');
     } finally {

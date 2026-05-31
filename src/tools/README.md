@@ -12,6 +12,7 @@
 | `bh_agent_fail` | Agent Fail | `agent/` | `internal` | `safe` | `message`, `code?` | Agent 无法继续或确认失败，返回结构化失败结果。 |
 | `bh_agent_ask_user` | Agent Ask User | `agent/` | `internal` | `safe` | `question` | Agent 缺少必要用户输入时暂停 run，并把问题交还给用户。 |
 | `bh_action_check_readiness` | Check Action Readiness | `action/` | `debug`, `act` | `low` | `kind`, `refId`, `source`, `valuePreview?` | 只读检查拟执行动作的目标、风险、approval 预判和重新观察需求，不修改页面。 |
+| `bh_action_click` | Click Action | `action/` | `act` | `medium` | `refId`, `source?`, `valuePreview?` | 对已就绪且非高风险的 stable ref 执行真实点击；高风险目标阻断，不修改页面。 |
 | `bh_page_observe` | Page Observe | `page/` | `ask`, `debug`, `form` | `safe` | 无 | 读取当前页面 bounded observation，并生成裁剪后的 structured context summary。 |
 | `bh_page_read_visible_text` | Read Visible Text | `page/` | `ask`, `debug`, `form` | `safe` | `cursor?`, `maxChars?` | 分页读取当前页面可见文本。 |
 | `bh_page_read_article` | Read Article | `page/` | `ask`, `debug`, `form` | `safe` | `cursor?`, `maxChars?`, `includeHeadings?`, `includeLinks?` | 读取页面正文/文章内容。 |
