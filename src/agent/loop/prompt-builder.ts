@@ -11,6 +11,11 @@ import { buildRecentToolActions } from './recent-tool-actions';
 import { compactTaskState, createInitialTaskState } from './runtime-task-state';
 import { buildStablePolicyPrefix } from '../prompts/safety-policy-prompt';
 import type { Locale } from '../../i18n/types';
+import { buildMemoryPromptContext } from '../memory/memory-summary-builder';
+import { defaultMemoryRepo } from '../../storage/memory-repo';
+import { defaultScratchpadRepo } from '../../storage/scratchpad-repo';
+import { defaultWorkflowRepo } from '../../storage/workflow-repo';
+import { buildSessionSummary } from '../memory/session-summary-builder';
 
 // ── Context budget limits ──
 const MAX_OBSERVATION_CHARS = 8000;
@@ -21,7 +26,7 @@ const MAX_PAGE_READ_TEXT_CHARS = 12_000;
 const MAX_PAGE_READ_HEADINGS = 20;
 const MAX_PAGE_READ_LINKS = 20;
 const MAX_TOTAL_PROMPT_CHARS = 32000;
-const MIN_USER_PROMPT_CHARS = 8000;
+const MAX_USER_PROMPT_CHARS = 16000;
 const MAX_CONVERSATION_HISTORY_CHARS = 6000;
 const MAX_HISTORY_LINE_CHARS = 1200;
 const MAX_PREVIOUS_TRACE_HISTORY_EVENTS = 12;
@@ -83,7 +88,8 @@ export function buildMessages(input: BuildMessagesInput): ModelMessage[] {
 
   // ── Dynamic suffix: user task, page context, history, trace ──
   const lastToolResult = snapshot.toolResult ? compactToolResult(snapshot.toolResult) : undefined;
-  const hasPageReadText = Boolean(snapshot.toolResult && pageReadTextFromToolResult(snapshot.toolResult));
+  const priorityPageReadText = snapshot.toolResult ? pageReadTextFromToolResult(snapshot.toolResult) : undefined;
+  const hasPageReadText = Boolean(priorityPageReadText);
   const observation = compactObservation(
     snapshot.observation,
     hasPageReadText ? MAX_OBSERVATION_CHARS_WITH_PAGE_READ : MAX_OBSERVATION_CHARS
@@ -95,6 +101,20 @@ export function buildMessages(input: BuildMessagesInput): ModelMessage[] {
   const recentActions = buildRecentToolActions(record.trace);
   const loopGuard = buildLoopGuard(recentActions);
   const taskState = compactTaskState(record.taskState ?? createInitialTaskState(redactedTask));
+  const sessionSummary = buildSessionSummary({
+    sessionId: snapshot.runId,
+    taskGoal: redactedTask,
+    trace: record.trace,
+    snapshot
+  });
+  const memoryContext = buildMemoryPromptContext({
+    domain: readObservationDomain(snapshot),
+    task: redactedTask,
+    runId: snapshot.runId,
+    memoryRepo: defaultMemoryRepo,
+    workflowRepo: defaultWorkflowRepo,
+    scratchpadRepo: defaultScratchpadRepo
+  });
 
   // Dynamic user content: all untrusted / page-derived data
   const userContent = {
@@ -102,9 +122,11 @@ export function buildMessages(input: BuildMessagesInput): ModelMessage[] {
     locale,
     taskState,
     ...(lastToolResult ? { lastToolResult } : {}),
-    ...(decisionGuidance ? { decisionGuidance } : {}),
+    ...(priorityPageReadText ? { priorityPageReadText: redactTextForModelContext(priorityPageReadText) } : {}),
     ...(loopGuard ? { loopGuard } : {}),
     ...(recentActions.length ? { recentActions } : {}),
+    ...(memoryContext ? { memoryContext } : {}),
+    sessionSummary,
     observation,
     structuredPageData
   };
@@ -113,18 +135,22 @@ export function buildMessages(input: BuildMessagesInput): ModelMessage[] {
 
   // Calculate budget: fixed overhead (system + history) vs variable (userJson)
   const baseOverhead = JSON.stringify([systemMessage, ...historyMessages]).length;
+  const availableUserBudget = MAX_TOTAL_PROMPT_CHARS - baseOverhead - PROMPT_BUDGET_MARGIN_CHARS;
   const userBudget = Math.max(
-    MIN_USER_PROMPT_CHARS,
-    MAX_TOTAL_PROMPT_CHARS - baseOverhead - PROMPT_BUDGET_MARGIN_CHARS
+    400,
+    Math.min(MAX_USER_PROMPT_CHARS, availableUserBudget)
   );
   const userJson = truncateJson(userContent, userBudget);
+  const userPrompt = decisionGuidance
+    ? `RUNTIME_DECISION_GUIDANCE: ${decisionGuidance}\n${userJson}`
+    : userJson;
 
   const messages: ModelMessage[] = [
     systemMessage,
     ...historyMessages,
     {
       role: 'user',
-      content: userJson
+      content: userPrompt
     }
   ];
 
@@ -254,6 +280,10 @@ function compactObservation(obs: RunSnapshot['observation'], maxChars: number): 
     interactiveCount,
     warnings
   };
+}
+
+function readObservationDomain(snapshot: RunSnapshot): string | undefined {
+  return snapshot.observation?.currentDomain ?? snapshot.observation?.origin;
 }
 
 function compactStructuredPageData(data: RunSnapshot['structuredPageData']): unknown {

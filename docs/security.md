@@ -28,14 +28,36 @@ Future versions may add optional WebCrypto-based encryption.
 
 ## Page-Health Hook
 
-When BrowserHelm's content script activates on a page, it injects a small monitoring script (`page-health-hook.js`) that listens for:
+BrowserHelm no longer injects the shallow monitoring script by default. In Debug mode, `bh_debug_collect_page_health` can opt in to a temporary page hook (`page-health-hook.js`) that listens for:
 - Unhandled console errors
 - Network request failures
 
 This hook:
 - Does NOT read cookies, password fields, form inputs, or localStorage.
 - Does NOT send data anywhere; collected errors are only accessible via `bh_debug_collect_page_health` in Debug run mode.
-- Will become Debug-mode opt-in in a future version.
+- Redacts URL query, path, fragment, and obvious provider secrets before data crosses `postMessage`.
+
+## DevTools / CDP Debugging
+
+v1.3 deep debugging uses Chrome's `debugger` permission. `bh_cdp_attach` attaches to the current tab only when invoked in Debug/Full mode and enables CDP Network, Runtime, and Performance collectors.
+
+CDP data handling:
+- Request and response headers are redacted by default. `Authorization`, `Cookie`, `Set-Cookie`, token, secret, password, and API key headers are shown as `[MASKED]`.
+- URLs, response bodies, console text, and request bodies pass through best-effort redaction/truncation before entering UI, trace, or model context.
+- Attach failure, permission/API unavailability, and response-body unavailability are returned as explicit tool errors.
+- Detach with `bh_cdp_detach` when deep inspection is no longer needed.
+
+## Vision / Screenshot Handling
+
+v1.4 screenshot tools are opt-in tool calls for visual ambiguity, overlays, layout issues, canvas/chart-like content, or DOM/a11y fallback. BrowserHelm does not run a screenshot-first loop.
+
+Screenshot data handling:
+- Raw screenshot `dataUrl` is never written to trace payloads.
+- Persisted snapshot detail masks screenshot `dataUrl` as `[MASKED_IMAGE_DATA]`.
+- Vision provider calls receive the screenshot only when a `bh_vision_*` describe/detect tool is explicitly executed and the configured provider supports vision input.
+- If vision is unavailable, BrowserHelm returns `VISION_UNAVAILABLE` with `fallback: dom_a11y` and keeps the existing DOM/a11y observation usable.
+- `bh_pointer_click` is a last-resort visual fallback. Sensitive coordinate actions such as payment, submit, delete, upload, or password-related clicks return approval required before any click is sent.
+- `bh_file_upload_with_approval` records an explicit approval boundary for upload handoff, but does not read local file paths or set file inputs automatically. The user must still choose the file in the browser-controlled picker.
 
 ## Permissions
 
@@ -47,6 +69,11 @@ This hook:
 | `scripting` | Inject content scripts for page observation |
 | `sidePanel` | Open BrowserHelm in Chrome side panel |
 | `webNavigation` | Detect page navigations for side panel updates |
+| `debugger` | Attach to the active tab for explicit Debug/Full CDP deep inspection |
+| `downloads` | List recent download metadata for v1.5 advanced file tools; BrowserHelm redacts local paths and URL query/fragment before traces/model context |
+| `offscreen` | Host the MV3 offscreen clipboard bridge; it is created only for approved clipboard read/write operations |
+| `clipboardRead` | Read clipboard text only after explicit BrowserHelm approval; snapshot detail masks clipboard content |
+| `clipboardWrite` | Write clipboard text only after explicit BrowserHelm approval; trace stores length/preview metadata, not raw text |
 | `optional: <all_urls>` | Request page access on first use (user-granted) |
 
 ## Web-Accessible Resources

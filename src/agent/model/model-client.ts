@@ -12,6 +12,14 @@ export type ModelOutput = {
   text: string;
 };
 
+export type VisionModelInput = {
+  runId: string;
+  stepIndex: number;
+  prompt: string;
+  imageDataUrl: string;
+  signal?: AbortSignal | undefined;
+};
+
 export type ModelStreamCallbacks = {
   onStart?: (() => void) | undefined;
   onDelta?: ((delta: string) => void) | undefined;
@@ -22,6 +30,7 @@ export type ModelStreamCallbacks = {
 
 export interface ModelClient {
   complete(input: ModelInput): Promise<ModelOutput>;
+  completeVision?(input: VisionModelInput): Promise<ModelOutput>;
   streamComplete?(
     input: ModelInput,
     callbacks?: ModelStreamCallbacks

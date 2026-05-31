@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shadow DOM Fixture</title>
+</head>
+<body>
+  <main>
+    <h1>Shadow DOM Fixture</h1>
+    <x-search id="search-widget"></x-search>
+  </main>
+  <script>
+    const host = document.getElementById('search-widget');
+    const root = host.attachShadow({ mode: 'open' });
+    root.innerHTML = `
+      <section>
+        <label>Search docs <input aria-label="Search docs"></label>
+        <button aria-label="Run search">Go</button>
+      </section>
+    `;
+  </script>
+</body>
+</html>

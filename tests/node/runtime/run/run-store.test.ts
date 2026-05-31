@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { RunStore } from '../../../../src/background/runtime/run/run-store';
+import { InMemoryRunSessionPersistence } from '../../../../src/background/runtime/run/session-persistence';
 import type { RunRecord } from '../../../../src/background/runtime/run/runtime-service-types';
 import type { RunSnapshot, RuntimeEvent } from '../../../../src/runtime/runtime-messages';
 import { TRACE_EVENT_NAMES } from '../../../../src/shared/constants/event-names';
+import { defaultMemoryRepo } from '../../../../src/storage/memory-repo';
 
 describe('RunStore', () => {
   it('creates incrementing run IDs', () => {
@@ -53,6 +55,45 @@ describe('RunStore', () => {
     expect(store.getSnapshot('run_1')).toBe(snapshot);
   });
 
+  it('attaches current domain memory to snapshots without executing a memory tool', () => {
+    defaultMemoryRepo.clearAll();
+    const entry = defaultMemoryRepo.save({
+      domain: 'app.example.com',
+      task: '打开账单',
+      summary: '入口在 Billing'
+    });
+    const store = new RunStore();
+
+    store.setSnapshot('run_1', {
+      runId: 'run_1',
+      mode: 'ask',
+      status: 'observed',
+      observation: {
+        title: 'Example App',
+        url: 'https://app.example.com/dashboard',
+        currentDomain: 'app.example.com',
+        origin: 'https://app.example.com',
+        visibleTextSummary: 'Dashboard',
+        pageStateSummary: 'Ready',
+        interactiveCount: 0,
+        warnings: []
+      },
+      toolResult: {
+        tool: 'bh_page_observe',
+        ok: true,
+        code: 'ok',
+        summary: 'Observed'
+      }
+    });
+
+    expect(store.getSnapshot('run_1').toolResult?.tool).toBe('bh_page_observe');
+    expect(store.getSnapshot('run_1').memory).toEqual({
+      domain: 'app.example.com',
+      entries: [entry]
+    });
+    defaultMemoryRepo.clearAll();
+  });
+
   it('appends trace events to record and notifies listeners', () => {
     const store = new RunStore();
     const record: RunRecord = {
@@ -77,6 +118,29 @@ describe('RunStore', () => {
     expect(record.trace[0]!.runId).toBe('run_1');
     expect(record.trace[0]!.type).toBe(TRACE_EVENT_NAMES.STATE_CHANGED);
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists audit events for session diagnostics', () => {
+    const persistence = new InMemoryRunSessionPersistence();
+    const store = new RunStore({ sessionPersistence: persistence });
+    const runId = store.createRunId();
+    const record: RunRecord = {
+      task: 'test',
+      mode: 'ask',
+      trace: []
+    };
+
+    store.appendTrace(record, {
+      runId,
+      type: TRACE_EVENT_NAMES.STATE_CHANGED,
+      payload: { status: 'thinking' }
+    });
+
+    expect(persistence.readAuditEvents(runId)).toMatchObject([{
+      runId,
+      type: TRACE_EVENT_NAMES.STATE_CHANGED,
+      payload: { status: 'thinking' }
+    }]);
   });
 
   it('stamps appended trace events that do not include timestamps', () => {
@@ -232,6 +296,74 @@ describe('RunStore', () => {
     
     store.deletePendingApprovalAction('req_1');
     expect(store.getPendingApprovalAction('req_1')).toBeUndefined();
+  });
+
+  it('persists pending approval actions and snapshot summaries for session restore', () => {
+    const persistence = new InMemoryRunSessionPersistence();
+    const store = new RunStore({ sessionPersistence: persistence });
+    const runId = store.createRunId();
+    const action = {
+      runId,
+      tool: 'test_tool',
+      args: { param: 'value' }
+    };
+
+    store.setSnapshot(runId, {
+      runId,
+      mode: 'form',
+      status: 'waiting_for_approval',
+      observation: {
+        url: 'https://app.example.com',
+        title: 'Example',
+        currentDomain: 'app.example.com',
+        origin: 'https://app.example.com',
+        visibleTextSummary: 'Example page',
+        pageStateSummary: 'Ready',
+        interactiveCount: 1,
+        warnings: []
+      },
+      pendingApproval: {
+        id: 'req_1',
+        runId,
+        stepId: 'step_1',
+        tool: 'test_tool',
+        argsPreview: {},
+        risk: 'high',
+        reason: 'Needs approval',
+        status: 'pending',
+        createdAt: Date.now()
+      }
+    });
+    store.setPendingApprovalAction('req_1', action);
+
+    expect(persistence.readSnapshotSummary(runId)).toMatchObject({
+      runId,
+      status: 'waiting_for_approval',
+      domain: 'app.example.com',
+      pendingApprovalId: 'req_1'
+    });
+
+    const restoredStore = new RunStore({ sessionPersistence: persistence });
+    expect(restoredStore.getPendingApprovalAction('req_1')).toEqual(action);
+  });
+
+  it('expires persisted pending approval actions', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1000);
+    const persistence = new InMemoryRunSessionPersistence();
+    const store = new RunStore({ sessionPersistence: persistence });
+    const action = {
+      runId: store.createRunId(),
+      tool: 'test_tool',
+      args: {}
+    };
+
+    store.setPendingApprovalAction('req_1', action);
+    vi.setSystemTime(1000 + 11 * 60 * 1000);
+
+    const restoredStore = new RunStore({ sessionPersistence: persistence });
+    expect(restoredStore.getPendingApprovalAction('req_1')).toBeUndefined();
+    vi.useRealTimers();
   });
 
   it('isolates data between different runs', () => {

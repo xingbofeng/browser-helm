@@ -36,6 +36,39 @@ const tools: ToolPromptContract[] = [
     readOnly: false,
     requiresApproval: true,
     contextVisibility: 'summary'
+  },
+  {
+    name: 'bh_download_list',
+    title: 'Downloads',
+    description: 'List downloads',
+    modes: ['advanced'],
+    risk: 'safe',
+    argsSchema: {},
+    readOnly: true,
+    requiresApproval: false,
+    contextVisibility: 'summary'
+  },
+  {
+    name: 'bh_file_upload_with_approval',
+    title: 'Upload file',
+    description: 'Upload file with approval',
+    modes: ['advanced'],
+    risk: 'high',
+    argsSchema: {},
+    readOnly: false,
+    requiresApproval: true,
+    contextVisibility: 'summary'
+  },
+  {
+    name: 'bh_clipboard_write_with_approval',
+    title: 'Clipboard write',
+    description: 'Write clipboard',
+    modes: ['advanced'],
+    risk: 'high',
+    argsSchema: {},
+    readOnly: false,
+    requiresApproval: true,
+    contextVisibility: 'summary'
   }
 ];
 
@@ -113,5 +146,75 @@ describe('core ToolSelector', () => {
 
     expect(result.visibleTools).toEqual([]);
     expect(result.limitations).toContain('Domain bank.example is not allowed');
+  });
+
+  it('loads advanced tool families only when the task and capabilities need them', () => {
+    const withoutNeed = selectToolsForRun({
+      mode: 'full',
+      task: '总结当前页面',
+      tools,
+      capabilities: {
+        hasActiveTab: true,
+        hasDebuggerPermission: false,
+        hasClipboardPermission: true,
+        hasDownloadsPermission: true,
+        hostPermissions: [],
+        shallowDebugAvailable: true,
+        cdp: 'reserved'
+      }
+    });
+
+    expect(withoutNeed.hiddenTools).toContainEqual({
+      tool: 'bh_download_list',
+      reason: 'Advanced tool family is not needed for current task'
+    });
+
+    const downloadTask = selectToolsForRun({
+      mode: 'full',
+      task: '列出下载文件',
+      tools,
+      capabilities: {
+        hasActiveTab: true,
+        hasDebuggerPermission: false,
+        hasClipboardPermission: false,
+        hasDownloadsPermission: true,
+        hostPermissions: [],
+        shallowDebugAvailable: true,
+        cdp: 'reserved'
+      }
+    });
+
+    expect(downloadTask.visibleTools).toContain('bh_download_list');
+    expect(downloadTask.hiddenTools).toContainEqual({
+      tool: 'bh_file_upload_with_approval',
+      reason: 'Advanced tool family is not needed for current task'
+    });
+    expect(downloadTask.hiddenTools).toContainEqual({
+      tool: 'bh_clipboard_write_with_approval',
+      reason: 'Clipboard permission is unavailable'
+    });
+  });
+
+  it('does not require downloads permission for upload approval boundary', () => {
+    const result = selectToolsForRun({
+      mode: 'full',
+      task: '上传头像文件',
+      tools,
+      capabilities: {
+        hasActiveTab: true,
+        hasDebuggerPermission: false,
+        hasClipboardPermission: false,
+        hasDownloadsPermission: false,
+        hostPermissions: [],
+        shallowDebugAvailable: true,
+        cdp: 'reserved'
+      }
+    });
+
+    expect(result.visibleTools).toContain('bh_file_upload_with_approval');
+    expect(result.hiddenTools).toContainEqual({
+      tool: 'bh_download_list',
+      reason: 'Downloads permission is unavailable'
+    });
   });
 });

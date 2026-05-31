@@ -243,6 +243,7 @@ export class FormSubmitApprovalFlow implements ToolApprovalFlow {
       {
         runId: input.runId,
         stepId: `${input.runId}:post_submit_observe`,
+        tabId: record.tabId,
         runMode: record.mode,
         ...(record.locale ? { locale: record.locale } : {})
       }

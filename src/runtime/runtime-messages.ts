@@ -16,6 +16,7 @@ import type {
 import type { TaskClassification } from '../shared/schemas/mode-system.schema';
 import type { RecoveryState } from '../shared/schemas/recovery.schema';
 import type { RuntimeCapabilities } from '../shared/schemas/runtime-capabilities.schema';
+import type { MemoryEntry } from '../shared/schemas/memory';
 import type { ToolResult } from '../shared/schemas/tool-result.schema';
 import type { ProviderSettings } from '../storage/interfaces/settings-store';
 import type {
@@ -174,6 +175,11 @@ export type RuntimeTaskState = {
   updatedAt: number;
 };
 
+export type RuntimeMemorySnapshot = {
+  domain: string;
+  entries: MemoryEntry[];
+};
+
 export type RunSnapshot = {
   runId: string;
   targetTabId?: number | undefined;
@@ -208,6 +214,7 @@ export type RunSnapshot = {
   canInterrupt?: boolean;
   canReviseGoal?: boolean;
   taskState?: RuntimeTaskState | undefined;
+  memory?: RuntimeMemorySnapshot | undefined;
   toolResult?: RuntimeToolResultSnapshot;
   pendingApproval?: ApprovalUiState | undefined;
   messages?: AgentMessage[] | undefined;

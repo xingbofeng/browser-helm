@@ -118,7 +118,7 @@ export class CockpitUiFlow {
 
     const approvalPage = await sidePanel.openRun(snapshot.runId);
     await new CockpitPanel(approvalPage).expectApprovalDrawer({
-      action: 'Click Iframe Target'
+      action: 'bh_iframe_click'
     });
   }
 
@@ -177,6 +177,16 @@ export class CockpitUiFlow {
       task: '观察当前页面',
       mode: 'ask'
     });
+    const enableSnapshot = await sidePanel.runOnTab({
+      tabId,
+      task: '启用页面健康诊断',
+      mode: 'debug'
+    });
+    await executeToolResult(sidePanel.executeTool({
+      runId: enableSnapshot.runId,
+      tool: TOOL_NAMES.DEBUG_COLLECT_PAGE_HEALTH,
+      args: {}
+    }));
     await fixture.page.evaluate(() => {
       window.postMessage({
         channel: 'BROWSER_HELM_PAGE_HEALTH_EVENT',

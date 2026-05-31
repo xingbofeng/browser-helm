@@ -79,7 +79,8 @@ function requestHasArticleToolResult(body: string): boolean {
     if (typeof content !== 'string') {
       return false;
     }
-    const userContext = JSON.parse(content) as {
+    const jsonStart = content.indexOf('{');
+    const userContext = JSON.parse(jsonStart >= 0 ? content.slice(jsonStart) : content) as {
       lastToolResult?: {
         tool?: unknown;
         ok?: unknown;
@@ -131,5 +132,8 @@ function listen(server: Server): Promise<void> {
 }
 
 function contentType(filePath: string): string {
-  return extname(filePath) === '.html' ? 'text/html; charset=utf-8' : 'text/plain';
+  const extension = extname(filePath);
+  if (extension === '.html') return 'text/html; charset=utf-8';
+  if (extension === '.pdf') return 'application/pdf';
+  return 'text/plain';
 }

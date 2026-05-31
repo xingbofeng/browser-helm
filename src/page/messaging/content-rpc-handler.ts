@@ -18,6 +18,7 @@ import {
   scrollViewport,
   waitUntilStable
 } from './viewport-dom';
+import { listShadowRoots, queryShadowRoot } from '../shadow/shadow-dom';
 import {
   createOpaqueToken,
   describeResolvedElement,
@@ -68,7 +69,11 @@ export class ContentRpcHandler {
   private readonly formActionGrants = new Map<string, FormActionGrant>();
   private locale: Locale;
 
-  constructor(private readonly document: Document, locale: Locale = 'zh') {
+  constructor(
+    private readonly document: Document,
+    locale: Locale = 'zh',
+    private readonly enablePageHealthBridge?: (() => void) | undefined
+  ) {
     this.locale = locale;
   }
 
@@ -106,6 +111,14 @@ export class ContentRpcHandler {
 
   private handleParsed(message: ContentRpcRequest): ContentRpcResponse | Promise<ContentRpcResponse> {
     switch (message.type) {
+      case CONTENT_RPC_MESSAGES.PAGE_HEALTH_ENABLE: {
+        this.enablePageHealthBridge?.();
+        return {
+          ok: true,
+          enabled: true,
+          summary: 'Temporary shallow page-health hook enabled for Debug mode.'
+        };
+      }
       case CONTENT_RPC_MESSAGES.PAGE_OBSERVE: {
         const refMap = this.ensureRefMap(true);
         return {
@@ -215,6 +228,21 @@ export class ContentRpcHandler {
           return iframeActionUnauthorized();
         }
         return this.typeIframeTarget(message.refId, message.text);
+      }
+      case CONTENT_RPC_MESSAGES.SHADOW_LIST: {
+        return {
+          ok: true,
+          shadowRoots: listShadowRoots(this.document)
+        };
+      }
+      case CONTENT_RPC_MESSAGES.SHADOW_QUERY: {
+        return {
+          ok: true,
+          shadowQuery: queryShadowRoot(this.document, {
+            hostSelector: message.hostSelector,
+            selector: message.selector
+          })
+        };
       }
       // form fill actions
       case CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE: {

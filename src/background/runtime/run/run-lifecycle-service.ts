@@ -188,6 +188,7 @@ export class RunLifecycleService {
         {
           runId,
           stepId: `${runId}:observe`,
+          tabId,
           runMode: record.mode,
           ...(record.locale ? { locale: record.locale } : {})
         }

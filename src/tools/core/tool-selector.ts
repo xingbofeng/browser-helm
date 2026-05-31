@@ -2,6 +2,7 @@ import type { RuntimeCapabilities } from '../../shared/schemas/runtime-capabilit
 import type { ToolSelection } from '../../shared/schemas/mode-system.schema';
 import type { RunMode } from '../../shared/schemas/tool.schema';
 import type { ToolRisk } from '../../shared/schemas/tool-result.schema';
+import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import type { ToolPromptContract } from './tool-router';
 import { isToolAvailableInRunMode } from './tool-router';
 
@@ -55,6 +56,20 @@ export function selectToolsForRun(input: SelectToolsInput): ToolSelection {
         reason: `Tool is not available in ${input.mode} mode`
       });
       continue;
+    }
+
+    if (tool.modes.includes('advanced')) {
+      const advancedGate = evaluateAdvancedToolGate(tool.name, input.task, input.capabilities);
+      if (advancedGate) {
+        hiddenTools.push({
+          tool: tool.name,
+          reason: advancedGate
+        });
+        if (advancedGate.endsWith('permission is unavailable') && !limitations.includes(advancedGate)) {
+          limitations.push(advancedGate);
+        }
+        continue;
+      }
     }
 
     if (tool.risk === 'high' && input.mode !== 'full') {
@@ -111,6 +126,14 @@ export function selectToolsForRun(input: SelectToolsInput): ToolSelection {
       continue;
     }
 
+    if (tool.name.startsWith('bh_vision_') && !taskNeedsVision(input.task, input.lastError?.code)) {
+      hiddenTools.push({
+        tool: tool.name,
+        reason: 'Vision tools are reserved for visual ambiguity or DOM/a11y fallback'
+      });
+      continue;
+    }
+
     visibleTools.push(tool.name);
   }
 
@@ -120,4 +143,50 @@ export function selectToolsForRun(input: SelectToolsInput): ToolSelection {
     hiddenTools,
     limitations
   };
+}
+
+function taskNeedsVision(task: string, lastErrorCode: string | undefined): boolean {
+  if (lastErrorCode === 'ELEMENT_NOT_ACTIONABLE' || lastErrorCode === 'ELEMENT_NOT_FOUND') {
+    return true;
+  }
+  return /screenshot|vision|visual|see|look|canvas|chart|map|overlay|blocked|covered|layout|misaligned|hidden|obstruct|截图|视觉|看一下|看见|画布|图表|地图|遮挡|挡住|覆盖|布局|错位|隐藏/u.test(task);
+}
+
+function evaluateAdvancedToolGate(
+  toolName: string,
+  task: string,
+  capabilities: RuntimeCapabilities
+): string | undefined {
+  if (toolName === TOOL_NAMES.FILE_UPLOAD_WITH_APPROVAL) {
+    return taskNeedsAdvancedFamily(task, /upload|file upload|上传|选择文件/u);
+  }
+  if (toolName.startsWith('bh_download_') || toolName.startsWith('bh_file_')) {
+    if (!capabilities.hasDownloadsPermission) {
+      return 'Downloads permission is unavailable';
+    }
+    return taskNeedsAdvancedFamily(task, /download|downloads|file|files|下载|文件/u);
+  }
+  if (toolName.startsWith('bh_clipboard_')) {
+    if (!capabilities.hasClipboardPermission) {
+      return 'Clipboard permission is unavailable';
+    }
+    return taskNeedsAdvancedFamily(task, /clipboard|copy|paste|剪贴板|复制|粘贴/u);
+  }
+  if (toolName.startsWith('bh_tab_')) {
+    return taskNeedsAdvancedFamily(task, /tab|tabs|window|windows|标签|窗口|新页面|新标签/u);
+  }
+  if (toolName.startsWith('bh_shadow_')) {
+    return taskNeedsAdvancedFamily(task, /shadow|web component|shadow dom|影子|组件/u);
+  }
+  if (toolName.startsWith('bh_doc_')) {
+    return taskNeedsAdvancedFamily(task, /pdf|document|doc|text file|文档|文件|资料/u);
+  }
+  return undefined;
+}
+
+function taskNeedsAdvancedFamily(task: string, pattern: RegExp): string | undefined {
+  if (pattern.test(task)) {
+    return undefined;
+  }
+  return 'Advanced tool family is not needed for current task';
 }

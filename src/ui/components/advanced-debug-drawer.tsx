@@ -1,10 +1,14 @@
-import { Bug, Download, ListTree, MousePointerClick, RadioTower, Wrench } from 'lucide-react';
-import { FileText } from 'lucide-react';
+import { Bug, Download, Eye, ListTree, MousePointerClick, RadioTower, Wrench } from 'lucide-react';
+import { FileText, Gauge } from 'lucide-react';
 import { Button } from 'animal-island-ui';
 import { useMemo, useState } from 'react';
 import { useT, useLocale } from '../../i18n/context';
 
 import type { RunSnapshot, RuntimeEvent } from '../../runtime/runtime-messages';
+import { TOOL_NAMES } from '../../shared/constants/tool-names';
+import { cdpAttachStateSchema, cdpConsoleEventSchema, cdpPerformanceSnapshotSchema } from '../../shared/schemas/cdp-event';
+import { networkRequestRecordSchema, requestDetailSchema } from '../../shared/schemas/network-request';
+import { screenshotCaptureSchema, visionObservationSchema } from '../../shared/schemas/vision';
 import type { StructuredPageData } from '../../shared/schemas/structured-page-data.schema';
 import { jsonPreview } from '../lib/format-tool';
 import {
@@ -13,6 +17,10 @@ import {
 } from '../lib/merge-elements-forms';
 import { ToolInspector } from './tool-inspector';
 import { TraceLog, summarizeTraceEvents } from './trace-log';
+import { ConsoleEventPanel } from './console-event-panel';
+import { PerformancePanel } from './performance-panel';
+import { RequestInspector } from './request-inspector';
+import { VisionPanel } from './vision-panel';
 
 type AdvancedDebugDrawerProps = {
   snapshot?: RunSnapshot | undefined;
@@ -38,6 +46,8 @@ function debugTabs(t: ReturnType<typeof useT>) {
     { key: 'tools', label: t('debug.tab.tools'), icon: Wrench },
     { key: 'elements', label: t('debug.tab.elements'), icon: MousePointerClick },
     { key: 'form', label: t('debug.tab.form'), icon: FileText },
+    { key: 'deep', label: t('debug.tab.deep'), icon: Gauge },
+    { key: 'vision', label: t('vision.panel.title'), icon: Eye },
     { key: 'streaming', label: t('debug.tab.streaming'), icon: RadioTower }
   ] as const;
 }
@@ -130,6 +140,8 @@ export function AdvancedDebugPanel({
       ) : null}
       {activeTab === 'streaming' ? <StreamingTab snapshot={snapshot} /> : null}
       {activeTab === 'form' ? <FormExecutionTab snapshot={snapshot} /> : null}
+      {activeTab === 'deep' ? <DeepInspectTab snapshot={snapshot} /> : null}
+      {activeTab === 'vision' ? <VisionTab snapshot={snapshot} /> : null}
     </div>
   );
 }
@@ -159,6 +171,36 @@ function DebugSummary(props: {
           {t('debug.shallowBoundary')}
         </span>
       ) : null}
+    </div>
+  );
+}
+
+function DeepInspectTab({ snapshot }: { snapshot?: RunSnapshot | undefined }) {
+  const t = useT();
+  const view = readCdpView(snapshot?.toolResult);
+  return (
+    <div className="bh-debugTab">
+      <div className="bh-debugTabHeader">
+        <Gauge size={16} />
+        <strong>{t('debug.deep.title')}</strong>
+      </div>
+      <RequestInspector
+        status={view.status}
+        reason={view.reason}
+        requests={view.requests}
+        detail={view.detail}
+      />
+      <PerformancePanel snapshot={view.performance} />
+      <ConsoleEventPanel events={view.consoleEvents} />
+    </div>
+  );
+}
+
+function VisionTab({ snapshot }: { snapshot?: RunSnapshot | undefined }) {
+  const view = readVisionView(snapshot?.toolResult);
+  return (
+    <div className="bh-debugTab">
+      <VisionPanel observation={view.observation} screenshot={view.screenshot} />
     </div>
   );
 }
@@ -434,4 +476,95 @@ function FormExecutionTab({ snapshot }: { snapshot?: RunSnapshot | undefined }) 
       )}
     </div>
   );
+}
+
+type CdpView = {
+  status: 'detached' | 'attached' | 'error';
+  reason?: string | undefined;
+  requests: Array<ReturnType<typeof networkRequestRecordSchema.parse>>;
+  detail?: ReturnType<typeof requestDetailSchema.parse> | undefined;
+  performance?: ReturnType<typeof cdpPerformanceSnapshotSchema.parse> | undefined;
+  consoleEvents: Array<ReturnType<typeof cdpConsoleEventSchema.parse>>;
+};
+
+function readCdpView(toolResult: RunSnapshot['toolResult']): CdpView {
+  const data = readToolData(toolResult);
+  const view: CdpView = {
+    status: 'detached',
+    requests: [],
+    consoleEvents: []
+  };
+  if (!toolResult) return view;
+  if (toolResult.tool === TOOL_NAMES.CDP_ATTACH) {
+    const parsed = cdpAttachStateSchema.safeParse(data.state);
+    return parsed.success
+      ? { ...view, status: parsed.data.attached ? 'attached' : 'error', reason: parsed.data.reason }
+      : view;
+  }
+  if (toolResult.tool === TOOL_NAMES.CDP_GET_NETWORK_EVENTS && Array.isArray(data.requests)) {
+    return {
+      ...view,
+      status: 'attached',
+      requests: data.requests.flatMap((item) => {
+        const parsed = networkRequestRecordSchema.safeParse(item);
+        return parsed.success ? [parsed.data] : [];
+      })
+    };
+  }
+  if (toolResult.tool === TOOL_NAMES.CDP_GET_REQUEST_DETAIL) {
+    const parsed = requestDetailSchema.safeParse(data.detail);
+    return parsed.success
+      ? { ...view, status: 'attached', requests: [parsed.data], detail: parsed.data }
+      : view;
+  }
+  if (toolResult.tool === TOOL_NAMES.CDP_GET_PERFORMANCE_METRICS) {
+    const parsed = cdpPerformanceSnapshotSchema.safeParse(data.snapshot);
+    return parsed.success ? { ...view, status: 'attached', performance: parsed.data } : view;
+  }
+  if (toolResult.tool === TOOL_NAMES.CDP_GET_CONSOLE_EVENTS && Array.isArray(data.events)) {
+    return {
+      ...view,
+      status: 'attached',
+      consoleEvents: data.events.flatMap((item) => {
+        const parsed = cdpConsoleEventSchema.safeParse(item);
+        return parsed.success ? [parsed.data] : [];
+      })
+    };
+  }
+  return toolResult.tool === TOOL_NAMES.CDP_DETACH ? { ...view, status: 'detached' } : view;
+}
+
+function readToolData(toolResult: RunSnapshot['toolResult']): Record<string, unknown> {
+  if (!toolResult || typeof toolResult.detail !== 'object' || toolResult.detail === null || Array.isArray(toolResult.detail)) {
+    return {};
+  }
+  const detail = toolResult.detail as Record<string, unknown>;
+  return typeof detail.data === 'object' && detail.data !== null && !Array.isArray(detail.data)
+    ? detail.data as Record<string, unknown>
+    : {};
+}
+
+function readVisionView(toolResult: RunSnapshot['toolResult']) {
+  const data = readToolData(toolResult);
+  const observation = visionObservationSchema.safeParse(data.observation);
+  const screenshot = readVisionScreenshot(data.screenshot);
+  return {
+    observation: observation.success ? observation.data : undefined,
+    screenshot
+  };
+}
+
+function readVisionScreenshot(value: unknown) {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const parsed = screenshotCaptureSchema.partial().safeParse({
+    mode: record.mode,
+    mimeType: record.mimeType,
+    width: record.width,
+    height: record.height,
+    bounds: record.bounds
+  });
+  return parsed.success ? parsed.data : undefined;
 }

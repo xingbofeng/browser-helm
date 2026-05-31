@@ -2,7 +2,7 @@ const providerSecretPattern = /\bsk-[A-Za-z0-9_-]{8,}/gu;
 const emailPattern = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu;
 const phonePattern = /(?<![\w@])(?:\+?\d[\d\s\-()]{6,}\d)(?![\w@])/gu;
 const sensitiveDetailKeyPattern =
-  /api.?key|password|token|secret|otp|one.?time|sensitive.?text|requested.?value|actual.?value|value.?preview|masked.?actual.?value/i;
+  /api.?key|password|token|secret|otp|one.?time|sensitive.?text|clipboard.?text|requested.?value|actual.?value|value.?preview|masked.?actual.?value|data.?url/i;
 
 export function maskProviderSecret(value: string): string {
   return value.replace(providerSecretPattern, '[MASKED]');
@@ -48,6 +48,9 @@ export function sanitizeSensitiveDetail(value: unknown): unknown {
 
 function sanitizeDetailValue(value: unknown, key: string): unknown {
   if (typeof value === 'string') {
+    if (/^data:image\//iu.test(value)) {
+      return '[MASKED_IMAGE_DATA]';
+    }
     return sensitiveDetailKeyPattern.test(key)
       ? '[MASKED]'
       : redactTextForModelContext(value);

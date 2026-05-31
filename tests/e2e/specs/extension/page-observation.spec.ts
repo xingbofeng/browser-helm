@@ -2,7 +2,7 @@ import { test } from '@playwright/test';
 
 import { PageObservationFlow } from '../../flows/page-observation-flow';
 
-test('observes basic form page through content RPC', async () => {
+test('通过内容脚本 RPC 观察基础表单页面', async () => {
   const flow = await PageObservationFlow.start();
   try {
     await flow.expectBasicFormObservation();
@@ -11,7 +11,7 @@ test('observes basic form page through content RPC', async () => {
   }
 });
 
-test('renders empty observation for pages without interactive elements', async () => {
+test('页面没有交互元素时渲染空观察结果', async () => {
   const flow = await PageObservationFlow.start();
   try {
     await flow.expectEmptyObservation();
@@ -20,7 +20,7 @@ test('renders empty observation for pages without interactive elements', async (
   }
 });
 
-test('observes form fields inside iframe through runtime aggregation', async () => {
+test('通过运行时聚合观察 iframe 内的表单字段', async () => {
   const flow = await PageObservationFlow.start();
   try {
     await flow.expectIframeFormObservation();
@@ -29,7 +29,7 @@ test('observes form fields inside iframe through runtime aggregation', async () 
   }
 });
 
-test('refreshes side panel after delayed iframe form render', async () => {
+test('iframe 表单延迟渲染后刷新侧边栏', async () => {
   const flow = await PageObservationFlow.start();
   try {
     await flow.expectDelayedIframeFormRefresh();
@@ -38,7 +38,7 @@ test('refreshes side panel after delayed iframe form render', async () => {
   }
 });
 
-test.skip('routes iframe read and blocks high-risk click/type before mutation', async () => {
+test('路由 iframe 读取并在变更前阻止高风险点击和输入', async () => {
   const flow = await PageObservationFlow.start();
   try {
     await flow.expectIframeActModeReadClickType();
@@ -47,7 +47,7 @@ test.skip('routes iframe read and blocks high-risk click/type before mutation', 
   }
 });
 
-test.skip('denies high-risk iframe tool through runtime approval API', async () => {
+test('通过运行时审批 API 拒绝高风险 iframe 工具', async () => {
   const flow = await PageObservationFlow.start();
   try {
     await flow.expectRuntimeApprovalDenyForIframeTool();

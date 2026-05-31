@@ -2,13 +2,13 @@ import { test } from '@playwright/test';
 
 import { RealSitesFlow } from '../../flows/real-sites-flow';
 
-test.describe('real site smoke E2E', () => {
+test.describe('真实站点冒烟端到端', () => {
   test.skip(
     process.env.BROWSER_HELM_REAL_SITE_E2E !== '1',
-    'Real site E2E is opt-in because third-party pages are unstable.'
+    '真实站点端到端用例默认关闭，因为第三方页面不稳定。'
   );
 
-  test('fills Google search box without submitting', async () => {
+  test('填写 Google 搜索框但不提交', async () => {
     const flow = await RealSitesFlow.start();
     try {
       await flow.expectGoogleSearchFill();
@@ -17,7 +17,7 @@ test.describe('real site smoke E2E', () => {
     }
   });
 
-  test('fills GitHub search box without submitting', async () => {
+  test('填写 GitHub 搜索框但不提交', async () => {
     const flow = await RealSitesFlow.start();
     try {
       await flow.expectGithubSearchFill();
@@ -26,7 +26,7 @@ test.describe('real site smoke E2E', () => {
     }
   });
 
-  test('fills Apple registration low-risk fields without sensitive data or submit', async () => {
+  test('填写 Apple 注册页低风险字段且不输入敏感数据也不提交', async () => {
     test.setTimeout(120_000);
     const flow = await RealSitesFlow.start();
     try {
@@ -36,7 +36,7 @@ test.describe('real site smoke E2E', () => {
     }
   });
 
-  test('observes Anthropic tools-for-agents article', async () => {
+  test('观察 Anthropic tools-for-agents 文章', async () => {
     const flow = await RealSitesFlow.start();
     try {
       await flow.expectAnthropicToolsForAgentsArticleObservation();

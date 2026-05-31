@@ -2,7 +2,7 @@ import { test } from '@playwright/test';
 
 import { DebugDrawerFlow } from '../../flows/debug-drawer-flow';
 
-test('debug drawer Trace tab 显示分级 trace item', async () => {
+test('调试抽屉的追踪标签显示分级追踪条目', async () => {
   const flow = await DebugDrawerFlow.start();
   try {
     await flow.expectTraceTabShowsGradedItems();
@@ -11,7 +11,7 @@ test('debug drawer Trace tab 显示分级 trace item', async () => {
   }
 });
 
-test('trace item 大 payload 默认折叠', async () => {
+test('追踪条目的大负载默认折叠', async () => {
   const flow = await DebugDrawerFlow.start();
   try {
     await flow.expectLargePayloadCollapsed();
@@ -20,7 +20,7 @@ test('trace item 大 payload 默认折叠', async () => {
   }
 });
 
-test('工具结果 tab 显示工具调用结果', async () => {
+test('工具结果标签显示工具调用结果', async () => {
   const flow = await DebugDrawerFlow.start();
   try {
     await flow.expectToolsTabShowsResults();
@@ -29,7 +29,7 @@ test('工具结果 tab 显示工具调用结果', async () => {
   }
 });
 
-test('无工具时工具 tab 显示空态', async () => {
+test('无工具时工具标签显示空态', async () => {
   const flow = await DebugDrawerFlow.start();
   try {
     await flow.expectToolsTabEmptyState();
@@ -38,7 +38,7 @@ test('无工具时工具 tab 显示空态', async () => {
   }
 });
 
-test('错误 trace 有明显 error 状态', async () => {
+test('错误追踪有明显错误状态', async () => {
   const flow = await DebugDrawerFlow.start();
   try {
     await flow.expectErrorTraceHasErrorState();

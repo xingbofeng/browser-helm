@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/status-v1.0-blue?style=flat-square" alt="Status" />
+  <img src="https://img.shields.io/badge/status-v1.5.0-blue?style=flat-square" alt="Status" />
   <img src="https://img.shields.io/badge/runtime-Chrome_Extension-2ea44f?style=flat-square" alt="Runtime" />
   <img src="https://img.shields.io/badge/arch-local--first-black?style=flat-square" alt="Architecture" />
   <img src="https://img.shields.io/badge/agent-a11y--first-6f42c1?style=flat-square" alt="Agent" />
@@ -101,7 +101,7 @@ Agent core loop, memory, trace, and settings all run locally via chrome.storage.
 
 ## 🛠️ Built-in Tools
 
-BrowserHelm ships with **30+ `bh_`-prefixed tools** covering page observation, form diagnosis, element reading, read-only iframe access, accessibility snapshots, and page health diagnostics. Tools are organized by domain:
+BrowserHelm ships with **70+ `bh_`-prefixed tools** covering page observation, form diagnosis, element reading, read-only iframe access, accessibility snapshots, DevTools/CDP, vision inspection, local memory, and workflow replay. Tools are organized by domain:
 
 | Module | Tools | Description |
 |---|---|---|
@@ -111,7 +111,10 @@ BrowserHelm ships with **30+ `bh_`-prefixed tools** covering page observation, f
 | 🖱️ Element | `bh_element_inspect` `bh_element_read_state` `bh_action_check_readiness` | Element inspection, action readiness |
 | 📝 Form | `bh_form_list` `bh_form_inspect` `bh_form_read_fields` `bh_form_find_missing_required` `bh_form_find_validation_errors` `bh_form_find_disabled_submit_reason` `bh_form_infer_fill_plan` `bh_form_fill_field` `bh_form_fill_many` `bh_form_verify` `bh_form_submit_with_approval` | Complete form diagnosis, fill, verify, approve pipeline |
 | 🖼️ iframe | `bh_iframe_read` | iframe content reading (mutating actions not exposed in v1.1.2) |
-| 🔧 Debug | `bh_debug_collect_page_health` | Page health diagnostics |
+| 🔧 Debug | `bh_debug_collect_page_health` `bh_cdp_attach` `bh_cdp_get_network_events` `bh_cdp_get_console_events` | Page health diagnostics and CDP deep inspect |
+| 👁️ Vision | `bh_vision_capture_viewport` `bh_vision_describe_viewport` `bh_vision_detect_overlay` `bh_pointer_click` | Screenshot/vision enhancement, DOM fallback, and last-resort coordinate click |
+| 🗂️ Advanced browser | `bh_tab_list` `bh_tab_get_active` `bh_tab_focus` `bh_shadow_list` `bh_shadow_query` `bh_download_list` `bh_doc_read_url` | Multi-tab context, Shadow DOM, download metadata, and document/PDF reading |
+| 🧩 Memory/Workflow | `bh_memory_lookup` `bh_pad_append` `bh_flow_preview` `bh_flow_run_with_approval` | Local domain memory, scratchpad, and workflow replay |
 
 See [src/tools/README.md](src/tools/README.md) for details.
 

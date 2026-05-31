@@ -118,9 +118,58 @@ bh_form_submit_with_approval
 
 ```txt
 bh_debug_collect_page_health
+bh_cdp_attach
+bh_cdp_detach
+bh_cdp_get_targets
+bh_cdp_get_console_events
+bh_cdp_get_network_events
+bh_cdp_get_request_detail
+bh_cdp_get_response_body
+bh_cdp_get_performance_metrics
+bh_cdp_get_event_listeners
+bh_cdp_capture_dom_snapshot
 ```
 
-该工具读取浅层页面健康摘要。当前 page-health hook 默认注入页面主世界以捕获 console/network failure 摘要；它不采集 cookie、密码字段或用户输入。后续 v1.3 会收敛为 Debug mode opt-in，并优先使用 CDP deep debug 替代可替代场景。
+Debug 工具分两层：`bh_cdp_*` 通过 `debugger` 权限连接当前 tab，采集 Network、Runtime、Performance 和 DOM 诊断数据；`bh_debug_collect_page_health` 是浅层 fallback，只在 Debug mode 调用时按需启用临时 `page-health-hook.js`。CDP 与 page-health 输出都会做敏感 header、cookie、token、URL query/path/fragment 和明显 provider secret 脱敏。
+
+### Vision / screenshot
+
+```txt
+bh_vision_capture_viewport
+bh_vision_capture_full_page
+bh_vision_capture_element
+bh_vision_describe_viewport
+bh_vision_detect_overlay
+bh_vision_detect_layout_issues
+```
+
+Vision 工具是 DOM/a11y 主路径的增强，不是 screenshot-first loop。`bh_vision_capture_full_page` 优先走 CDP full-page capture，并在不可用时明确回退可见视口。截图结果可以用于 vision provider 输入，但原始 `dataUrl` 不进入 trace payload，持久化 snapshot detail 会替换成 `[MASKED_IMAGE_DATA]`。provider 不支持视觉输入时，`bh_vision_describe_viewport` 返回 `VISION_UNAVAILABLE` 和 `fallback: dom_a11y`，runtime 保持 run 为 observed，不阻断已有页面观察。
+
+### Pointer fallback
+
+```txt
+bh_pointer_click
+```
+
+`bh_pointer_click` 只在 DOM/a11y ref 路径不可用、且 vision 检查给出明确坐标原因时使用。它会真实改变页面状态，普通视觉 fallback 为 `medium` risk；如果 reason 命中支付、提交、删除、密码、上传等敏感场景，工具不会点击，而是返回 approval required。
+
+### Advanced tab tools
+
+```txt
+bh_tab_list
+bh_tab_get_active
+bh_tab_focus
+bh_shadow_list
+bh_shadow_query
+bh_download_list
+bh_file_read_download
+bh_file_upload_with_approval
+bh_doc_read_url
+bh_clipboard_read_with_approval
+bh_clipboard_write_with_approval
+```
+
+Tab 工具用于多标签工作流的目标枚举和焦点切换。`bh_tab_list` / `bh_tab_get_active` 只读并移除 URL query/hash；`bh_tab_focus` 只切换已有 tab 焦点，执行后必须重新 observe 新目标。Shadow 工具只读取 open shadow root，不穿透 closed shadow root，也不执行 shadow 内点击/输入。Download/file 工具覆盖下载记录读取、本地文件读取边界和上传审批边界：`bh_download_list` 只返回脱敏元数据；`bh_file_read_download` 是高风险 approval-gated 安全外壳；`bh_file_upload_with_approval` 不读取本地路径、不设置 file input，只创建审批和手动文件选择提示。Doc 工具 `bh_doc_read_url` 读取浏览器可访问文本/PDF，返回文本、页码范围、总页数、scanned 和 truncated。Clipboard 工具只创建审批，请求本身不读写系统剪贴板；批准后通过 offscreen document 执行真实读写，snapshot detail 对剪贴板内容脱敏。
 
 ### Action readiness
 
@@ -149,6 +198,19 @@ bh_action_check_readiness
 | `bh_form_verify` | `low` | 否 | 否 |
 | `bh_form_submit_with_approval` | `high` | 否，创建审批请求 | 用户批准后真实提交并重新 observe |
 | `bh_debug_collect_page_health` | `safe` | 否 | 否 |
+| `bh_cdp_attach` / `bh_cdp_detach` | `medium` | 否，仅改变扩展 debugger attach 状态 | 否 |
+| `bh_cdp_get_*` / `bh_cdp_capture_dom_snapshot` | `safe` | 否 | 否 |
+| `bh_vision_capture_*` / `bh_vision_describe_viewport` / `bh_vision_detect_*` | `safe` | 否 | 否 |
+| `bh_pointer_click` | `medium`，敏感场景升级为 approval required | 是，点击视口坐标 | 是 |
+| `bh_tab_list` / `bh_tab_get_active` | `safe` | 否 | 否 |
+| `bh_tab_focus` | `low` | 否，仅改变浏览器焦点 | 是 |
+| `bh_shadow_list` / `bh_shadow_query` | `safe` | 否 | 否 |
+| `bh_download_list` | `safe` | 否 | 否 |
+| `bh_file_read_download` | `high` | 否，创建审批/边界说明 | 否 |
+| `bh_file_upload_with_approval` | `high` | 否，创建审批/手动选择提示 | 是 |
+| `bh_doc_read_url` | `safe` | 否 | 否 |
+| `bh_clipboard_read_with_approval` | `high` | 否，批准后读取系统剪贴板 | 否 |
+| `bh_clipboard_write_with_approval` | `high` | 是，批准后修改系统剪贴板 | 否 |
 | `bh_action_check_readiness` | `low` | 否 | 否 |
 
 ## 4. 后续规划边界
@@ -159,11 +221,15 @@ v1.2 聚焦持久化记忆、工作流 replay、MV3 生命周期恢复和上下�
 
 ### v1.3
 
-v1.3 聚焦 DevTools/CDP deep debug。page-health hook 会变成 Debug mode opt-in fallback，并增加 URL/path/query/fragment 脱敏。
+v1.3 聚焦 DevTools/CDP deep debug。page-health hook 已收敛为 Debug mode opt-in fallback，并增加 URL/path/query/fragment 脱敏。
+
+### v1.4
+
+v1.4 聚焦 Vision/Screenshot Agent。新增 screenshot capture、vision summary、overlay/layout issue 检测、Vision Panel 和 pointer fallback；仍保留 DOM/a11y 为主路径，不做 screenshot-first loop。
 
 ### v1.5 之后
 
-通用元素点击、输入、导航、键盘、选择、剪贴板、下载、文件上传等 action 只能在完整 ToolSelector、domain policy、approval resume flow、stale ref 校验和 E2E 覆盖齐备后引入。未实现前不得写入当前工具表或 prompt-visible contract。
+v1.5 已补 tab、frame/iframe、shadow、下载元数据读取、本地文件读取边界、上传审批边界、浏览器可访问文档/PDF 读取和审批后的 clipboard 读写。后续继续补更完整的文件内容处理。通用元素点击、输入、导航、键盘、选择、真实自动设置 file input 等 action 只能在完整 ToolSelector、domain policy、approval resume flow、stale ref 校验和 E2E 覆盖齐备后引入。未实现前不得写入当前工具表或 prompt-visible contract。
 
 ## 5. 维护要求
 

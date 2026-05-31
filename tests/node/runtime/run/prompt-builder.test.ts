@@ -6,6 +6,9 @@ import { TOOL_NAMES } from '../../../../src/shared/constants/tool-names';
 import type { RunSnapshot, RuntimeEvent } from '../../../../src/runtime/runtime-messages';
 import type { RunRecord } from '../../../../src/agent/loop/types';
 import type { ToolPromptContract } from '../../../../src/tools/core/tool-router';
+import { defaultMemoryRepo } from '../../../../src/storage/memory-repo';
+import { defaultScratchpadRepo } from '../../../../src/storage/scratchpad-repo';
+import { defaultWorkflowRepo } from '../../../../src/storage/workflow-repo';
 
 describe('runtime prompt builder', () => {
   it('keeps page read text in prompt even when page context is large', () => {
@@ -158,6 +161,92 @@ describe('runtime prompt builder', () => {
 
     const prompt = messages.at(-1)?.content ?? '';
     expect(prompt).not.toContain('loopGuard');
+  });
+
+  it('injects memory hits and scratchpad only through the dynamic suffix', () => {
+    const domain = `memory-${Date.now()}.example.com`;
+    defaultMemoryRepo.save({
+      domain,
+      task: '分析账单报表',
+      summary: '账单报表入口在 Billing > Invoices'
+    });
+    defaultWorkflowRepo.save({
+      domain,
+      intent: '打开账单报表',
+      taskDescription: '进入 Billing 后打开 Invoices',
+      steps: [{
+        id: 'step_1',
+        tool: TOOL_NAMES.PAGE_OBSERVE,
+        summary: '观察页面',
+        risk: 'safe',
+        requiresApproval: false
+      }]
+    });
+    defaultScratchpadRepo.replace('run_test', '已经确认报表使用 Billing 菜单。');
+
+    const messages = buildMessages({
+      record: {
+        ...recordWithTrace([]),
+        task: '分析账单报表'
+      },
+      snapshot: {
+        ...snapshotWithLastToolResult(TOOL_NAMES.PAGE_OBSERVE),
+        observation: {
+          url: `https://${domain}/dashboard`,
+          title: 'Dashboard',
+          currentDomain: domain,
+          origin: `https://${domain}`,
+          visibleTextSummary: 'Dashboard',
+          pageStateSummary: 'Ready',
+          interactiveCount: 2,
+          warnings: []
+        }
+      },
+      toolsContracts: [toolContract(TOOL_NAMES.PAGE_OBSERVE)],
+      locale: 'zh'
+    });
+
+    expect(messages[0]?.content).not.toContain('Billing > Invoices');
+    const prompt = messages.at(-1)?.content ?? '';
+    expect(prompt).toContain('memoryContext');
+    expect(prompt).toContain('Billing > Invoices');
+    expect(prompt).toContain('打开账单报表');
+    expect(prompt).toContain('已经确认报表使用 Billing 菜单。');
+  });
+
+  it('does not inject memory hits for restricted domains', () => {
+    const domain = 'secure.bank.example';
+    defaultMemoryRepo.save({
+      domain,
+      task: '查看余额',
+      summary: 'Sensitive banking memory'
+    });
+
+    const messages = buildMessages({
+      record: {
+        ...recordWithTrace([]),
+        task: '查看余额'
+      },
+      snapshot: {
+        ...snapshotWithLastToolResult(TOOL_NAMES.PAGE_OBSERVE),
+        observation: {
+          url: `https://${domain}/login`,
+          title: 'Bank',
+          currentDomain: domain,
+          origin: `https://${domain}`,
+          visibleTextSummary: 'Bank',
+          pageStateSummary: 'Ready',
+          interactiveCount: 1,
+          warnings: []
+        }
+      },
+      toolsContracts: [toolContract(TOOL_NAMES.PAGE_OBSERVE)],
+      locale: 'zh'
+    });
+
+    const prompt = messages.at(-1)?.content ?? '';
+    expect(prompt).toContain('DOMAIN_RESTRICTED');
+    expect(prompt).not.toContain('Sensitive banking memory');
   });
 });
 

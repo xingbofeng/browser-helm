@@ -98,6 +98,30 @@ describe('ToolExecutionService', () => {
     const result = await svc.execute(baseInput);
     expect(result.ok).toBe(true);
   });
+  it('injects a vision client into the tool context when available', async () => {
+    const visionClient = { describeViewport: vi.fn() };
+    const execute = vi.fn().mockResolvedValue({
+      ok: true,
+      code: ERROR_CODES.OK,
+      summary: 'vision ok',
+      changedPage: false,
+      requiresObserve: false
+    });
+    const d = deps({
+      createVisionClient: vi.fn().mockResolvedValue(visionClient),
+      createToolRouter: vi.fn().mockReturnValue({
+        execute,
+        getToolContract: vi.fn().mockReturnValue(null)
+      })
+    });
+    const svc = new ToolExecutionService(d as unknown as ToolExecutionDeps);
+    const result = await svc.execute({ ...baseInput, tool: 'bh_vision_describe_viewport' });
+    expect(result.ok).toBe(true);
+    expect(execute).toHaveBeenCalledWith(
+      { tool: 'bh_vision_describe_viewport', args: {} },
+      expect.objectContaining({ visionClient })
+    );
+  });
   it('returns error on failure', async () => {
     const d = deps();
     d.createToolRouter = vi.fn().mockReturnValue({
@@ -107,6 +131,30 @@ describe('ToolExecutionService', () => {
     const svc = new ToolExecutionService(d as unknown as ToolExecutionDeps);
     const result = await svc.execute(baseInput);
     expect(result.ok).toBe(false);
+  });
+  it('keeps the run observed when vision is unavailable but DOM/a11y fallback is available', async () => {
+    const setSnapshot = vi.fn();
+    const d = deps({
+      setSnapshot,
+      createToolRouter: vi.fn().mockReturnValue({
+        execute: vi.fn().mockResolvedValue({
+          ok: false,
+          code: ERROR_CODES.VISION_UNAVAILABLE,
+          summary: 'Vision unavailable; falling back to DOM/a11y observation.',
+          changedPage: false,
+          requiresObserve: false,
+          data: { observation: { fallback: 'dom_a11y' } }
+        }),
+        getToolContract: vi.fn().mockReturnValue(null)
+      })
+    });
+    const svc = new ToolExecutionService(d as unknown as ToolExecutionDeps);
+    const result = await svc.execute({ ...baseInput, tool: 'bh_vision_describe_viewport' });
+    expect(result.code).toBe(ERROR_CODES.VISION_UNAVAILABLE);
+    expect(setSnapshot).toHaveBeenLastCalledWith('run_1', expect.objectContaining({
+      status: 'observed'
+    }));
+    expect(setSnapshot.mock.calls.at(-1)?.[1]).not.toHaveProperty('error');
   });
   it('runs recovery re-observe for stale ref failures', async () => {
     const execute = vi.fn()

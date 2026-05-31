@@ -52,6 +52,23 @@ describe('manifest 权限契约', () => {
     expect(permissions).toContain('storage');
   });
 
+  it('包含 debugger 权限用于 v1.3 CDP deep tools', () => {
+    const permissions = manifest.permissions as string[];
+    expect(permissions).toContain('debugger');
+  });
+
+  it('包含 downloads 权限用于 v1.5 下载列表工具', () => {
+    const permissions = manifest.permissions as string[];
+    expect(permissions).toContain('downloads');
+  });
+
+  it('包含 offscreen 与 clipboard 权限用于 v1.5 剪贴板审批工具', () => {
+    const permissions = manifest.permissions as string[];
+    expect(permissions).toContain('offscreen');
+    expect(permissions).toContain('clipboardRead');
+    expect(permissions).toContain('clipboardWrite');
+  });
+
   it('使用 activeTab，并把 http/https 与 <all_urls> 放入 optional host 权限', () => {
     const permissions = manifest.permissions as string[];
     const hostPermissions = (manifest.host_permissions as string[] | undefined) ?? [];

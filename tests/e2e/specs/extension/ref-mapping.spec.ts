@@ -2,7 +2,7 @@ import { test } from '@playwright/test';
 
 import { RefWorkflowFlow } from '../../flows/ref-workflow-flow';
 
-test('renders ref mapping from a11y snapshot', async () => {
+test('从无障碍快照渲染 ref 映射', async () => {
   const flow = await RefWorkflowFlow.start();
   try {
     await flow.expectInteractiveElementsRefMapping();

@@ -2,7 +2,7 @@ import { test } from '@playwright/test';
 
 import { PageObservationFlow } from '../../flows/page-observation-flow';
 
-test('keeps prompt injection text as observation data', async () => {
+test('把提示注入文本保留为观察数据', async () => {
   const flow = await PageObservationFlow.start();
   try {
     await flow.expectPromptInjectionRemainsObservationData();

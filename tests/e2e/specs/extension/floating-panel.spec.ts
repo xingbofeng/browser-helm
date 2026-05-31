@@ -2,7 +2,7 @@ import { test } from '@playwright/test';
 
 import { FloatingPanelFlow } from '../../flows/floating-panel-flow';
 
-test('页面加载后右侧出现 BrowserHelm floating icon', async () => {
+test('页面加载后右侧出现 BrowserHelm 浮动图标', async () => {
   const flow = await FloatingPanelFlow.start();
   try {
     await flow.expectFloatingIconVisible();
@@ -11,7 +11,7 @@ test('页面加载后右侧出现 BrowserHelm floating icon', async () => {
   }
 });
 
-test('点击 icon 设置 data-open="true" 展开面板', async () => {
+test('点击图标后设置 data-open="true" 并展开面板', async () => {
   const flow = await FloatingPanelFlow.start();
   try {
     await flow.expectExpandSetsDataOpen();
@@ -20,7 +20,7 @@ test('点击 icon 设置 data-open="true" 展开面板', async () => {
   }
 });
 
-test('展开面板 iframe 使用 active target URL 和当前 tabId', async () => {
+test('展开面板的 iframe 使用当前目标 URL 和当前 tabId', async () => {
   const flow = await FloatingPanelFlow.start();
   try {
     await flow.expectExpandedPanelUsesActiveTargetUrl();
@@ -38,7 +38,7 @@ test('Alt/Opt+Shift+B 快捷键可以展开和收起面板', async () => {
   }
 });
 
-test('再次点击 icon 收起面板', async () => {
+test('再次点击图标会收起面板', async () => {
   const flow = await FloatingPanelFlow.start();
   try {
     await flow.expectToggleCollapse();
@@ -47,7 +47,7 @@ test('再次点击 icon 收起面板', async () => {
   }
 });
 
-test('icon tooltip 包含 Ctrl+Shift+B / Opt+Shift+B 快捷键', async () => {
+test('图标提示包含 Ctrl+Shift+B / Opt+Shift+B 快捷键', async () => {
   const flow = await FloatingPanelFlow.start();
   try {
     await flow.expectIconHasShortcutTooltip();
@@ -56,7 +56,7 @@ test('icon tooltip 包含 Ctrl+Shift+B / Opt+Shift+B 快捷键', async () => {
   }
 });
 
-test('icon 图片正常加载不挂图 (naturalWidth > 0)', async () => {
+test('图标图片正常加载且 naturalWidth 大于 0', async () => {
   const flow = await FloatingPanelFlow.start();
   try {
     await flow.expectIconImageLoaded();
@@ -65,7 +65,7 @@ test('icon 图片正常加载不挂图 (naturalWidth > 0)', async () => {
   }
 });
 
-test('icon 图片使用 chrome-extension:// 协议的扩展资源路径', async () => {
+test('图标图片使用 chrome-extension:// 协议的扩展资源路径', async () => {
   const flow = await FloatingPanelFlow.start();
   try {
     await flow.expectIconUsesExtensionUrl();
@@ -74,7 +74,7 @@ test('icon 图片使用 chrome-extension:// 协议的扩展资源路径', async 
   }
 });
 
-test('floating host 只在 top frame 创建，iframe 内不创建', async () => {
+test('浮动宿主只在顶层 frame 创建且不在 iframe 内创建', async () => {
   const flow = await FloatingPanelFlow.start();
   try {
     await flow.expectOnlyTopFrameCreatesHost();

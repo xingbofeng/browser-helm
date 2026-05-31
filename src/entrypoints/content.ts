@@ -49,14 +49,13 @@ function installWithDomainPolicy(
     return;
   }
   globalScope[CONTENT_SCRIPT_INSTALLED_MARKER] = true;
-  installPageHealthBridge(globalScope);
   const floatingPanel = installFloatingPanel();
 
   // Bootstrap locale from chrome.storage.local; start with 'zh' as default.
   // The handler is created synchronously so listeners register immediately,
   // then locale is updated asynchronously once storage is read.
   let handlerLocale: Locale = 'zh';
-  const handler = new ContentRpcHandler(document, handlerLocale);
+  const handler = new ContentRpcHandler(document, handlerLocale, () => enablePageHealthBridgeForDebug());
   void readLocale().then((locale) => {
     handlerLocale = locale;
     handler.updateLocale(locale);
@@ -120,8 +119,8 @@ function installPageHealthBridge(globalScope: Record<string, unknown>): void {
     if (event.data.kind === 'console_error') {
       const consoleErrors = readGlobalArray(globalScope, '__browserHelmConsoleErrors');
       consoleErrors.push({
-        message: event.data.message,
-        source: event.data.source
+        message: redactPageHealthText(event.data.message),
+        source: redactPageHealthText(event.data.source)
       });
       globalScope.__browserHelmConsoleErrors = consoleErrors.slice(-20);
       return;
@@ -130,21 +129,25 @@ function installPageHealthBridge(globalScope: Record<string, unknown>): void {
       const consoleMessages = readGlobalArray(globalScope, '__browserHelmConsoleMessages');
       consoleMessages.push({
         level: event.data.level,
-        message: event.data.message,
-        source: event.data.source
+        message: redactPageHealthText(event.data.message),
+        source: redactPageHealthText(event.data.source)
       });
       globalScope.__browserHelmConsoleMessages = consoleMessages.slice(-20);
       return;
     }
     const networkFailures = readGlobalArray(globalScope, '__browserHelmNetworkFailures');
     networkFailures.push({
-      url: event.data.url,
+      url: redactPageHealthUrl(event.data.url),
       method: event.data.method,
-      errorText: event.data.errorText,
+      errorText: redactPageHealthText(event.data.errorText),
       status: event.data.status
     });
     globalScope.__browserHelmNetworkFailures = networkFailures.slice(-20);
   });
+}
+
+export function enablePageHealthBridgeForDebug(): void {
+  installPageHealthBridge(globalThis);
 }
 
 function installPageHealthPageHooks(): void {
@@ -528,6 +531,32 @@ function isPageHealthEvent(value: unknown): value is {
     (record.kind === 'console_error' ||
       record.kind === 'console_message' ||
       record.kind === 'network_failure');
+}
+
+function redactPageHealthText(value: unknown): unknown {
+  return typeof value === 'string'
+    ? value
+        .replace(/https?:\/\/[^\s"'<>]+/giu, redactPageHealthUrlFromString)
+        .replace(/\bsk-[A-Za-z0-9_-]{8,}/gu, '[MASKED]')
+    : value;
+}
+
+function redactPageHealthUrl(value: unknown): unknown {
+  return typeof value === 'string' ? redactPageHealthUrlFromString(value) : value;
+}
+
+function redactPageHealthUrlFromString(raw: string): string {
+  try {
+    const parsed = new URL(raw);
+    parsed.search = '';
+    parsed.hash = '';
+    if (parsed.pathname.length > 1) {
+      parsed.pathname = '/[REDACTED_PATH]';
+    }
+    return parsed.toString();
+  } catch {
+    return raw.replace(/[?#].*$/u, '');
+  }
 }
 
 function isFloatingPanelToggleMessage(value: unknown): value is {

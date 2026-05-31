@@ -6,7 +6,8 @@ import { CONTENT_RPC_MESSAGES } from '../../../../src/shared/constants/event-nam
 
 describe('debug read-only tools', () => {
   it('collects page health summary from observation without CDP', async () => {
-    const result = await bhDebugCollectPageHealth(debugRpc()).execute(
+    const rpc = debugRpc();
+    const result = await bhDebugCollectPageHealth(rpc).execute(
       {},
       {
         runId: 'run_1',
@@ -21,10 +22,14 @@ describe('debug read-only tools', () => {
       pageStateSummary: '页面包含表单',
       limitations: ['CDP deep inspection unavailable']
     });
+    expect(rpc.calls).toEqual([
+      CONTENT_RPC_MESSAGES.PAGE_HEALTH_ENABLE,
+      CONTENT_RPC_MESSAGES.PAGE_OBSERVE
+    ]);
   });
 
   it('returns shallow console and network signals from observation page health data', async () => {
-    const result = await bhDebugCollectPageHealth(debugRpc({
+    const rpc = debugRpc({
       pageHealth: {
         consoleErrors: [
           {
@@ -44,7 +49,8 @@ describe('debug read-only tools', () => {
         pageStateSummary: '检测到 1 类 console error 和 1 个 network failure',
         limitations: ['CDP deep inspection unavailable']
       }
-    })).execute(
+    });
+    const result = await bhDebugCollectPageHealth(rpc).execute(
       {},
       {
         runId: 'run_1',
@@ -71,12 +77,26 @@ describe('debug read-only tools', () => {
       ],
       pageStateSummary: '检测到 1 类 console error 和 1 个 network failure'
     });
+    expect(rpc.calls).toEqual([
+      CONTENT_RPC_MESSAGES.PAGE_HEALTH_ENABLE,
+      CONTENT_RPC_MESSAGES.PAGE_OBSERVE
+    ]);
   });
 });
 
-function debugRpc(overrides: Record<string, unknown> = {}): ContentRpcClient {
+function debugRpc(overrides: Record<string, unknown> = {}): ContentRpcClient & { calls: string[] } {
+  const calls: string[] = [];
   return {
+    calls,
     async request(message) {
+      calls.push(message.type);
+      if (message.type === CONTENT_RPC_MESSAGES.PAGE_HEALTH_ENABLE) {
+        return {
+          ok: true,
+          enabled: true,
+          summary: 'page-health hook enabled'
+        };
+      }
       expect(message.type).toBe(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
       return {
         ok: true,

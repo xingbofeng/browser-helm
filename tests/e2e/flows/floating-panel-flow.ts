@@ -1,4 +1,4 @@
-import { expect } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { E2EFlowContext } from './e2e-flow-context';
 
 export class FloatingPanelFlow {
@@ -13,12 +13,9 @@ export class FloatingPanelFlow {
     const fixture = await this.flowContext.fixturePage();
     await fixture.goto('basic-form.html');
 
-    // floating entry host 在页面 DOM 中
-    const host = fixture.page.locator('#browserhelm-floating-entry-host');
-    await host.waitFor({ state: 'attached', timeout: 15000 });
-    await expect(host).toBeAttached();
+    await waitForFloatingButton(fixture.page);
+    await expect(fixture.page.locator('#browserhelm-floating-entry-host')).toBeAttached();
 
-    // 用 evaluate 检查 shadow DOM 内的按钮是否存在
     const buttonExists = await fixture.page.evaluate(() => {
       const hostEl = document.getElementById('browserhelm-floating-entry-host');
       if (!hostEl?.shadowRoot) return false;
@@ -33,14 +30,7 @@ export class FloatingPanelFlow {
     const fixture = await this.flowContext.fixturePage();
     await fixture.goto('basic-form.html');
 
-    // 点击 floating button（通过 evaluate 操作 shadow DOM）
-    await fixture.page.evaluate(() => {
-      const hostEl = document.getElementById('browserhelm-floating-entry-host');
-      if (!hostEl?.shadowRoot) throw new Error('Floating host not found');
-      const btn = hostEl.shadowRoot.querySelector('.entryButton') as HTMLButtonElement;
-      if (!btn) throw new Error('Entry button not found');
-      btn.click();
-    });
+    await clickFloatingButton(fixture.page);
 
     // 验证 data-open 属性被设置
     await expect(
@@ -53,13 +43,7 @@ export class FloatingPanelFlow {
     const fixture = await this.flowContext.fixturePage();
     await fixture.goto('basic-form.html');
 
-    await fixture.page.evaluate(() => {
-      const hostEl = document.getElementById('browserhelm-floating-entry-host');
-      if (!hostEl?.shadowRoot) throw new Error('Floating host not found');
-      const btn = hostEl.shadowRoot.querySelector('.entryButton') as HTMLButtonElement;
-      if (!btn) throw new Error('Entry button not found');
-      btn.click();
-    });
+    await clickFloatingButton(fixture.page);
 
     await expect(
       fixture.page.locator('#browserhelm-floating-entry-host')
@@ -82,6 +66,7 @@ export class FloatingPanelFlow {
     const fixture = await this.flowContext.fixturePage();
     await fixture.goto('basic-form.html');
     const host = fixture.page.locator('#browserhelm-floating-entry-host');
+    await waitForFloatingButton(fixture.page);
 
     await fixture.page.keyboard.press('Alt+Shift+B');
     await expect(host).toHaveAttribute('data-open', 'true');
@@ -100,25 +85,13 @@ export class FloatingPanelFlow {
 
     const page = fixture.page;
 
-    // 展开
-    await page.evaluate(() => {
-      const hostEl = document.getElementById('browserhelm-floating-entry-host');
-      if (!hostEl?.shadowRoot) throw new Error('Floating host not found');
-      const btn = hostEl.shadowRoot.querySelector('.entryButton') as HTMLButtonElement;
-      btn.click();
-    });
+    await clickFloatingButton(page);
 
     await expect(
       page.locator('#browserhelm-floating-entry-host')
     ).toHaveAttribute('data-open', 'true');
 
-    // 收起
-    await page.evaluate(() => {
-      const hostEl = document.getElementById('browserhelm-floating-entry-host');
-      if (!hostEl?.shadowRoot) throw new Error('Floating host not found');
-      const btn = hostEl.shadowRoot.querySelector('.entryButton') as HTMLButtonElement;
-      btn.click();
-    });
+    await clickFloatingButton(page);
 
     // 等待 data-open 移除
     await page.waitForFunction(() => {
@@ -131,10 +104,7 @@ export class FloatingPanelFlow {
   async expectIconHasShortcutTooltip(): Promise<void> {
     const fixture = await this.flowContext.fixturePage();
     await fixture.goto('basic-form.html');
-    await fixture.page.locator('#browserhelm-floating-entry-host').waitFor({
-      state: 'attached',
-      timeout: 15000
-    });
+    await waitForFloatingButton(fixture.page);
 
     const title = await fixture.page.evaluate(() => {
       const hostEl = document.getElementById('browserhelm-floating-entry-host');
@@ -153,12 +123,11 @@ export class FloatingPanelFlow {
     const fixture = await this.flowContext.fixturePage();
     await fixture.goto('basic-form.html');
 
-    const imageOk = await fixture.page.evaluate(async () => {
+    const imageLoaded = await fixture.page.waitForFunction(async () => {
       const hostEl = document.getElementById('browserhelm-floating-entry-host');
       if (!hostEl?.shadowRoot) return false;
       const img = hostEl.shadowRoot.querySelector('img');
       if (!img) return false;
-      // 等待图片加载
       if (!img.complete) {
         await new Promise<void>((resolve) => {
           img.addEventListener('load', () => resolve(), { once: true });
@@ -166,9 +135,9 @@ export class FloatingPanelFlow {
         });
       }
       return img.naturalWidth > 0 && img.naturalHeight > 0;
-    });
+    }, { timeout: 15000 });
 
-    expect(imageOk).toBe(true);
+    expect(await imageLoaded.jsonValue()).toBe(true);
   }
 
   /** icon 使用 chrome-extension:// 协议路径。 */
@@ -176,12 +145,13 @@ export class FloatingPanelFlow {
     const fixture = await this.flowContext.fixturePage();
     await fixture.goto('basic-form.html');
 
-    const src = await fixture.page.evaluate(() => {
+    const srcHandle = await fixture.page.waitForFunction(() => {
       const hostEl = document.getElementById('browserhelm-floating-entry-host');
-      if (!hostEl?.shadowRoot) return null;
+      if (!hostEl?.shadowRoot) return false;
       const img = hostEl.shadowRoot.querySelector('img');
-      return img?.getAttribute('src') ?? null;
-    });
+      return img?.getAttribute('src') ?? false;
+    }, { timeout: 15000 });
+    const src = await srcHandle.jsonValue();
 
     expect(src).toBeTruthy();
     expect(src).toMatch(/^chrome-extension:\/\//);
@@ -192,6 +162,7 @@ export class FloatingPanelFlow {
   async expectOnlyTopFrameCreatesHost(): Promise<void> {
     const fixture = await this.flowContext.fixturePage();
     await fixture.goto('iframe-form-host.html');
+    await waitForFloatingButton(fixture.page);
 
     // top frame 中 floating host 存在
     const hostInTop = await fixture.page.evaluate(() => {
@@ -210,4 +181,23 @@ export class FloatingPanelFlow {
   async close(): Promise<void> {
     await this.flowContext.close();
   }
+}
+
+async function waitForFloatingButton(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const hostEl = document.getElementById('browserhelm-floating-entry-host');
+    return Boolean(hostEl?.shadowRoot?.querySelector('.entryButton'));
+  }, { timeout: 15000 });
+}
+
+async function clickFloatingButton(page: Page): Promise<void> {
+  await waitForFloatingButton(page);
+  await page.evaluate(() => {
+    const hostEl = document.getElementById('browserhelm-floating-entry-host');
+    const button = hostEl?.shadowRoot?.querySelector('.entryButton');
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error('Floating entry button not found');
+    }
+    button.click();
+  });
 }

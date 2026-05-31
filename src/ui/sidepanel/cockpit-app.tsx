@@ -20,13 +20,17 @@ import {
 import { AdvancedDebugPanel } from '../components/advanced-debug-drawer';
 import { AgentMessageList } from '../components/agent-message-list';
 import { ChatPanel } from '../components/chat-panel';
+import { MemoryViewer } from '../components/memory-viewer';
 import { ModelConfigForm } from '../components/model-config-modal';
+import { ReplayPreview } from '../components/replay-preview';
 import { createAgentStore } from '../stores/agent-store';
 import { createApprovalStore } from '../stores/approval-store';
 import { createPageDataStore } from '../stores/page-data-store';
 import { createSettingsStore } from '../stores/settings-store';
 import { createTraceStore } from '../stores/trace-store';
 import type { SimpleStore } from '../stores/store-core';
+import type { MemoryEntry } from '../../shared/schemas/memory';
+import { workflowReplayPreviewSchema, type WorkflowReplayPreview } from '../../shared/schemas/workflow';
 import {
   conversationHistoryFromMessages,
   emptyStructuredPageData,
@@ -63,8 +67,9 @@ export function CockpitApp({
   const [approvalResult, setApprovalResult] = useState<RuntimeToolExecutionResult>();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
-  const [debugTab, setDebugTab] = useState<'trace' | 'tools' | 'elements' | 'streaming' | 'form'>('trace');
+  const [debugTab, setDebugTab] = useState<'trace' | 'tools' | 'elements' | 'streaming' | 'form' | 'deep' | 'vision'>('trace');
   const [conversationMessages, setConversationMessages] = useState<AgentMessage[]>([]);
+  const [memoryEntries, setMemoryEntries] = useState<MemoryEntry[]>([]);
   const unsubscribeRunRef = useRef<(() => void) | undefined>(undefined);
   const foregroundUserRunIdRef = useRef<string | undefined>(initialRunId);
   const userRunPendingRef = useRef(false);
@@ -92,6 +97,8 @@ export function CockpitApp({
         messages: conversationMessages
       }
     : undefined;
+  const memoryDomain = snapshot?.observation?.currentDomain;
+  const replayPreview = readReplayPreview(snapshot?.toolResult);
 
   const applySnapshot = useCallback((
     nextSnapshot: RunSnapshot,
@@ -99,6 +106,7 @@ export function CockpitApp({
   ) => {
     pageDataStore.getState().setSnapshot(nextSnapshot);
     traceStore.getState().setEvents(nextSnapshot.trace ?? []);
+    setMemoryEntries(nextSnapshot.memory?.entries ?? []);
     if (options.persistMessages) {
       setConversationMessages((messages) =>
         mergeAgentMessages(messages, nextSnapshot.messages ?? [])
@@ -417,6 +425,58 @@ export function CockpitApp({
     });
   };
 
+  const deleteMemory = async (id: string) => {
+    const currentSnapshot = snapshot;
+    if (!currentSnapshot) {
+      return;
+    }
+    await runtime.executeTool({
+      runId: currentSnapshot.runId,
+      tool: TOOL_NAMES.MEMORY_DELETE,
+      args: { id }
+    });
+    setMemoryEntries((entries) => entries.filter((entry) => entry.id !== id));
+  };
+
+  const clearDomainMemory = async () => {
+    const currentSnapshot = snapshot;
+    if (!currentSnapshot || !memoryDomain) {
+      return;
+    }
+    await runtime.executeTool({
+      runId: currentSnapshot.runId,
+      tool: TOOL_NAMES.MEMORY_CLEAR_DOMAIN,
+      args: { domain: memoryDomain }
+    });
+    setMemoryEntries([]);
+  };
+
+  const approveReplay = async () => {
+    const currentSnapshot = snapshot;
+    if (!currentSnapshot || !replayPreview) {
+      return;
+    }
+    await runtime.executeTool({
+      runId: currentSnapshot.runId,
+      tool: TOOL_NAMES.FLOW_RUN_WITH_APPROVAL,
+      args: { id: replayPreview.workflowId }
+    });
+    applySnapshot(await runtime.getRunSnapshot(currentSnapshot.runId), { persistMessages: true });
+  };
+
+  const denyReplay = async () => {
+    const currentSnapshot = snapshot;
+    if (!currentSnapshot || !replayPreview) {
+      return;
+    }
+    await runtime.executeTool({
+      runId: currentSnapshot.runId,
+      tool: TOOL_NAMES.FLOW_STOP,
+      args: { id: replayPreview.workflowId }
+    });
+    applySnapshot(await runtime.getRunSnapshot(currentSnapshot.runId), { persistMessages: true });
+  };
+
   return (
     <main className="bh-agentSidePanel animal-cursor--force">
       <header className="bh-agentHeader">
@@ -466,6 +526,30 @@ export function CockpitApp({
           void continueModeSwitchInAct();
         }}
       />
+
+      <div className="bh-memoryDock">
+        <MemoryViewer
+          domain={memoryDomain}
+          entries={memoryEntries}
+          onDelete={(id) => {
+            void deleteMemory(id);
+          }}
+          onClearDomain={() => {
+            void clearDomainMemory();
+          }}
+        />
+        {replayPreview ? (
+          <ReplayPreview
+            preview={replayPreview}
+            onApprove={() => {
+              void approveReplay();
+            }}
+            onDeny={() => {
+              void denyReplay();
+            }}
+          />
+        ) : null}
+      </div>
 
       <div className="bh-agentComposerDock">
         <ChatPanel
@@ -570,4 +654,14 @@ export function CockpitApp({
 
 function useStore<T extends object>(store: SimpleStore<T>): T {
   return useSyncExternalStore(store.subscribe, store.getState, store.getState);
+}
+
+function readReplayPreview(toolResult: RunSnapshot['toolResult']): WorkflowReplayPreview | undefined {
+  if (!toolResult || toolResult.tool !== TOOL_NAMES.FLOW_PREVIEW) {
+    return undefined;
+  }
+  const detail = isRecord(toolResult.detail) ? toolResult.detail : undefined;
+  const data = isRecord(detail?.data) ? detail.data : undefined;
+  const parsed = workflowReplayPreviewSchema.safeParse(data?.preview);
+  return parsed.success ? parsed.data : undefined;
 }

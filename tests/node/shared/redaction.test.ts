@@ -29,6 +29,38 @@ describe('redaction helpers', () => {
     });
   });
 
+  it('masks screenshot data URLs in persisted tool detail', () => {
+    expect(
+      sanitizeSensitiveDetail({
+        screenshot: {
+          dataUrl: 'data:image/png;base64,secret-image-bytes',
+          mimeType: 'image/png'
+        }
+      })
+    ).toEqual({
+      screenshot: {
+        dataUrl: '[MASKED_IMAGE_DATA]',
+        mimeType: 'image/png'
+      }
+    });
+  });
+
+  it('masks clipboard text fields in persisted tool detail', () => {
+    expect(
+      sanitizeSensitiveDetail({
+        data: {
+          operation: 'read',
+          sensitiveText: 'clipboard private value'
+        }
+      })
+    ).toEqual({
+      data: {
+        operation: 'read',
+        sensitiveText: '[MASKED]'
+      }
+    });
+  });
+
   it('redacts provider base URLs before trace storage', () => {
     expect(redactProviderBaseUrlForTrace('https://internal.example.com/v1')).toBeUndefined();
     expect(redactProviderBaseUrlForTrace(undefined)).toBeUndefined();

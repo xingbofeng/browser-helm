@@ -21,6 +21,8 @@ import { t, tZh } from '../../i18n/t';
 import { modeSwitchRequestMessage } from '../../background/runtime/run/mode-switch-message';
 import type { ToolPromptContract } from '../../tools/core/tool-router';
 import { buildMessages, getPromptToolContracts } from './prompt-builder';
+import { selectToolsForRun } from '../modes/tool-selector';
+import { resolveRuntimeCapabilities } from '../../runtime/capabilities/runtime-capabilities';
 import {
   augmentRuntimeToolDecision,
   normalizeModelDecision,
@@ -113,7 +115,7 @@ export class AgentLoop {
       model: settings.model
     });
     const maxSteps = input.maxSteps ?? 6;
-    const toolsContracts = getPromptToolContracts(
+    const allToolsContracts = getPromptToolContracts(
       this.deps.getToolContracts(input.record.mode),
       input.record.mode
     );
@@ -137,14 +139,49 @@ export class AgentLoop {
         trace: input.record.trace
       });
 
+      const selectedTools = selectToolsForRun({
+        mode: input.record.mode,
+        task: input.record.task,
+        tools: allToolsContracts,
+        capabilities: current.capabilities ?? resolveRuntimeCapabilities({
+          hasActiveTab: Boolean(input.record.tabId),
+          hasDebuggerPermission: true,
+          hasClipboardPermission: true,
+          hasDownloadsPermission: true,
+          shallowDebugAvailable: true
+        }),
+        pendingApproval: current.pendingApproval !== undefined,
+        ...(current.observation?.currentDomain
+          ? { pageDomain: current.observation.currentDomain }
+          : {}),
+        ...(current.error?.code ? { lastError: { code: current.error.code } } : {}),
+        ...(current.structuredPageData?.forms
+          ? { pageState: { hasForm: current.structuredPageData.forms.status !== 'empty' } }
+          : {})
+      });
+      const selectedToolNames = new Set(selectedTools.visibleTools);
+      const toolsContracts = allToolsContracts.filter((tool) => selectedToolNames.has(tool.name));
+
+      const selectionPayload: {
+        stepIndex: number;
+        toolCount: number;
+        toolNames: string[];
+        hiddenToolCount?: number;
+        limitations?: string[];
+      } = {
+        stepIndex,
+        toolCount: toolsContracts.length,
+        toolNames: toolsContracts.map((t) => t.name)
+      };
+      if (selectedTools.limitations.length > 0) {
+        selectionPayload.hiddenToolCount = selectedTools.hiddenTools.length;
+        selectionPayload.limitations = selectedTools.limitations;
+      }
+
       this.deps.appendTrace(input.record, {
         runId: input.runId,
         type: TRACE_EVENT_NAMES.TOOLS_SELECTED,
-        payload: {
-          stepIndex,
-          toolCount: toolsContracts.length,
-          toolNames: toolsContracts.map((t) => t.name)
-        }
+        payload: selectionPayload
       });
 
       const messages = buildMessages({

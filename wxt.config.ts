@@ -64,7 +64,7 @@ export default defineConfig({
     //
     // For a more locked-down distribution (e.g. enterprise), consider switching to
     // the activeTab-only model and removing optional_host_permissions entirely.
-    permissions: ['activeTab', 'storage', 'tabs', 'scripting', 'sidePanel', 'webNavigation'],
+    permissions: ['activeTab', 'storage', 'tabs', 'scripting', 'sidePanel', 'webNavigation', 'debugger', 'downloads', 'offscreen', 'clipboardRead', 'clipboardWrite'],
     host_permissions: [],
     optional_host_permissions: ['http://*/*', 'https://*/*', '<all_urls>'],
     web_accessible_resources: [

@@ -18,6 +18,7 @@ import { toolStartedEvent, toolResultEvent, approvalRequiredEvent } from './tool
 import type { ApprovalManager } from '../../../../runtime/approval/approval-manager';
 import type { Locale } from '../../../../i18n/types';
 import { t } from '../../../../i18n/t';
+import type { VisionClientLike } from '../../../../agent/model/vision-client';
 
 export type ToolExecutionDeps = {
   getSnapshot: (runId: string) => RunSnapshot;
@@ -34,6 +35,7 @@ export type ToolExecutionDeps = {
   approvalManager: ApprovalManager;
   approvalRequestForTrace: typeof approvalRequestForTrace;
   approvalRequiredResultFn: typeof approvalRequiredResult;
+  createVisionClient?: (() => Promise<VisionClientLike | undefined>) | undefined;
 };
 
 export class ToolExecutionService {
@@ -145,9 +147,16 @@ export class ToolExecutionService {
       trace: record.trace
     });
 
+    const visionClient = isVisionTool(input.tool) ? await this.deps.createVisionClient?.() : undefined;
     const result = await router.execute(
       { tool: input.tool, args: input.args },
-      { runId: input.runId, stepId: `${input.runId}:${input.tool}`, runMode: record.mode }
+      {
+        runId: input.runId,
+        stepId: `${input.runId}:${input.tool}`,
+        tabId: record.tabId,
+        runMode: record.mode,
+        ...(visionClient ? { visionClient } : {})
+      }
     );
 
     // Emit result event
@@ -194,13 +203,14 @@ export class ToolExecutionService {
     }
 
     // Normal result — success or error
+    const nonBlockingFailure = isNonBlockingToolFailure(result);
     this.deps.setSnapshot(input.runId, {
       ...this.deps.getSnapshot(input.runId),
-      status: result.ok ? 'observed' : 'error',
+      status: result.ok || nonBlockingFailure ? 'observed' : 'error',
       toolResult: this.deps.snapshotToolResult(input.tool, result),
       pendingApproval: undefined,
       trace: record.trace,
-      ...(result.ok ? {} : {
+      ...(result.ok || nonBlockingFailure ? {} : {
         error: { code: result.code, message: result.error?.message ?? result.summary }
       })
     });
@@ -323,6 +333,14 @@ function recoveryState(type: 're_observe' | 'repair_tool_args' | 'find_alternati
 
 function isHiddenIframeMutationTool(tool: string): boolean {
   return tool === INTERNAL_TOOL_NAMES.IFRAME_CLICK || tool === INTERNAL_TOOL_NAMES.IFRAME_TYPE;
+}
+
+function isVisionTool(tool: string): boolean {
+  return tool.startsWith('bh_vision_');
+}
+
+function isNonBlockingToolFailure(result: ToolResult): boolean {
+  return result.code === ERROR_CODES.VISION_UNAVAILABLE;
 }
 
 function repairArgs(args: unknown, argsSchema: unknown): Record<string, unknown> | undefined {

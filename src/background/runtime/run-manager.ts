@@ -40,6 +40,7 @@ import {
 import { RunStore } from './run/run-store';
 import type { RunManagerDeps, RunRecord } from './run/runtime-service-types';
 import { approvalRequestForTrace } from './run/runtime-event-utils';
+import { createDefaultRunSessionPersistence } from './run/session-persistence';
 import { emptyStreamingState, streamingStateFromTrace } from './run/streaming-state';
 import { ToolRuntimePolicy } from './run/tools/tool-runtime-policy';
 import { ToolExecutionService } from './run/tools/tool-execution-service';
@@ -50,15 +51,19 @@ import { ApprovalService } from './run/tools/approval/approval-service';
 import type { Locale } from '../../i18n/types';
 import { t } from '../../i18n/t';
 import { createProviderClient } from './provider-client-factory';
+import { VisionClient } from '../../agent/model/vision-client';
 
 export class RunManager {
-  private readonly store = new RunStore();
+  private readonly store: RunStore;
   private readonly settingsStore: SettingsStore;
   private readonly lifecycle: RunLifecycleService;
   private readonly tools: ToolExecutionService;
   private readonly approvals: ApprovalService;
 
   constructor(private readonly deps: RunManagerDeps = {}) {
+    this.store = new RunStore({
+      sessionPersistence: deps.runSessionPersistence ?? createDefaultRunSessionPersistence()
+    });
     this.settingsStore = deps.settingsStore ?? new ChromeSettingsStore();
 
     const approvalManager = new ApprovalManager();
@@ -98,7 +103,8 @@ export class RunManager {
       toolPolicy: new ToolRuntimePolicy(),
       approvalManager,
       approvalRequestForTrace,
-      approvalRequiredResultFn: approvalRequiredResult
+      approvalRequiredResultFn: approvalRequiredResult,
+      createVisionClient: async () => await this.createVisionClient()
     });
     const flowRegistry = new ToolApprovalFlowRegistry({
       getRecord: (runId) => this.store.getRecord(runId),
@@ -106,6 +112,7 @@ export class RunManager {
       deletePendingAction: (requestId) => this.store.deletePendingApprovalAction(requestId),
       createContentRpcClient: (tabId) => this.createContentRpcClient(tabId),
       createToolRouter: (tabId) => this.createToolRouter(tabId),
+      executeTool: async (input) => await this.tools.execute(input),
       appendTrace: (record, event) => this.store.appendTrace(record, event),
       setSnapshot: (runId, snapshot) => this.store.setSnapshot(runId, snapshot),
       getSnapshot: (runId) => this.store.getSnapshot(runId),
@@ -217,6 +224,26 @@ export class RunManager {
 
   private createContentRpcClient(tabId: number): ContentRpcClient {
     return this.deps.createContentRpcClient?.(tabId) ?? new ChromeContentRpcClient(tabId);
+  }
+
+  private async createVisionClient(): Promise<VisionClient | undefined> {
+    const settings = await this.settingsStore.getProviderSettings();
+    if (!settings?.apiKey || !settings.model.trim()) {
+      return undefined;
+    }
+    const modelClient = this.deps.createProviderModelClient?.({
+      baseUrl: settings.baseUrl,
+      apiKey: settings.apiKey,
+      model: settings.model
+    }) ?? createProviderClient({
+      baseUrl: settings.baseUrl,
+      apiKey: settings.apiKey,
+      model: settings.model,
+      ...(settings.allowLocalProviderEndpoints === undefined ? {} : {
+        allowLocalProviderEndpoints: settings.allowLocalProviderEndpoints
+      })
+    });
+    return new VisionClient(modelClient);
   }
 
   private async getActiveTabId(): Promise<number | undefined> {

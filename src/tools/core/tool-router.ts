@@ -117,6 +117,9 @@ export function isToolAvailableInRunMode(
   if (toolModes.includes('internal')) {
     return true;
   }
+  if (toolModes.includes('memory')) {
+    return true;
+  }
   if (runMode === 'ask') {
     return toolModes.includes('ask');
   }
@@ -127,7 +130,7 @@ export function isToolAvailableInRunMode(
     return toolModes.includes('ask') || toolModes.includes('form');
   }
   if (runMode === 'full') {
-    return toolModes.some((mode) => mode !== 'memory');
+    return true;
   }
   return (
     toolModes.includes('act') ||

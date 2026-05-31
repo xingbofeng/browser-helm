@@ -158,6 +158,9 @@ export function fallbackSnapshotFields(
   });
   const capabilities = resolveRuntimeCapabilities({
     hasActiveTab: true,
+    hasDebuggerPermission: true,
+    hasClipboardPermission: true,
+    hasDownloadsPermission: true,
     shallowDebugAvailable: true
   });
   const goal = initializeGoalState({

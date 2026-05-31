@@ -2,7 +2,7 @@ import { test } from '@playwright/test';
 
 import { CockpitUiFlow } from '../../flows/cockpit-ui-flow';
 
-test('renders agent waterfall from automatic observation', async () => {
+test('根据自动观察渲染 Agent 瀑布流', async () => {
   const flow = await CockpitUiFlow.start();
   try {
     await flow.expectCockpitAutoObservation();
@@ -11,7 +11,7 @@ test('renders agent waterfall from automatic observation', async () => {
   }
 });
 
-test('reads truncated long pages before streaming the answer', async () => {
+test('流式回答前先读取被截断的长页面', async () => {
   const flow = await CockpitUiFlow.start();
   try {
     await flow.expectLongPageArticleReadBeforeStreamingAnswer();
@@ -20,7 +20,7 @@ test('reads truncated long pages before streaming the answer', async () => {
   }
 });
 
-test('highlights page elements from the merged elements and forms debug tab', async () => {
+test('从合并的元素和表单调试标签高亮页面元素', async () => {
   const flow = await CockpitUiFlow.start();
   try {
     await flow.expectElementInspectHighlightsPageRef();
@@ -29,7 +29,7 @@ test('highlights page elements from the merged elements and forms debug tab', as
   }
 });
 
-test.skip('renders approval drawer for a pending runtime request', async () => {
+test('为待处理的运行时请求渲染审批抽屉', async () => {
   const flow = await CockpitUiFlow.start();
   try {
     await flow.expectApprovalDrawerFromPendingRuntimeRequest();
@@ -38,7 +38,7 @@ test.skip('renders approval drawer for a pending runtime request', async () => {
   }
 });
 
-test('masks provider API key in settings', async () => {
+test('在设置中遮蔽服务商 API 密钥', async () => {
   const flow = await CockpitUiFlow.start();
   try {
     await flow.expectSettingsMaskProviderKey();
@@ -47,7 +47,7 @@ test('masks provider API key in settings', async () => {
   }
 });
 
-test('renders Form Doctor diagnosis from real runtime snapshot', async () => {
+test('从真实运行时快照渲染 Form Doctor 诊断', async () => {
   const flow = await CockpitUiFlow.start();
   try {
     await flow.expectFormDoctorDiagnosis();
@@ -56,7 +56,7 @@ test('renders Form Doctor diagnosis from real runtime snapshot', async () => {
   }
 });
 
-test('renders Page Inspector diagnosis from real runtime snapshot', async () => {
+test('从真实运行时快照渲染 Page Inspector 诊断', async () => {
   const flow = await CockpitUiFlow.start();
   try {
     await flow.expectPageInspectorDiagnosis();
@@ -65,7 +65,7 @@ test('renders Page Inspector diagnosis from real runtime snapshot', async () => 
   }
 });
 
-test('fills, verifies, approves, submits, and debugs a local form', async () => {
+test('填写、校验、审批、提交并调试本地表单', async () => {
   const flow = await CockpitUiFlow.start();
   try {
     await flow.expectAssistedFormFillSubmitAndDebug();
@@ -74,7 +74,7 @@ test('fills, verifies, approves, submits, and debugs a local form', async () => 
   }
 });
 
-test('keeps verify-failed submit behind high-risk approval', async () => {
+test('校验失败后的提交仍保持高风险审批保护', async () => {
   const flow = await CockpitUiFlow.start();
   try {
     await flow.expectAssistedFormVerifyFailureStillSubmit();

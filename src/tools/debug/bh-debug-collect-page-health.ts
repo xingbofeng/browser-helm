@@ -25,6 +25,7 @@ export function bhDebugCollectPageHealth(
     resultSchema: toolResultSchema,
     async execute(_args, ctx) {
       const locale: Locale = ctx.locale ?? 'zh';
+      await rpc.request({ type: CONTENT_RPC_MESSAGES.PAGE_HEALTH_ENABLE }).catch(() => undefined);
       const response = await rpc.request({ type: CONTENT_RPC_MESSAGES.PAGE_OBSERVE });
       if (!response.ok) {
         return {

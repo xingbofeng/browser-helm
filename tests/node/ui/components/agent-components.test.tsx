@@ -293,6 +293,114 @@ describe('agent side panel components', () => {
     container.remove();
   });
 
+  it('renders vision observations from the debug drawer Vision tab', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const snapshot: RunSnapshot = {
+      runId: 'run_vision',
+      mode: 'debug',
+      status: 'finished',
+      toolResult: {
+        tool: 'bh_vision_describe_viewport',
+        ok: true,
+        code: 'OK',
+        summary: 'Vision observation: 按钮被浮层遮挡',
+        detail: {
+          data: {
+            screenshot: {
+              mode: 'viewport',
+              mimeType: 'image/png',
+              width: 1280,
+              height: 720
+            },
+            observation: {
+              summary: '按钮被浮层遮挡',
+              blockers: ['cookie banner overlaps button'],
+              layoutIssues: ['primary CTA shifted below fold'],
+              fallback: 'none',
+              confidence: 0.88
+            }
+          }
+        }
+      }
+    };
+
+    await act(async () => {
+      root.render(<I18nProvider><AdvancedDebugDrawer snapshot={snapshot} structuredPageData={structuredData()} /></I18nProvider>);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      button('高级开发者选项').click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      button('视觉检查').click();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('按钮被浮层遮挡');
+    expect(container.textContent).toContain('cookie banner overlaps button');
+    expect(container.textContent).toContain('1280 x 720');
+    root.unmount();
+    container.remove();
+  });
+
+  it('renders sanitized screenshot metadata in the Vision tab without requiring raw image data', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const snapshot: RunSnapshot = {
+      runId: 'run_vision_capture',
+      mode: 'debug',
+      status: 'observed',
+      toolResult: {
+        tool: 'bh_vision_capture_full_page',
+        ok: true,
+        code: 'OK',
+        summary: 'Captured full-page screenshot shot_1.',
+        detail: {
+          data: {
+            screenshot: {
+              id: 'shot_1',
+              tabId: 42,
+              mode: 'full_page',
+              mimeType: 'image/png',
+              width: 1440,
+              height: 2400,
+              dataUrl: '[MASKED_IMAGE_DATA]',
+              capturedAt: 123,
+              traceSafe: false
+            },
+            observation: {
+              summary: '截图已捕获，原始图片未持久化。',
+              fallback: 'none'
+            }
+          }
+        }
+      }
+    };
+
+    await act(async () => {
+      root.render(<I18nProvider><AdvancedDebugDrawer snapshot={snapshot} structuredPageData={structuredData()} /></I18nProvider>);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      button('高级开发者选项').click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      button('视觉检查').click();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('full_page');
+    expect(container.textContent).toContain('1440 x 2400');
+    expect(container.innerHTML).not.toContain('data:image');
+    root.unmount();
+    container.remove();
+  });
+
   it('saves model configuration and tests provider connection without leaking the key', async () => {
     const container = document.createElement('div');
     document.body.append(container);

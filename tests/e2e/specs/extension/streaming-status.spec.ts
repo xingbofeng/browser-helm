@@ -2,7 +2,7 @@ import { test } from '@playwright/test';
 
 import { StreamingStatusFlow } from '../../flows/streaming-status-flow';
 
-test('长页面读取 trace 包含 article read 工具调用', async () => {
+test('长页面读取追踪包含文章读取工具调用', async () => {
   const flow = await StreamingStatusFlow.start();
   try {
     await flow.expectLongPageReadArticleInTrace();
@@ -20,7 +20,7 @@ test('首次发送长页面总结会直接流式吐字并完成回复', async ()
   }
 });
 
-test('长页面 article read 失败时 UI 不静默卡住', async () => {
+test('长页面文章读取失败时界面不会静默卡住', async () => {
   const flow = await StreamingStatusFlow.start();
   try {
     await flow.expectLongPageArticleReadFailureShowsError();
@@ -38,7 +38,7 @@ test('AI 完成后不残留错误的运行中目标状态', async () => {
   }
 });
 
-test('用户发送消息后 extension 自动滚动到底部', async () => {
+test('用户发送消息后扩展界面自动滚动到底部', async () => {
   const flow = await StreamingStatusFlow.start();
   try {
     await flow.expectAutoScrollToBottomAfterSend();

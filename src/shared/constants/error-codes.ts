@@ -58,7 +58,13 @@ export const ERROR_CODE_DEFINITIONS = [
   { number: 3514, code: 'CROSS_FORM_FILL_REJECTED', description: '跨表单批量填写已拒绝' },
   { number: 3515, code: 'SUBMIT_DISABLED', description: '提交按钮处于禁用状态' },
   { number: 3516, code: 'APPROVAL_CONTEXT_STALE', description: '审批上下文已过期，需要重新验证' },
-  { number: 3517, code: 'SUBMIT_TARGET_NOT_READY', description: '提交目标当前不可用' }
+  { number: 3517, code: 'SUBMIT_TARGET_NOT_READY', description: '提交目标当前不可用' },
+  { number: 3600, code: 'SCREENSHOT_FAILED', description: '截图失败' },
+  { number: 3601, code: 'VISION_UNAVAILABLE', description: '视觉模型不可用' },
+  { number: 3602, code: 'POINTER_ACTION_FAILED', description: '坐标动作失败' },
+  { number: 3700, code: 'FILE_READ_UNAVAILABLE', description: '文件读取不可用' },
+  { number: 3701, code: 'DOCUMENT_READ_FAILED', description: '文档读取失败' },
+  { number: 3702, code: 'CLIPBOARD_UNAVAILABLE', description: '剪贴板不可用' }
 ] as const;
 
 export const ERROR_CODES = {
@@ -121,6 +127,12 @@ export const ERROR_CODES = {
   CROSS_FORM_FILL_REJECTED: 'CROSS_FORM_FILL_REJECTED',
   SUBMIT_DISABLED: 'SUBMIT_DISABLED',
   SUBMIT_TARGET_NOT_READY: 'SUBMIT_TARGET_NOT_READY',
+  SCREENSHOT_FAILED: 'SCREENSHOT_FAILED',
+  VISION_UNAVAILABLE: 'VISION_UNAVAILABLE',
+  POINTER_ACTION_FAILED: 'POINTER_ACTION_FAILED',
+  FILE_READ_UNAVAILABLE: 'FILE_READ_UNAVAILABLE',
+  DOCUMENT_READ_FAILED: 'DOCUMENT_READ_FAILED',
+  CLIPBOARD_UNAVAILABLE: 'CLIPBOARD_UNAVAILABLE',
 } as const;
 
 export const ERROR_CODE_NUMBERS = Object.fromEntries(

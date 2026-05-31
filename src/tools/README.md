@@ -34,12 +34,62 @@
 | `bh_form_find_missing_required` | Find Missing Required Fields | `form/` | `form` | `safe` | 无 | 找出 required 且当前值为空的字段。 |
 | `bh_form_find_validation_errors` | Find Validation Errors | `form/` | `form` | `safe` | 无 | 找出 validation failed 或 aria-invalid 的字段。 |
 | `bh_form_find_disabled_submit_reason` | Find Disabled Submit Reason | `form/` | `form` | `safe` | 无 | 读取 disabled submit 的已确认、推断或无法判断原因。 |
- | `bh_debug_collect_page_health` | Collect Page Health | `debug/` | `debug` | `safe` | 无 | 收集页面健康浅层摘要，不使用 CDP。 |
+| `bh_debug_collect_page_health` | Collect Page Health | `debug/` | `debug` | `safe` | 无 | 收集页面健康浅层摘要，不使用 CDP。 |
+| `bh_cdp_attach` | CDP Attach | `cdp/` | `debug` | `medium` | `tabId?`, `protocolVersion?` | 连接 Chrome debugger 并启用 Network/Runtime/Performance 采集。 |
+| `bh_cdp_detach` | CDP Detach | `cdp/` | `debug` | `medium` | `tabId?` | 断开当前标签页的 debugger 会话。 |
+| `bh_cdp_get_targets` | CDP Targets | `cdp/` | `debug` | `safe` | 无 | 列出 Chrome debugger target。 |
+| `bh_cdp_get_console_events` | CDP Console Events | `cdp/` | `debug` | `safe` | `tabId?`, `limit?` | 读取 CDP 捕获的 console 事件。 |
+| `bh_cdp_get_network_events` | CDP Network Events | `cdp/` | `debug` | `safe` | `tabId?` | 读取 CDP 捕获的 network 请求摘要。 |
+| `bh_cdp_get_request_detail` | CDP Request Detail | `cdp/` | `debug` | `safe` | `requestId`, `tabId?` | 读取单个请求的状态、headers 和可用响应预览。 |
+| `bh_cdp_get_response_body` | CDP Response Body | `cdp/` | `debug` | `safe` | `requestId`, `tabId?` | 读取单个请求的响应体或明确不可用原因。 |
+| `bh_cdp_get_performance_metrics` | CDP Performance Metrics | `cdp/` | `debug` | `safe` | `tabId?` | 读取 CDP performance metrics。 |
+| `bh_cdp_get_event_listeners` | CDP Event Listeners | `cdp/` | `debug` | `safe` | `tabId?`, `objectExpression?` | 读取 DOM 对象事件监听器摘要。 |
+| `bh_cdp_capture_dom_snapshot` | CDP DOM Snapshot | `cdp/` | `debug` | `safe` | `tabId?` | 捕获 CDP DOMSnapshot 诊断载荷。 |
+| `bh_vision_capture_viewport` | Capture Viewport Screenshot | `vision/` | `debug`, `vision` | `safe` | `windowId?` | 截取当前视口截图；原始 dataUrl 仅在工具结果内短暂使用，snapshot detail 会脱敏。 |
+| `bh_vision_capture_full_page` | Capture Full Page Screenshot | `vision/` | `debug`, `vision` | `safe` | `windowId?` | 通过 CDP full-page capture 截取完整页面视觉参考，失败时才回退可见视口。 |
+| `bh_vision_capture_element` | Capture Element Screenshot | `vision/` | `debug`, `vision` | `safe` | `selector`, `windowId?` | 截取指定元素并返回 bounds metadata，用于视觉/DOM 对照。 |
+| `bh_vision_describe_viewport` | Describe Viewport With Vision | `vision/` | `debug`, `vision` | `safe` | `prompt?`, `windowId?` | 请求 vision-capable provider 生成视口摘要；不可用时返回 DOM/a11y fallback。 |
+| `bh_vision_detect_overlay` | Detect Visual Overlay | `vision/` | `debug`, `vision` | `safe` | `prompt?`, `windowId?` | 聚焦检测浮层、弹窗、sticky header 或 banner 遮挡。 |
+| `bh_vision_detect_layout_issues` | Detect Layout Issues | `vision/` | `debug`, `vision` | `safe` | `prompt?`, `windowId?` | 聚焦检测裁剪、覆盖、偏移和响应式布局异常。 |
+| `bh_pointer_click` | Pointer Click | `pointer/` | `vision` | `medium` | `x`, `y`, `reason` | 仅作为视觉 fallback 最后手段点击坐标；敏感 reason 返回 approval required。 |
+| `bh_tab_list` | List Browser Tabs | `tab/` | `advanced` | `safe` | 无 | 列出当前浏览器 tab 摘要，URL 去除 query/hash。 |
+| `bh_tab_get_active` | Get Active Tab | `tab/` | `advanced` | `safe` | 无 | 读取当前 active tab 摘要，不改变浏览器状态。 |
+| `bh_tab_focus` | Focus Browser Tab | `tab/` | `advanced` | `low` | `tabId` | 切换到指定 tab，并要求重新 observe 新目标。 |
+| `bh_shadow_list` | List Shadow Roots | `shadow/` | `advanced` | `safe` | 无 | 列出页面 open shadow roots 的 host、文本预览和交互数量。 |
+| `bh_shadow_query` | Query Shadow Root | `shadow/` | `advanced` | `safe` | `hostSelector`, `selector` | 在指定 open shadow root 内只读查询元素摘要。 |
+| `bh_download_list` | List Downloads | `file/` | `advanced` | `safe` | `limit?`, `state?` | 列出最近下载记录，URL 去除 query/hash，本地路径只保留文件名。 |
+| `bh_file_read_download` | Read Downloaded File | `file/` | `advanced` | `high` | `downloadId` | 本地下载文件读取安全外壳；需要审批，当前返回结构化不可读边界和 fallback。 |
+| `bh_file_upload_with_approval` | Upload File With Approval | `file/` | `advanced` | `high` | `targetRefId`, `fileName?`, `reason?` | 本地文件上传审批安全外壳；不读取本地路径、不设置 file input，只创建审批和手动选择提示。 |
+| `bh_doc_read_url` | Read Document URL | `doc/` | `advanced` | `safe` | `url`, `maxChars?`, `pageStart?`, `pageEnd?` | 读取浏览器可访问文本/PDF，返回页码、scanned 和截断信息。 |
+| `bh_clipboard_read_with_approval` | Read Clipboard With Approval | `clipboard/` | `advanced` | `high` | 无 | 创建剪贴板读取审批；批准后通过 offscreen document 读取，snapshot detail 脱敏。 |
+| `bh_clipboard_write_with_approval` | Write Clipboard With Approval | `clipboard/` | `advanced` | `high` | `text` | 创建剪贴板写入审批；工具调用本身不写入，批准后才修改系统剪贴板。 |
 | `bh_form_infer_fill_plan` | Infer Fill Plan | `form/` | `form` | `low` | `userTask`, `formSummary`, `fields[]`, `formRefId?` | 根据用户任务和字段快照推断填写方案，输出 source/confidence/reason 和 masked preview。 |
 | `bh_form_fill_field` | Fill Single Field | `form/` | `form` | `medium` | `fieldRefId`, `value`, `clear?` | 填写单个表单字段，含 guard 检查和 input/change/blur 事件触发。 |
 | `bh_form_fill_many` | Batch Fill Many Fields | `form/` | `form` | `medium` | `fields[]`, `formRefId?` | 批量填写单个表单的多个字段，返回字段级 partial-success 结果。 |
 | `bh_form_verify` | Verify Form | `form/` | `form`, `debug` | `low` | `fieldRefIds[]`, `formRefId?`, `submitRefId?` | 验证表单准备状态，检查 HTML5 有效性、必填字段、可见错误文本和提交按钮状态。 |
 | `bh_form_submit_with_approval` | Submit Form (Approval Required) | `form/` | `form` | `high` | `formName`, `submitMethod`, `verifyStatus`, `fields[]` 等 | 提交审批阻断工具，需要用户明确确认后才执行真实提交。 |
+| `bh_memory_lookup` | Memory Lookup | `memory/` | `memory` | `low` | `domain`, `query?`, `limit?` | 查询当前 domain 的本地可复用记忆命中，只返回摘要和分数。 |
+| `bh_memory_save` | Memory Save | `memory/` | `memory` | `low` | `domain`, `task`, `summary`, `tags?` | 保存脱敏后的本地 domain memory，不改变页面。 |
+| `bh_memory_update` | Memory Update | `memory/` | `memory` | `low` | `id`, `task?`, `summary?`, `tags?` | 更新本地 memory 摘要、标签或成功/失败计数。 |
+| `bh_memory_delete` | Memory Delete | `memory/` | `memory` | `low` | `id` | 删除一条本地 memory。 |
+| `bh_memory_list` | Memory List | `memory/` | `memory` | `low` | `domain?` | 列出本地 memory，支持按 domain 过滤。 |
+| `bh_memory_clear_domain` | Memory Clear Domain | `memory/` | `memory` | `low` | `domain` | 删除某个 domain 的全部本地 memory。 |
+| `bh_memory_clear_all` | Memory Clear All | `memory/` | `memory` | `low` | 无 | 清空全部本地 memory，主要用于隐私控制和测试清理。 |
+| `bh_memory_explain_hit` | Memory Explain Hit | `memory/` | `memory` | `low` | `id` | 解释某条 memory 的命中原因和成功/失败计数。 |
+| `bh_pad_read` | Scratchpad Read | `pad/` | `memory` | `safe` | `runId?` | 读取当前 run scratchpad 摘要。 |
+| `bh_pad_append` | Scratchpad Append | `pad/` | `memory` | `safe` | `text`, `runId?` | 向当前 run scratchpad 追加脱敏文本。 |
+| `bh_pad_replace` | Scratchpad Replace | `pad/` | `memory` | `safe` | `text`, `runId?` | 替换当前 run scratchpad 内容。 |
+| `bh_pad_clear` | Scratchpad Clear | `pad/` | `memory` | `safe` | `runId?` | 清空当前 run scratchpad。 |
+| `bh_pad_compact` | Scratchpad Compact | `pad/` | `memory` | `safe` | `maxChars?`, `runId?` | 按预算保留最近 scratchpad 内容。 |
+| `bh_flow_lookup` | Workflow Lookup | `workflow/` | `memory` | `low` | `domain`, `query?`, `limit?` | 查询某个 domain 的本地可复用 workflow。 |
+| `bh_flow_preview` | Workflow Preview | `workflow/` | `memory` | `low` | `id` | 生成 workflow replay preview，不执行页面动作。 |
+| `bh_flow_run_with_approval` | Workflow Run With Approval | `workflow/` | `memory` | `high` | `id` | 在 workflow replay 前创建 approval 阻断，不静默执行。 |
+| `bh_flow_step` | Workflow Step | `workflow/` | `memory` | `low` | `id`, `index` | 读取 workflow replay 的单个步骤摘要。 |
+| `bh_flow_stop` | Workflow Stop | `workflow/` | `memory` | `low` | `id` | 停止 workflow replay 会话。 |
+| `bh_flow_save` | Workflow Save | `workflow/` | `memory` | `low` | `domain`, `intent`, `taskDescription`, `steps[]` | 保存脱敏后的可复用 workflow memory。 |
+| `bh_flow_update` | Workflow Update | `workflow/` | `memory` | `low` | `id`, `intent?`, `taskDescription?`, `steps?` | 更新 workflow memory 描述、步骤或评分。 |
+| `bh_flow_delete` | Workflow Delete | `workflow/` | `memory` | `low` | `id` | 删除一个 workflow memory。 |
+| `bh_flow_score` | Workflow Score | `workflow/` | `memory` | `low` | `id`, `outcome` | 记录 workflow replay 成功或失败结果。 |
 
 ## 目录约定
 
@@ -52,7 +102,15 @@
 | `a11y/` | a11y-like snapshot、stable ref map 和 ref 解析工具。 |
  | `element/` | 单元素检查和状态读取工具。 |
  | `form/` | 表单读取和诊断工具。 |
- | `debug/` | 页面健康浅层诊断工具，不承接 CDP deep tools。 |
+| `debug/` | 页面健康浅层诊断工具，不承接 CDP deep tools。 |
+| `cdp/` | Chrome debugger / CDP deep inspect 工具，负责 request、console、performance 和 event listener 读取。 |
+| `vision/` | screenshot capture、vision summary、overlay/layout issue 检测和 DOM/a11y fallback。 |
+| `pointer/` | 坐标点击 fallback 工具，必须由视觉检查和风险判断驱动。 |
+| `tab/` | 多 tab 上下文读取与焦点切换工具，服务 advanced browser workflow。 |
+| `shadow/` | open shadow root 发现与只读元素查询工具。 |
+| `memory/` | domain memory 查询、写入、删除和命中解释工具。 |
+| `pad/` | 当前 run scratchpad 的读写、清理和压缩工具。 |
+| `workflow/` | workflow memory 查询、预览、审批阻断和评分工具。 |
 | `core/` | 工具注册、路由、结果工厂、错误和上下文类型。 |
 
 ## 新增工具要求

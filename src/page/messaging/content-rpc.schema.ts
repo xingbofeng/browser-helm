@@ -9,11 +9,18 @@ import {
   fillManyResultSchema,
   formVerifyResultSchema,
 } from '../../shared/schemas/form-fill.schema';
+import {
+  shadowQueryResultSchema,
+  shadowRootSummarySchema
+} from '../../shared/schemas/shadow';
 import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 
 export const contentRpcRequestSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal(CONTENT_RPC_MESSAGES.PAGE_OBSERVE)
+  }),
+  z.object({
+    type: z.literal(CONTENT_RPC_MESSAGES.PAGE_HEALTH_ENABLE)
   }),
   z.object({
     type: z.literal(CONTENT_RPC_MESSAGES.PAGE_READ_VISIBLE_TEXT),
@@ -92,6 +99,14 @@ export const contentRpcRequestSchema = z.discriminatedUnion('type', [
       preview: z.string(),
       reason: z.string().optional()
     }).optional()
+  }),
+  z.object({
+    type: z.literal(CONTENT_RPC_MESSAGES.SHADOW_LIST)
+  }),
+  z.object({
+    type: z.literal(CONTENT_RPC_MESSAGES.SHADOW_QUERY),
+    hostSelector: z.string().min(1),
+    selector: z.string().min(1)
   }),
   // 表单填写动作
   z.object({
@@ -205,6 +220,19 @@ export const contentRpcSuccessSchema = z.union([
   z.object({
     ok: z.literal(true),
     actionToken: z.string().min(1)
+  }),
+  z.object({
+    ok: z.literal(true),
+    shadowRoots: z.array(shadowRootSummarySchema)
+  }),
+  z.object({
+    ok: z.literal(true),
+    shadowQuery: shadowQueryResultSchema
+  }),
+  z.object({
+    ok: z.literal(true),
+    enabled: z.boolean(),
+    summary: z.string()
   })
 ]);
 

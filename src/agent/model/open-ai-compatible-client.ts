@@ -2,7 +2,8 @@ import type {
   ModelClient,
   ModelInput,
   ModelOutput,
-  ModelStreamCallbacks
+  ModelStreamCallbacks,
+  VisionModelInput
 } from './model-client';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import type { ProviderTestResult } from '../../shared/schemas/agent-message.schema';
@@ -77,6 +78,43 @@ export class OpenAICompatibleClient implements ModelClient {
     return {
       text
     };
+  }
+
+  async completeVision(input: VisionModelInput): Promise<ModelOutput> {
+    this.ensureConfigured();
+
+    const response = await this.fetchImpl(this.completionsUrl(), {
+      method: 'POST',
+      headers: this.headers(),
+      ...(input.signal ? { signal: input.signal } : {}),
+      body: JSON.stringify({
+        model: this.config.model,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: input.prompt },
+            { type: 'image_url', image_url: { url: input.imageDataUrl } }
+          ]
+        }],
+        response_format: {
+          type: 'json_object'
+        }
+      })
+    });
+
+    if (!response.ok) {
+      throw new ModelRequestFailedError(
+        `Vision model request failed with status ${response.status}`
+      );
+    }
+
+    const data = (await response.json()) as OpenAICompletionResponse;
+    const text = data.choices?.[0]?.message?.content;
+    if (typeof text !== 'string') {
+      throw new ModelRequestFailedError('Vision model response missing message content');
+    }
+
+    return { text };
   }
 
   async streamComplete(

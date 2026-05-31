@@ -2,7 +2,7 @@ import { test } from '@playwright/test';
 
 import { ActiveTabRefreshFlow } from '../../flows/active-tab-refresh-flow';
 
-test('同 tab 导航后 side panel 观察卡自动刷新', async () => {
+test('同一标签页导航后侧边栏观察卡自动刷新', async () => {
   const flow = await ActiveTabRefreshFlow.start();
   try {
     await flow.expectObservationRefreshesAfterNavigation();
