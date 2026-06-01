@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { validateRuntimeToolDecision } from '../../../../src/agent/loop/form-fill-augmenter';
+import { validateModelDecision } from '../../../../src/agent/loop/decision-validator';
+import {
+  normalizeModelDecision,
+  validateRuntimeToolDecision
+} from '../../../../src/agent/loop/form-fill-augmenter';
 import type { RunRecord } from '../../../../src/agent/loop/types';
 import type { RunSnapshot } from '../../../../src/runtime/runtime-messages';
+import { TRACE_EVENT_NAMES } from '../../../../src/shared/constants/event-names';
+import { TOOL_NAMES } from '../../../../src/shared/constants/tool-names';
 import type { AgentDecision } from '../../../../src/shared/schemas/agent-decision.schema';
+import type { ToolPromptContract } from '../../../../src/tools/core/tool-router';
 
 function makeRecord(task: string): RunRecord {
   return { task, mode: 'form', trace: [] };
@@ -190,3 +197,257 @@ describe('validateRuntimeToolDecision', () => {
     expect(rejection).toBeUndefined();
   });
 });
+
+describe('normalizeModelDecision', () => {
+  it('normalizes common model refId alias for FORM_FILL_MANY', () => {
+    const decision = normalizeModelDecision({
+      type: 'tool_call',
+      tool: TOOL_NAMES.FORM_FILL_MANY,
+      args: {
+        fields: [
+          { refId: 'field-1', value: 'John' },
+          { fieldRefId: 'field-2', value: false }
+        ]
+      },
+      reason: 'testing'
+    });
+
+    expect(decision).toMatchObject({
+      type: 'tool_call',
+      tool: TOOL_NAMES.FORM_FILL_MANY,
+      args: {
+        fields: [
+          { refId: 'field-1', fieldRefId: 'field-1', value: 'John' },
+          { fieldRefId: 'field-2', value: 'false' }
+        ]
+      }
+    });
+  });
+
+  it('normalizes common model refId alias for FORM_FILL_FIELD', () => {
+    const decision = normalizeModelDecision({
+      type: 'tool_call',
+      tool: TOOL_NAMES.FORM_FILL_FIELD,
+      args: {
+        refId: 'field-1',
+        value: true
+      },
+      reason: 'testing'
+    });
+
+    expect(decision).toMatchObject({
+      type: 'tool_call',
+      tool: TOOL_NAMES.FORM_FILL_FIELD,
+      args: {
+        refId: 'field-1',
+        fieldRefId: 'field-1',
+        value: 'true'
+      }
+    });
+  });
+});
+
+describe('validateModelDecision', () => {
+  it('rejects repeated page article reads without cursor progress after a successful read', () => {
+    const decision: AgentDecision = {
+      type: 'tool_call',
+      tool: TOOL_NAMES.PAGE_READ_ARTICLE,
+      args: { maxChars: 5000 },
+      reason: 'read again'
+    };
+
+    const rejection = validateModelDecision(
+      decision,
+      toolContracts(TOOL_NAMES.PAGE_READ_ARTICLE),
+      snapshotWithPageRead({ hasMore: true, nextCursor: 5000 }),
+      recordWithSuccessfulTool(TOOL_NAMES.PAGE_READ_ARTICLE, { maxChars: 5000 })
+    );
+
+    expect(rejection).toMatchObject({
+      kind: 'repeated_page_read'
+    });
+  });
+
+  it('allows page article reads that continue from the previous nextCursor', () => {
+    const decision: AgentDecision = {
+      type: 'tool_call',
+      tool: TOOL_NAMES.PAGE_READ_ARTICLE,
+      args: { cursor: 5000, maxChars: 5000 },
+      reason: 'continue reading'
+    };
+
+    const rejection = validateModelDecision(
+      decision,
+      toolContracts(TOOL_NAMES.PAGE_READ_ARTICLE),
+      snapshotWithPageRead({ hasMore: true, nextCursor: 5000 }),
+      recordWithSuccessfulTool(TOOL_NAMES.PAGE_READ_ARTICLE, { maxChars: 5000 })
+    );
+
+    expect(rejection).toBeUndefined();
+  });
+
+  it('rejects repeated form field reads after fields were already read on an unchanged page', () => {
+    const decision: AgentDecision = {
+      type: 'tool_call',
+      tool: TOOL_NAMES.FORM_READ_FIELDS,
+      args: {},
+      reason: 'read fields again'
+    };
+
+    const rejection = validateModelDecision(
+      decision,
+      toolContracts(TOOL_NAMES.FORM_READ_FIELDS),
+      snapshotWithToolResult(TOOL_NAMES.FORM_READ_FIELDS),
+      recordWithSuccessfulTool(TOOL_NAMES.FORM_READ_FIELDS, {})
+    );
+
+    expect(rejection).toMatchObject({
+      kind: 'repeated_form_inspect'
+    });
+  });
+
+  it('rejects accessibility discovery after form fields were already read on an unchanged page', () => {
+    const decision: AgentDecision = {
+      type: 'tool_call',
+      tool: TOOL_NAMES.A11Y_SNAPSHOT,
+      args: {},
+      reason: 'inspect accessibility tree after reading fields'
+    };
+
+    const rejection = validateModelDecision(
+      decision,
+      toolContracts(TOOL_NAMES.A11Y_SNAPSHOT),
+      snapshotWithToolResult(TOOL_NAMES.FORM_READ_FIELDS),
+      recordWithSuccessfulTool(TOOL_NAMES.FORM_READ_FIELDS, {})
+    );
+
+    expect(rejection).toMatchObject({
+      kind: 'repeated_form_inspect'
+    });
+  });
+
+  it('rejects later form field reads even when another read-only discovery tool ran in between', () => {
+    const decision: AgentDecision = {
+      type: 'tool_call',
+      tool: TOOL_NAMES.FORM_READ_FIELDS,
+      args: {},
+      reason: 'read fields again after a11y discovery'
+    };
+
+    const rejection = validateModelDecision(
+      decision,
+      toolContracts(TOOL_NAMES.FORM_READ_FIELDS),
+      snapshotWithToolResult(TOOL_NAMES.A11Y_SNAPSHOT),
+      recordWithSuccessfulToolSequence([
+        [TOOL_NAMES.FORM_READ_FIELDS, {}],
+        [TOOL_NAMES.A11Y_SNAPSHOT, {}]
+      ])
+    );
+
+    expect(rejection).toMatchObject({
+      kind: 'repeated_form_inspect'
+    });
+  });
+
+  it('allows form fill after a repeated form inspection repair', () => {
+    const decision: AgentDecision = {
+      type: 'tool_call',
+      tool: TOOL_NAMES.FORM_FILL_FIELD,
+      args: { fieldRefId: 'field-1', value: 'passport renewal' },
+      reason: 'fill after reading fields'
+    };
+
+    const rejection = validateModelDecision(
+      decision,
+      toolContracts(TOOL_NAMES.FORM_FILL_FIELD),
+      snapshotWithToolResult(TOOL_NAMES.FORM_READ_FIELDS),
+      recordWithSuccessfulTool(TOOL_NAMES.FORM_READ_FIELDS, {})
+    );
+
+    expect(rejection).toBeUndefined();
+  });
+
+  it('allows a select fill when the existing value already equals the desired value', () => {
+    const decision: AgentDecision = {
+      type: 'tool_call',
+      tool: TOOL_NAMES.FORM_FILL_FIELD,
+      args: { fieldRefId: 'country', value: 'USA' },
+      reason: 'ensure country is USA'
+    };
+
+    const rejection = validateModelDecision(
+      decision,
+      toolContracts(TOOL_NAMES.FORM_FILL_FIELD),
+      makeSnapshot([
+        { refId: 'country', label: 'Country/Region', name: 'countrySelect', type: 'select', valuePreview: 'non-empty', actualValue: 'USA' }
+      ]),
+      makeRecord('country/region 选择 USA')
+    );
+
+    expect(rejection).toBeUndefined();
+  });
+});
+
+function toolContracts(...names: string[]): ToolPromptContract[] {
+  return names.map<ToolPromptContract>((name) => ({
+    name,
+    title: name,
+    description: name,
+    modes: ['ask'],
+    risk: 'safe',
+    argsSchema: {},
+    readOnly: true,
+    requiresApproval: false,
+    contextVisibility: 'summary'
+  }));
+}
+
+function snapshotWithPageRead(data: Record<string, unknown>): RunSnapshot {
+  return snapshotWithToolResult(TOOL_NAMES.PAGE_READ_ARTICLE, {
+    text: 'article text',
+    ...data
+  });
+}
+
+function snapshotWithToolResult(tool: string, data: Record<string, unknown> = {}): RunSnapshot {
+  return {
+    runId: 'test-run-1',
+    mode: 'ask',
+    status: 'thinking',
+    toolResult: {
+      tool,
+      ok: true,
+      code: 'OK',
+      summary: 'Tool succeeded',
+      detail: {
+        data
+      },
+      changedPage: false,
+      requiresObserve: false
+    },
+    trace: []
+  } as unknown as RunSnapshot;
+}
+
+function recordWithSuccessfulTool(tool: string, args: Record<string, unknown>): RunRecord {
+  return recordWithSuccessfulToolSequence([[tool, args]]);
+}
+
+function recordWithSuccessfulToolSequence(tools: Array<[string, Record<string, unknown>]>): RunRecord {
+  return {
+    task: 'read article',
+    mode: 'ask',
+    trace: tools.flatMap(([tool, args]) => [
+      {
+        runId: 'test-run-1',
+        type: TRACE_EVENT_NAMES.TOOL_STARTED,
+        payload: { tool, args }
+      },
+      {
+        runId: 'test-run-1',
+        type: TRACE_EVENT_NAMES.TOOL_RESULT,
+        payload: { tool, ok: true, code: 'OK', changedPage: false }
+      }
+    ])
+  };
+}

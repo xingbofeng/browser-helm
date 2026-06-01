@@ -30,14 +30,19 @@ export function normalizeModelDecision(decision: AgentDecision): AgentDecision {
 function normalizeFillToolDecision(decision: ToolCallDecision): ToolCallDecision {
   if (decision.tool === TOOL_NAMES.FORM_FILL_FIELD) {
     const value = normalizeFillFieldValue(decision.args.value);
-    if (value === undefined || value === decision.args.value) {
+    const fieldRefId = normalizeFieldRefId(decision.args);
+    if (
+      (value === undefined || value === decision.args.value) &&
+      (fieldRefId === undefined || fieldRefId === decision.args.fieldRefId)
+    ) {
       return decision;
     }
     return {
       ...decision,
       args: {
         ...decision.args,
-        value
+        ...(fieldRefId ? { fieldRefId } : {}),
+        ...(value !== undefined ? { value } : {})
       }
     };
   }
@@ -54,13 +59,18 @@ function normalizeFillToolDecision(decision: ToolCallDecision): ToolCallDecision
     }
     const record = field as Record<string, unknown>;
     const value = normalizeFillFieldValue(record.value);
-    if (value === undefined || value === record.value) {
+    const fieldRefId = normalizeFieldRefId(record);
+    if (
+      (value === undefined || value === record.value) &&
+      (fieldRefId === undefined || fieldRefId === record.fieldRefId)
+    ) {
       return field;
     }
     changed = true;
     return {
       ...record,
-      value
+      ...(fieldRefId ? { fieldRefId } : {}),
+      ...(value !== undefined ? { value } : {})
     };
   });
 
@@ -163,6 +173,16 @@ function normalizeFillFieldValue(value: unknown): string | undefined {
   return undefined;
 }
 
+function normalizeFieldRefId(record: Record<string, unknown>): string | undefined {
+  if (typeof record.fieldRefId === 'string' && record.fieldRefId.trim().length > 0) {
+    return record.fieldRefId;
+  }
+  if (typeof record.refId === 'string' && record.refId.trim().length > 0) {
+    return record.refId;
+  }
+  return undefined;
+}
+
 // ── Form candidates ──
 
 export function runtimeFormCandidates(snapshot: RunSnapshot): RuntimeFormCandidate[] {
@@ -246,7 +266,7 @@ export function isExistingValueBlocked(
   }
   const actualValue = candidate.writable?.actualValue;
   if (actualValue && normalizeUserText(actualValue) === normalizeUserText(desiredValue)) {
-    return true;
+    return false;
   }
   return false;
 }

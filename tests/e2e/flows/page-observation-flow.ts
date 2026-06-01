@@ -191,6 +191,47 @@ export class PageObservationFlow {
     ).toHaveValue('');
   }
 
+  async expectPublicActionClickMutatesSafeIframeTarget(): Promise<void> {
+    const fixture = await this.flowContext.fixturePage();
+    await fixture.goto('iframe-form-host.html');
+
+    const tabId = await this.flowContext.shell().activeTabId();
+    const sidePanel = this.flowContext.sidePanel();
+    const snapshot = await sidePanel.runOnTab({
+      tabId,
+      task: '点击 iframe 内普通按钮',
+      mode: 'act'
+    });
+    const detailsRef = findFrameRef(snapshot.refs, {
+      role: 'button',
+      name: '展开详情'
+    });
+    const refId = `frame_${detailsRef.frameId}:${detailsRef.innerRefId}`;
+
+    const click = await sidePanel.executeTool({
+      runId: snapshot.runId,
+      tool: TOOL_NAMES.ACTION_CLICK,
+      args: {
+        refId,
+        source: 'agent'
+      }
+    });
+
+    expect(click).toMatchObject({
+      ok: true,
+      code: ERROR_CODES.OK,
+      changedPage: true,
+      requiresObserve: true,
+      data: {
+        refId
+      }
+    });
+    await expect(fixture.page.frameLocator('iframe').locator('body')).toHaveAttribute(
+      'data-details',
+      'open'
+    );
+  }
+
   async expectRuntimeApprovalDenyForIframeTool(): Promise<void> {
     const fixture = await this.flowContext.fixturePage();
     await fixture.goto('iframe-form-host.html');

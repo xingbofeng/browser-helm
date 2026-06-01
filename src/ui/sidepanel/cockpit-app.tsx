@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { Bug, Settings, Trash2 } from 'lucide-react';
 import { Button } from 'animal-island-ui';
 
-import type { RuntimeToolExecutionResult, RunSnapshot } from '../../runtime/runtime-messages';
+import type {
+  RuntimeDomainAdapterId,
+  RuntimeToolExecutionResult,
+  RunSnapshot
+} from '../../runtime/runtime-messages';
 import type { RuntimePort } from '../../runtime/runtime-port';
 import type { AgentMessage } from '../../shared/schemas/agent-message.schema';
 import type { RunMode } from '../../shared/schemas/tool.schema';
@@ -20,9 +24,11 @@ import {
 import { AdvancedDebugPanel } from '../components/advanced-debug-drawer';
 import { AgentMessageList } from '../components/agent-message-list';
 import { ChatPanel } from '../components/chat-panel';
+import { DomainAdapterStatus } from '../components/domain-adapter-status';
 import { MemoryViewer } from '../components/memory-viewer';
 import { ModelConfigForm } from '../components/model-config-modal';
 import { ReplayPreview } from '../components/replay-preview';
+import { WorkflowDraftPreview } from '../components/workflow-draft-preview';
 import { createAgentStore } from '../stores/agent-store';
 import { createApprovalStore } from '../stores/approval-store';
 import { createPageDataStore } from '../stores/page-data-store';
@@ -98,7 +104,7 @@ export function CockpitApp({
       }
     : undefined;
   const memoryDomain = snapshot?.observation?.currentDomain;
-  const replayPreview = readReplayPreview(snapshot?.toolResult);
+  const replayPreview = readReplayPreview(snapshot);
 
   const applySnapshot = useCallback((
     nextSnapshot: RunSnapshot,
@@ -414,6 +420,19 @@ export function CockpitApp({
     await settingsStore.getState().save(nextSettings);
   };
 
+  const setDomainAdapterEnabled = async (adapterId: RuntimeDomainAdapterId, enabled: boolean) => {
+    const currentSnapshot = snapshot;
+    if (!currentSnapshot) {
+      return;
+    }
+    const nextSnapshot = await runtime.setDomainAdapterEnabled({
+      runId: currentSnapshot.runId,
+      adapterId,
+      enabled
+    });
+    applySnapshot(nextSnapshot, { persistMessages: true });
+  };
+
   const inspectElement = async (refId: string) => {
     const currentSnapshot = snapshot;
     if (!currentSnapshot || refId.startsWith('sensitive_ref_')) {
@@ -477,6 +496,33 @@ export function CockpitApp({
     applySnapshot(await runtime.getRunSnapshot(currentSnapshot.runId), { persistMessages: true });
   };
 
+  const saveWorkflowDraft = async () => {
+    const currentSnapshot = snapshot;
+    const draft = currentSnapshot?.workflowDraft;
+    if (!currentSnapshot || !draft) {
+      return;
+    }
+    const saved = await runtime.executeTool({
+      runId: currentSnapshot.runId,
+      tool: TOOL_NAMES.FLOW_SAVE,
+      args: {
+        domain: draft.domain,
+        intent: draft.intent,
+        taskDescription: draft.taskDescription,
+        steps: draft.steps
+      }
+    });
+    const workflowId = readSavedWorkflowId(saved);
+    if (workflowId) {
+      await runtime.executeTool({
+        runId: currentSnapshot.runId,
+        tool: TOOL_NAMES.FLOW_PREVIEW,
+        args: { id: workflowId }
+      });
+    }
+    applySnapshot(await runtime.getRunSnapshot(currentSnapshot.runId), { persistMessages: true });
+  };
+
   return (
     <main className="bh-agentSidePanel animal-cursor--force">
       <header className="bh-agentHeader">
@@ -527,6 +573,13 @@ export function CockpitApp({
         }}
       />
 
+      <DomainAdapterStatus
+        adapter={snapshot?.domainAdapter}
+        onSetEnabled={(adapterId, enabled) => {
+          void setDomainAdapterEnabled(adapterId, enabled);
+        }}
+      />
+
       <div className="bh-memoryDock">
         <MemoryViewer
           domain={memoryDomain}
@@ -546,6 +599,14 @@ export function CockpitApp({
             }}
             onDeny={() => {
               void denyReplay();
+            }}
+          />
+        ) : null}
+        {snapshot?.workflowDraft && !replayPreview ? (
+          <WorkflowDraftPreview
+            draft={snapshot.workflowDraft}
+            onSave={() => {
+              void saveWorkflowDraft();
             }}
           />
         ) : null}
@@ -656,12 +717,19 @@ function useStore<T extends object>(store: SimpleStore<T>): T {
   return useSyncExternalStore(store.subscribe, store.getState, store.getState);
 }
 
-function readReplayPreview(toolResult: RunSnapshot['toolResult']): WorkflowReplayPreview | undefined {
+function readReplayPreview(snapshot: RunSnapshot | undefined): WorkflowReplayPreview | undefined {
+  const toolResult = snapshot?.toolResult;
   if (!toolResult || toolResult.tool !== TOOL_NAMES.FLOW_PREVIEW) {
-    return undefined;
+    return snapshot?.memory?.workflowPreviews?.[0];
   }
   const detail = isRecord(toolResult.detail) ? toolResult.detail : undefined;
   const data = isRecord(detail?.data) ? detail.data : undefined;
   const parsed = workflowReplayPreviewSchema.safeParse(data?.preview);
-  return parsed.success ? parsed.data : undefined;
+  return parsed.success ? parsed.data : snapshot?.memory?.workflowPreviews?.[0];
+}
+
+function readSavedWorkflowId(result: RuntimeToolExecutionResult): string | undefined {
+  const data = isRecord(result.data) ? result.data : undefined;
+  const workflow = isRecord(data?.workflow) ? data.workflow : undefined;
+  return readString(workflow?.id);
 }

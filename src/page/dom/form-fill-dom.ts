@@ -105,7 +105,19 @@ export function setCheckboxState(
   desiredState: boolean
 ): void {
   if (element.type !== 'checkbox') return;
-  element.checked = desiredState;
+  if (element.checked !== desiredState) {
+    const label = Array.from(element.labels ?? []).find((candidate): candidate is HTMLLabelElement =>
+      isVisibleElement(candidate)
+    );
+    try {
+      (label ?? element).click();
+    } catch {
+      // Fall back to property assignment below for non-clickable controls.
+    }
+  }
+  if (element.checked !== desiredState) {
+    element.checked = desiredState;
+  }
   dispatchInputEvents(element);
 }
 
@@ -237,8 +249,9 @@ function fillTextControl(
   type: string,
   label: string | undefined
 ): FillFieldResult {
-  setFieldText(el, target.clear ? '' : target.value);
-  return mkField(target, target.clear ? 'cleared' : 'filled', el, type, label, el.value);
+  const isClearOnly = target.clear === true && target.value.length === 0;
+  setFieldText(el, isClearOnly ? '' : target.value);
+  return mkField(target, isClearOnly ? 'cleared' : 'filled', el, type, label, el.value);
 }
 
 function fillContentEditable(
@@ -247,8 +260,9 @@ function fillContentEditable(
   type: string,
   label: string | undefined
 ): FillFieldResult {
-  setContentEditableText(el, target.clear ? '' : target.value);
-  return mkField(target, target.clear ? 'cleared' : 'filled', el, type, label, el.textContent ?? '');
+  const isClearOnly = target.clear === true && target.value.length === 0;
+  setContentEditableText(el, isClearOnly ? '' : target.value);
+  return mkField(target, isClearOnly ? 'cleared' : 'filled', el, type, label, el.textContent ?? '');
 }
 
 function hasVisibleControlLabel(element: HTMLElement): boolean {
@@ -492,7 +506,11 @@ export function executeSubmit(
   document: Document,
   refMap: RefMap,
   submitTargetRefId?: string,
-  options: { allowDisabledSubmit?: boolean } = {}
+  options: {
+    allowDisabledSubmit?: boolean;
+    formRefId?: string | undefined;
+    fieldRefIds?: string[] | undefined;
+  } = {}
 ): 'submitted' | 'dialog_unsupported' | 'no_submit_path' {
   // 优先使用 ref
   if (submitTargetRefId) {
@@ -514,8 +532,13 @@ export function executeSubmit(
     }
   }
 
-  // 自动查找 submit button
-  const btn = document.querySelector<HTMLElement>(
+  const submitScope = resolveSubmitScope(document, refMap, options);
+  if (!submitScope) {
+    return 'no_submit_path';
+  }
+
+  // 自动查找 submit button，仅限已批准的表单范围。
+  const btn = submitScope.querySelector<HTMLElement>(
     'button[type="submit"], input[type="submit"]'
   );
   if (btn && isVisibleElement(btn)) {
@@ -533,9 +556,8 @@ export function executeSubmit(
   }
 
   // Enter 回退
-  const form = document.querySelector('form');
-  if (form) {
-    const input = form.querySelector<HTMLElement>(
+  if (submitScope instanceof HTMLFormElement) {
+    const input = submitScope.querySelector<HTMLElement>(
       'input:not([type="hidden"]):not([type="submit"]), textarea, select'
     );
     if (input) {
@@ -553,6 +575,62 @@ export function executeSubmit(
   }
 
   return 'no_submit_path';
+}
+
+function resolveSubmitScope(
+  document: Document,
+  refMap: RefMap,
+  options: {
+    formRefId?: string | undefined;
+    fieldRefIds?: string[] | undefined;
+  }
+): HTMLFormElement | Document | undefined {
+  if (options.formRefId) {
+    const formEntry = refMap.resolve(options.formRefId);
+    const formElement = formEntry?.element;
+    if (formElement instanceof HTMLFormElement) {
+      return formElement;
+    }
+    if (formElement instanceof HTMLElement) {
+      const closest = formElement.closest('form');
+      if (closest instanceof HTMLFormElement) {
+        return closest;
+      }
+    }
+  }
+
+  const fieldForm = resolveCommonFieldForm(refMap, options.fieldRefIds ?? []);
+  if (fieldForm) {
+    return fieldForm;
+  }
+
+  return options.formRefId ? undefined : document;
+}
+
+function resolveCommonFieldForm(
+  refMap: RefMap,
+  fieldRefIds: string[]
+): HTMLFormElement | undefined {
+  let commonForm: HTMLFormElement | undefined;
+  for (const refId of fieldRefIds) {
+    const entry = refMap.resolve(refId);
+    const element = entry?.element;
+    if (!(element instanceof HTMLElement)) {
+      continue;
+    }
+    const form = element.closest('form');
+    if (!(form instanceof HTMLFormElement)) {
+      continue;
+    }
+    if (!commonForm) {
+      commonForm = form;
+      continue;
+    }
+    if (commonForm !== form) {
+      return undefined;
+    }
+  }
+  return commonForm;
 }
 
 // ---------------------------------------------------------------------------

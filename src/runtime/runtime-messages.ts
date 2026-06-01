@@ -17,8 +17,10 @@ import type { TaskClassification } from '../shared/schemas/mode-system.schema';
 import type { RecoveryState } from '../shared/schemas/recovery.schema';
 import type { RuntimeCapabilities } from '../shared/schemas/runtime-capabilities.schema';
 import type { MemoryEntry } from '../shared/schemas/memory';
+import type { WorkflowDraft, WorkflowReplayPreview } from '../shared/schemas/workflow';
 import type { ToolResult } from '../shared/schemas/tool-result.schema';
 import type { ProviderSettings } from '../storage/interfaces/settings-store';
+import type { AdapterId } from '../adapters/adapter-types';
 import type {
   AgentMessage,
   ProviderTestResult,
@@ -71,6 +73,23 @@ export const providerSettingsInputSchema = z.object({
   allowLocalProviderEndpoints: z.boolean().optional()
 });
 
+export const adapterIdSchema = z.enum([
+  'github',
+  'gmail',
+  'notion',
+  'linear',
+  'jira',
+  'stripe',
+  'vercel',
+  'supabase'
+]);
+
+export const setDomainAdapterEnabledInputSchema = z.object({
+  runId: z.string().min(1),
+  adapterId: adapterIdSchema,
+  enabled: z.boolean()
+});
+
 export const runtimeRequestSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal(RUNTIME_MESSAGES.START_RUN),
@@ -103,6 +122,10 @@ export const runtimeRequestSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal(RUNTIME_MESSAGES.TEST_PROVIDER_CONNECTION),
     input: providerSettingsInputSchema
+  }),
+  z.object({
+    type: z.literal(RUNTIME_MESSAGES.SET_DOMAIN_ADAPTER_ENABLED),
+    input: setDomainAdapterEnabledInputSchema
   })
 ]);
 
@@ -125,6 +148,8 @@ export type DecideApprovalInput = z.infer<typeof decideApprovalInputSchema>;
 export type ReviseGoalInput = z.infer<typeof reviseGoalInputSchema>;
 export type HighlightRefInput = z.infer<typeof highlightRefInputSchema>;
 export type TestProviderSettingsInput = z.infer<typeof providerSettingsInputSchema>;
+export type SetDomainAdapterEnabledInput = z.infer<typeof setDomainAdapterEnabledInputSchema>;
+export type RuntimeDomainAdapterId = AdapterId;
 export type RuntimeRequest = z.infer<typeof runtimeRequestSchema>;
 export type RuntimeResponse = z.infer<typeof runtimeResponseSchema>;
 
@@ -178,7 +203,27 @@ export type RuntimeTaskState = {
 export type RuntimeMemorySnapshot = {
   domain: string;
   entries: MemoryEntry[];
+  workflowPreviews?: WorkflowReplayPreview[] | undefined;
 };
+
+export type RuntimeDomainAdapterSnapshot =
+  | {
+      enabled: true;
+      id: AdapterId;
+      label: string;
+      workflowCount: number;
+      locatorCount: number;
+      approvalEnforced: true;
+    }
+  | {
+      enabled: false;
+      fallback: 'generic_browser_tools';
+      reason: string;
+      disabledAdapter?: {
+        id: AdapterId;
+        label: string;
+      } | undefined;
+    };
 
 export type RunSnapshot = {
   runId: string;
@@ -215,6 +260,8 @@ export type RunSnapshot = {
   canReviseGoal?: boolean;
   taskState?: RuntimeTaskState | undefined;
   memory?: RuntimeMemorySnapshot | undefined;
+  workflowDraft?: WorkflowDraft | undefined;
+  domainAdapter?: RuntimeDomainAdapterSnapshot | undefined;
   toolResult?: RuntimeToolResultSnapshot;
   pendingApproval?: ApprovalUiState | undefined;
   messages?: AgentMessage[] | undefined;

@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../../../../src/i18n/context';
 import { MemoryViewer } from '../../../../src/ui/components/memory-viewer';
 import { ReplayPreview } from '../../../../src/ui/components/replay-preview';
+import { WorkflowDraftPreview } from '../../../../src/ui/components/workflow-draft-preview';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -96,5 +97,48 @@ describe('memory and replay components', () => {
     root.unmount();
     container.remove();
   });
-});
 
+  it('renders an unsaved workflow draft and exposes save-for-preview action', () => {
+    const onSave = vi.fn();
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <I18nProvider initialLocale="zh">
+          <WorkflowDraftPreview
+            draft={{
+              id: 'draft_run_1',
+              domain: 'app.example.com',
+              intent: '打开账单报表',
+              taskDescription: '打开账单报表',
+              steps: [{
+                id: 'draft_step_1',
+                tool: 'bh_page_observe',
+                summary: '观察账单页面',
+                risk: 'safe',
+                requiresApproval: false
+              }],
+              completionEvidence: ['账单页面已打开'],
+              requiresPreview: true,
+              requiresApproval: true,
+              saved: false
+            }}
+            onSave={onSave}
+          />
+        </I18nProvider>
+      );
+    });
+
+    expect(container.textContent).toContain('Workflow 草稿');
+    expect(container.textContent).toContain('未保存');
+    expect(container.textContent).toContain('观察账单页面');
+    act(() => {
+      container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onSave).toHaveBeenCalledOnce();
+    root.unmount();
+    container.remove();
+  });
+});

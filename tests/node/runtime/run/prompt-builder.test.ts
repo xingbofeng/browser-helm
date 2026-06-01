@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { buildMessages } from '../../../../src/agent/loop/prompt-builder';
 import { TRACE_EVENT_NAMES } from '../../../../src/shared/constants/event-names';
@@ -9,8 +9,13 @@ import type { ToolPromptContract } from '../../../../src/tools/core/tool-router'
 import { defaultMemoryRepo } from '../../../../src/storage/memory-repo';
 import { defaultScratchpadRepo } from '../../../../src/storage/scratchpad-repo';
 import { defaultWorkflowRepo } from '../../../../src/storage/workflow-repo';
+import { defaultDomainAdapterPreferences } from '../../../../src/adapters/preferences';
 
 describe('runtime prompt builder', () => {
+  beforeEach(() => {
+    defaultDomainAdapterPreferences.clear();
+  });
+
   it('keeps page read text in prompt even when page context is large', () => {
     const importantSentence = '重要正文在摘要之外：这篇文章主要解释如何注册尼日利亚区 Apple ID 并用于订阅 Claude Pro。';
     const messages = buildMessages({
@@ -143,6 +148,50 @@ describe('runtime prompt builder', () => {
     expect(prompt).toContain('Do not repeat bh_action_check_readiness');
   });
 
+  it('trims interactive structured data items before building the prompt', () => {
+    const interactiveItems = Array.from({ length: 80 }, (_, index) => ({
+      refId: `ref_interactive_${index}`,
+      role: 'button',
+      name: `Action ${index}`,
+      tagName: 'button',
+      visible: true,
+      disabled: false,
+      domOrder: index,
+      zone: 'main',
+      warnings: []
+    }));
+    const messages = buildMessages({
+      record: recordWithTrace([]),
+      snapshot: {
+        ...snapshotWithLastToolResult(TOOL_NAMES.PAGE_OBSERVE),
+        structuredPageData: {
+          observation: tabData('observation', []),
+          refs: tabData('refs', []),
+          interactive: tabData('many interactive items', interactiveItems),
+          forms: tabData('forms', [])
+        }
+      },
+      toolsContracts: [toolContract(TOOL_NAMES.PAGE_OBSERVE)],
+      locale: 'zh'
+    });
+
+    const prompt = messages.at(-1)?.content ?? '';
+    const parsed = JSON.parse(prompt) as {
+      structuredPageData: {
+        interactive: {
+          count: number;
+          items: Array<{ refId: string }>;
+          omittedCount: number;
+        };
+      };
+    };
+
+    expect(parsed.structuredPageData.interactive.count).toBe(80);
+    expect(parsed.structuredPageData.interactive.items).toHaveLength(50);
+    expect(parsed.structuredPageData.interactive.items.at(-1)?.refId).toBe('ref_interactive_49');
+    expect(parsed.structuredPageData.interactive.omittedCount).toBe(30);
+  });
+
   it('does not add loop guard guidance when the page changed between reads', () => {
     const messages = buildMessages({
       record: recordWithTrace([
@@ -212,6 +261,74 @@ describe('runtime prompt builder', () => {
     expect(prompt).toContain('Billing > Invoices');
     expect(prompt).toContain('打开账单报表');
     expect(prompt).toContain('已经确认报表使用 Billing 菜单。');
+  });
+
+  it('injects detected domain adapter guidance and workflows into the dynamic suffix', () => {
+    const messages = buildMessages({
+      record: {
+        ...recordWithTrace([]),
+        task: '帮我查看这个 GitHub 仓库的 issue'
+      },
+      snapshot: {
+        ...snapshotWithLastToolResult(TOOL_NAMES.PAGE_OBSERVE),
+        observation: {
+          url: 'https://github.com/openai/browser-helm/issues',
+          title: 'Issues',
+          currentDomain: 'github.com',
+          origin: 'https://github.com',
+          visibleTextSummary: 'Issues',
+          pageStateSummary: 'Ready',
+          interactiveCount: 8,
+          warnings: []
+        }
+      },
+      toolsContracts: [
+        toolContract(TOOL_NAMES.PAGE_OBSERVE),
+        toolContract(TOOL_NAMES.ADAPTER_DETECT_SITE)
+      ],
+      locale: 'zh'
+    });
+
+    expect(messages[0]?.content).not.toContain('github-open-issue');
+    const prompt = messages.at(-1)?.content ?? '';
+    expect(prompt).toContain('domainAdapter');
+    expect(prompt).toContain('GitHub');
+    expect(prompt).toContain('github-open-issue');
+    expect(prompt).toContain('never bypasses global approval policy');
+  });
+
+  it('falls back to generic adapter context when the matched adapter is disabled', () => {
+    defaultDomainAdapterPreferences.setEnabled('github', false);
+
+    const messages = buildMessages({
+      record: {
+        ...recordWithTrace([]),
+        task: '帮我查看这个 GitHub 仓库的 issue'
+      },
+      snapshot: {
+        ...snapshotWithLastToolResult(TOOL_NAMES.PAGE_OBSERVE),
+        observation: {
+          url: 'https://github.com/openai/browser-helm/issues',
+          title: 'Issues',
+          currentDomain: 'github.com',
+          origin: 'https://github.com',
+          visibleTextSummary: 'Issues',
+          pageStateSummary: 'Ready',
+          interactiveCount: 8,
+          warnings: []
+        }
+      },
+      toolsContracts: [
+        toolContract(TOOL_NAMES.PAGE_OBSERVE),
+        toolContract(TOOL_NAMES.ADAPTER_DETECT_SITE)
+      ],
+      locale: 'zh'
+    });
+
+    const prompt = messages.at(-1)?.content ?? '';
+    expect(prompt).toContain('generic_browser_tools');
+    expect(prompt).toContain('GitHub adapter disabled by user');
+    expect(prompt).not.toContain('github-open-issue');
   });
 
   it('does not inject memory hits for restricted domains', () => {

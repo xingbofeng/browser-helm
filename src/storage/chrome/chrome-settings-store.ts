@@ -7,6 +7,14 @@ import {
   isBrowserHelmDomainPolicy,
   type BrowserHelmDomainPolicy
 } from '../../shared/domain-policy';
+import type { AdapterId } from '../../adapters/adapter-types';
+import {
+  BROWSER_HELM_DOMAIN_ADAPTER_SETTINGS_KEY,
+  DEFAULT_DOMAIN_ADAPTER_SETTINGS,
+  defaultDomainAdapterPreferences,
+  normalizeDomainAdapterSettings,
+  type DomainAdapterSettings
+} from '../../adapters/preferences';
 
 const PROVIDER_SETTINGS_KEY = 'providerSettings';
 
@@ -44,5 +52,27 @@ export class ChromeSettingsStore implements SettingsStore {
     await chrome.storage.local.set({
       [BROWSER_HELM_DOMAIN_POLICY_STORAGE_KEY]: policy
     });
+  }
+
+  async getDomainAdapterSettings(): Promise<DomainAdapterSettings | undefined> {
+    if (!globalThis.chrome?.storage?.local) {
+      return defaultDomainAdapterPreferences.getSettings();
+    }
+    const result = await chrome.storage.local.get(BROWSER_HELM_DOMAIN_ADAPTER_SETTINGS_KEY);
+    const settings = normalizeDomainAdapterSettings(result[BROWSER_HELM_DOMAIN_ADAPTER_SETTINGS_KEY]);
+    defaultDomainAdapterPreferences.setSettings(settings);
+    return settings;
+  }
+
+  async setDomainAdapterEnabled(adapterId: AdapterId, enabled: boolean): Promise<DomainAdapterSettings> {
+    const current = await this.getDomainAdapterSettings() ?? DEFAULT_DOMAIN_ADAPTER_SETTINGS;
+    defaultDomainAdapterPreferences.setSettings(current);
+    const next = defaultDomainAdapterPreferences.setEnabled(adapterId, enabled);
+    if (globalThis.chrome?.storage?.local) {
+      await chrome.storage.local.set({
+        [BROWSER_HELM_DOMAIN_ADAPTER_SETTINGS_KEY]: next
+      });
+    }
+    return next;
   }
 }

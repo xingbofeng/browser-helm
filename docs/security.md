@@ -80,7 +80,7 @@ Screenshot data handling:
 
 - `sidepanel.html` — side panel UI
 - `page-health-hook.js` — error monitoring injection (see above)
-- `assets/*`, `icons/*` — UI assets
+- `icons/*` — floating panel entry icon
 
 ## Redaction
 

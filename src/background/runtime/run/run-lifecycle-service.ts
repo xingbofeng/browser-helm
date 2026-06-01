@@ -176,6 +176,7 @@ export class RunLifecycleService {
     record: RunRecord & { tabId: number },
     tabId: number
   ): Promise<void> {
+    await this.deps.settingsStore?.getDomainAdapterSettings?.();
     this.deps.store.appendTrace(record, {
       runId, type: TRACE_EVENT_NAMES.TOOL_STARTED,
       payload: { tool: TOOL_NAMES.PAGE_OBSERVE, args: {} }
@@ -219,8 +220,22 @@ export class RunLifecycleService {
       runId, type: TRACE_EVENT_NAMES.TOOL_RESULT,
       payload: { tool: TOOL_NAMES.PAGE_OBSERVE, ok: result.ok, code: result.code, summary: result.summary, changedPage: result.changedPage, requiresObserve: result.requiresObserve, requiresApproval: result.requiresApproval }
     });
+    const previousSnapshot = this.deps.store.getSnapshot(runId);
+    const observedSnapshot = this.deps.snapshotFromObserveResult(runId, record.mode, result, record.trace);
     const baseSnapshot = this.deps.withRunMessages(
-      this.deps.snapshotFromObserveResult(runId, record.mode, result, record.trace),
+      {
+        ...previousSnapshot,
+        ...observedSnapshot,
+        ...(previousSnapshot.goal ?? observedSnapshot.goal
+          ? { goal: previousSnapshot.goal ?? observedSnapshot.goal }
+          : {}),
+        ...(previousSnapshot.plan ?? observedSnapshot.plan
+          ? { plan: previousSnapshot.plan ?? observedSnapshot.plan }
+          : {}),
+        ...(previousSnapshot.taskState ?? observedSnapshot.taskState
+          ? { taskState: previousSnapshot.taskState ?? observedSnapshot.taskState }
+          : {})
+      },
       record
     );
 
@@ -240,9 +255,16 @@ export class RunLifecycleService {
   ): Promise<void> {
     this.deps.store.setSnapshot(runId, baseSnapshot);
     try {
+      const fallbackFields = this.deps.fallbackSnapshotFields(record.mode, result, record.locale ?? 'zh');
       const fallback: RunSnapshot = {
         ...baseSnapshot,
-        ...this.deps.fallbackSnapshotFields(record.mode, result, record.locale ?? 'zh'),
+        ...fallbackFields,
+        ...(baseSnapshot.goal ?? fallbackFields.goal
+          ? { goal: baseSnapshot.goal ?? fallbackFields.goal }
+          : {}),
+        ...(baseSnapshot.plan ?? fallbackFields.plan
+          ? { plan: baseSnapshot.plan ?? fallbackFields.plan }
+          : {}),
         trace: record.trace,
         messages: this.deps.withRunMessages(baseSnapshot, record).messages,
         streaming: this.deps.streamingStateFromTrace(record.trace),
@@ -265,9 +287,16 @@ export class RunLifecycleService {
     result: ToolResult,
     baseSnapshot: RunSnapshot
   ): Promise<void> {
+    const fallbackFields = this.deps.fallbackSnapshotFields(record.mode, result, record.locale ?? 'zh');
     let nextSnapshot: RunSnapshot = {
       ...baseSnapshot,
-      ...this.deps.fallbackSnapshotFields(record.mode, result, record.locale ?? 'zh'),
+      ...fallbackFields,
+      ...(baseSnapshot.goal ?? fallbackFields.goal
+        ? { goal: baseSnapshot.goal ?? fallbackFields.goal }
+        : {}),
+      ...(baseSnapshot.plan ?? fallbackFields.plan
+        ? { plan: baseSnapshot.plan ?? fallbackFields.plan }
+        : {}),
       trace: record.trace,
       messages: this.deps.withRunMessages(baseSnapshot, record).messages,
       streaming: this.deps.streamingStateFromTrace(record.trace),

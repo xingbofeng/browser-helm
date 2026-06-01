@@ -120,6 +120,7 @@ export class AgentLoop {
       input.record.mode
     );
     const locale = input.record.locale ?? 'zh';
+    const hasDomainPolicyApi = typeof this.deps.settingsStore.getDomainPolicy === 'function';
 
     for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
       const current = this.deps.getSnapshot(input.runId);
@@ -139,6 +140,7 @@ export class AgentLoop {
         trace: input.record.trace
       });
 
+      const domainPolicy = await this.deps.settingsStore.getDomainPolicy?.();
       const selectedTools = selectToolsForRun({
         mode: input.record.mode,
         task: input.record.task,
@@ -150,6 +152,14 @@ export class AgentLoop {
           hasDownloadsPermission: true,
           shallowDebugAvailable: true
         }),
+        ...(hasDomainPolicyApi
+          ? {
+              permissions: {
+                allowedDomains: domainPolicy?.enabledDomains ?? [],
+                requireExplicitDomainConsent: true
+              }
+            }
+          : {}),
         pendingApproval: current.pendingApproval !== undefined,
         ...(current.observation?.currentDomain
           ? { pageDomain: current.observation.currentDomain }
@@ -525,6 +535,39 @@ export class AgentLoop {
   ): Promise<{ done: boolean; snapshot: RunSnapshot }> {
     if (decision.type === 'finish') {
       const current = this.deps.getSnapshot(input.runId);
+      const finishCriteria = evaluateFinishCriteria(
+        current.goal,
+        input.record.taskState,
+        explicitSuccessCriteria(input.record.trace)
+      );
+      if (finishCriteria.unmetCriteria.length > 0) {
+        const snapshot: RunSnapshot = {
+          ...current,
+          status: 'waiting_for_user',
+          taskState: input.record.taskState,
+          ...(finishCriteria.goal ? { goal: finishCriteria.goal } : {}),
+          messages: upsertAgentMessage(
+            current.messages,
+            askUserMessage(
+              input.runId,
+              unmetCriteriaQuestion(finishCriteria.unmetCriteria, input.record.locale ?? 'zh'),
+              input.record.locale ?? 'zh'
+            )
+          ),
+          trace: input.record.trace
+        };
+        this.deps.appendTrace(input.record, {
+          runId: input.runId,
+          type: TRACE_EVENT_NAMES.STATE_CHANGED,
+          payload: {
+            status: 'waiting_for_user',
+            reason: 'success_criteria_unmet',
+            unmetCriteria: finishCriteria.unmetCriteria
+          }
+        });
+        this.setSnapshot(input.runId, this.deps.withRunMessages(snapshot, input.record));
+        return { done: true, snapshot };
+      }
       this.deps.appendTrace(input.record, {
         runId: input.runId,
         type: TRACE_EVENT_NAMES.RUN_FINISHED,
@@ -537,6 +580,7 @@ export class AgentLoop {
         ...current,
         status: 'finished',
         taskState: input.record.taskState,
+        ...(finishCriteria.goal ? { goal: finishCriteria.goal } : {}),
         messages: upsertFinalMessage(
           current.messages,
           input.runId,
@@ -738,6 +782,74 @@ function askUserMessage(
     createdAt: now,
     updatedAt: now
   };
+}
+
+function evaluateFinishCriteria(
+  goal: RunSnapshot['goal'],
+  taskState: RunSnapshot['taskState'],
+  explicitCriteria: string[] | undefined
+): {
+  goal: RunSnapshot['goal'];
+  unmetCriteria: string[];
+} {
+  if (!explicitCriteria?.length) {
+    return { goal, unmetCriteria: [] };
+  }
+  if (!goal) {
+    return { goal, unmetCriteria: explicitCriteria };
+  }
+  const criteria = explicitCriteria;
+  const completed = [
+    ...goal.satisfiedCriteria,
+    ...(taskState?.completed ?? [])
+  ];
+  const satisfiedCriteria = criteria.filter((criterion) =>
+    completed.some((item) => textMatchesCriterion(item, criterion))
+  );
+  const unmetCriteria = criteria.filter((criterion) =>
+    !satisfiedCriteria.some((satisfied) => textMatchesCriterion(satisfied, criterion))
+  );
+  return {
+    goal: {
+      ...goal,
+      satisfiedCriteria,
+      unsatisfiedCriteria: unmetCriteria
+    },
+    unmetCriteria
+  };
+}
+
+function explicitSuccessCriteria(trace: RunRecord['trace']): string[] | undefined {
+  const started = trace.find((event) => event.type === TRACE_EVENT_NAMES.RUN_STARTED);
+  if (!started || typeof started.payload !== 'object' || started.payload === null) {
+    return undefined;
+  }
+  const value = started.payload.successCriteria;
+  return Array.isArray(value)
+    ? value.filter((criterion): criterion is string =>
+        typeof criterion === 'string' && criterion.trim().length > 0
+      )
+    : undefined;
+}
+
+function textMatchesCriterion(left: string, right: string): boolean {
+  const normalizedLeft = normalizeCriterionText(left);
+  const normalizedRight = normalizeCriterionText(right);
+  return normalizedLeft === normalizedRight ||
+    normalizedLeft.includes(normalizedRight) ||
+    normalizedRight.includes(normalizedLeft);
+}
+
+function normalizeCriterionText(value: string): string {
+  return value.trim().replace(/\s+/gu, ' ').toLowerCase();
+}
+
+function unmetCriteriaQuestion(criteria: string[], locale: Locale): string {
+  const list = criteria.map((criterion) => `- ${criterion}`).join('\n');
+  if (locale === 'en') {
+    return `Before finishing, these success criteria are still unverified:\n${list}\nPlease keep verifying them or explain why they cannot be satisfied.`;
+  }
+  return `完成前仍有未验证的验收条件：\n${list}\n请继续验证这些条件，或说明为什么无法满足。`;
 }
 
 function explicitValueFieldLabels(

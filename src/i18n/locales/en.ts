@@ -170,6 +170,16 @@ export const en = {
   'debug.tab.streaming': 'Streaming',
   'debug.tab.aria': 'Advanced debug options',
 
+  // ── Domain Adapter ──
+  'adapter.statusAria': 'Domain adapter status',
+  'adapter.enabledTitle': '{label} adapter',
+  'adapter.enabledMeta': '{workflows} workflow, {locators} locator hints',
+  'adapter.approvalEnforced': 'Approval policy enforced',
+  'adapter.genericTitle': 'Generic browser tools',
+  'adapter.genericReason': 'No domain adapter enabled',
+  'adapter.disableAction': 'Disable {label} adapter',
+  'adapter.enableAction': 'Enable {label} adapter',
+
   // ── Debug Trace Tab ──
   'debug.trace.title': 'Event Summary',
   'debug.trace.downloadAria': 'Download trace JSONL',
@@ -349,6 +359,10 @@ export const en = {
   'tool.description.bh_a11y_snapshot': 'Returns an accessibility-like snapshot with stable refs',
   'tool.description.bh_action_check_readiness': 'Read-only check for whether a proposed action is ready and would require approval; it does not execute the action',
   'tool.description.bh_action_click': 'Clicks a ready non-high-risk target by stable ref_id; high-risk targets are not clicked automatically',
+  'tool.description.bh_adapter_detect_site': 'Detects whether a URL has a site-specific domain adapter.',
+  'tool.description.bh_adapter_list_workflows': 'Lists site-specific workflow templates without executing them.',
+  'tool.description.bh_adapter_apply_locator': 'Applies adapter locator hints to observed candidates and falls back on failure.',
+  'tool.description.bh_adapter_report_failure': 'Records adapter workflow or locator failure for fallback and improvement.',
   'tool.description.bh_agent_ask_user': 'Requests user input before continuing',
   'tool.description.bh_agent_fail': 'Fails current run with structured error',
   'tool.description.bh_agent_finish': 'Completes current run with final summary',
@@ -448,6 +462,9 @@ export const en = {
   'replay.preview.lowRisk': 'Review required',
   'replay.preview.approve': 'Approve replay',
   'replay.preview.deny': 'Deny',
+  'workflow.draft.title': 'Workflow Draft',
+  'workflow.draft.unsaved': 'Unsaved',
+  'workflow.draft.saveForPreview': 'Save and preview',
 
   // ── Elements State ──
   'elements.sensitiveField': 'Sensitive field',
@@ -886,6 +903,10 @@ export const en = {
   'tool.title.bh_page_read_article': 'Read Page Article',
   'tool.title.bh_page_read_visible_text': 'Read Visible Text',
   'tool.title.bh_page_wait_until_stable': 'Page Wait Until Stable',
+  'tool.title.bh_adapter_detect_site': 'Detect Domain Adapter',
+  'tool.title.bh_adapter_list_workflows': 'List Adapter Workflows',
+  'tool.title.bh_adapter_apply_locator': 'Apply Adapter Locator',
+  'tool.title.bh_adapter_report_failure': 'Report Adapter Failure',
 
   // ── Tool Error Messages ──
   'tool.error.formRpcNoObservation': 'Content RPC did not return a page observation',

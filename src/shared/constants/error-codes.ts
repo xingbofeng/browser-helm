@@ -64,7 +64,10 @@ export const ERROR_CODE_DEFINITIONS = [
   { number: 3602, code: 'POINTER_ACTION_FAILED', description: '坐标动作失败' },
   { number: 3700, code: 'FILE_READ_UNAVAILABLE', description: '文件读取不可用' },
   { number: 3701, code: 'DOCUMENT_READ_FAILED', description: '文档读取失败' },
-  { number: 3702, code: 'CLIPBOARD_UNAVAILABLE', description: '剪贴板不可用' }
+  { number: 3702, code: 'CLIPBOARD_UNAVAILABLE', description: '剪贴板不可用' },
+  { number: 3800, code: 'ADAPTER_NOT_FOUND', description: '未检测到站点 adapter' },
+  { number: 3801, code: 'ADAPTER_LOCATOR_FAILED', description: '站点 adapter locator 匹配失败' },
+  { number: 3802, code: 'ADAPTER_WORKFLOW_FAILED', description: '站点 adapter workflow 匹配失败' }
 ] as const;
 
 export const ERROR_CODES = {
@@ -133,6 +136,9 @@ export const ERROR_CODES = {
   FILE_READ_UNAVAILABLE: 'FILE_READ_UNAVAILABLE',
   DOCUMENT_READ_FAILED: 'DOCUMENT_READ_FAILED',
   CLIPBOARD_UNAVAILABLE: 'CLIPBOARD_UNAVAILABLE',
+  ADAPTER_NOT_FOUND: 'ADAPTER_NOT_FOUND',
+  ADAPTER_LOCATOR_FAILED: 'ADAPTER_LOCATOR_FAILED',
+  ADAPTER_WORKFLOW_FAILED: 'ADAPTER_WORKFLOW_FAILED',
 } as const;
 
 export const ERROR_CODE_NUMBERS = Object.fromEntries(

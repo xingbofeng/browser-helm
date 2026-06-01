@@ -10,101 +10,6 @@
 **待确认**：
 - [ ] 后续是否按月份继续拆分 archive，例如 `implementation-notes-archive-2026-05.md`。
 
-## Action Readiness 重复检查修复 - 2026-05-31
-
-**目标**：分析 `browserhelm-trace-run_8-20260531.jsonl` 中 Act 模式反复检查 Quickstart 链接却不前进的问题，并防止同类 run 走到 max steps。
-
-**设计决策**：
-- 根因是模型把 `bh_action_check_readiness` 的 OK 结果误当成“点击会发生/已经发生”；该工具实际是只读动作前检查，不修改页面。
-- `bh_action_check_readiness` 的 summary 和工具描述显式写明 “no action was executed / 不会执行该动作”。
-- prompt 在最近一次 readiness 后加入边界 guidance：不要在页面未变化或 refs 未刷新时重复检查同一目标；没有单独执行工具时应 finish 并说明边界。
-- `decision-validator` 增加硬保护：同一页面上相同 `kind + refId` 的 readiness 已成功后，重复决策进入 repair，不再触发第二次工具执行。
-
-**偏差说明**：没有新增真实点击工具；本次只修复 readiness 被模型误用导致的循环。是否开放通用链接点击/导航执行能力需要单独对齐审批、风险和工具命名。
-
-**验证结果**：
-- 新增回归测试覆盖重复 readiness repair。
-- `npm test -- tests/node/runtime/run-manager.test.ts -t "repairs repeated action readiness"` 通过。
-- `npm test -- tests/node/runtime/run/prompt-builder.test.ts` 通过。
-- `npm test -- tests/node/runtime/run/decision-validator.test.ts tests/node/tools/action/action-tools.test.ts tests/node/shared/schemas/action-readiness.test.ts` 通过。
-- `npm test -- tests/node/runtime/run-manager.test.ts` 通过：59 passed。
-- `npm run typecheck` 通过。
-- `npm run lint -- --quiet` 通过。
-- `npm run build` 通过。
-
-**待确认**：
-- [ ] 是否需要为非表单链接点击新增单独 public action execution 工具，还是继续保持 Act 只做 readiness/表单低风险执行。
-
-## Tool Status 与 Ask User 顺序修复 - 2026-05-31
-
-**目标**：分析 `browserhelm-trace-run_8-20260531 (1).jsonl` 中 UI 显示“需要你的补充”在 `bh_action_check_readiness` 工具卡上方的原因，并修复瀑布流顺序误导。
-
-**设计决策**：
-- trace 真实顺序是先 `bh_action_check_readiness`，后模型返回 `ask_user`；UI 反序来自 `RunManager.withRunMessages()` 在 terminal snapshot 中根据最新 `toolResult` 追加派生工具状态消息。
-- 新增 `upsertToolStatusMessage()`，当当前 run 已有 ask/final/recommendation/error/provider 回复时，把工具状态卡插到该回复前；已有工具卡仍原位更新，不制造重复消息。
-- 保持 trace、toolResult 和 AgentLoop 决策语义不变，本次只修 user-facing waterfall 的派生消息顺序。
-
-**偏差说明**：本次没有新增真实点击工具；`帮我点击` 仍会先做只读 readiness，然后因为没有公开点击执行工具而请求用户手动处理或补充。
-
-**验证结果**：
-- 新增回归测试覆盖 tool status 在 ask_user 前展示。
-- `npm test -- tests/node/runtime/run-manager.test.ts -t "orders tool status before ask_user"` 通过。
-- `npm test -- tests/node/runtime/run-manager.test.ts tests/node/runtime/run/prompt-builder.test.ts tests/node/runtime/run/decision-validator.test.ts tests/node/tools/action/action-tools.test.ts tests/node/shared/schemas/action-readiness.test.ts` 通过：84 passed。
-- `npm run typecheck` 通过。
-- `npm run lint -- --quiet` 通过。
-- `npm run build` 通过。
-
-**待确认**：
-- [ ] 是否需要进一步把 action readiness 的工具卡标题从默认“工具 bh_action_check_readiness”改成更可读的“动作就绪检查”。
-
-## Act 模式普通点击执行工具 - 2026-05-31
-
-**目标**：修复“帮我点击”只检查 readiness、不自动点击的问题，让普通链接/按钮点击在 Act 模式下可被模型真实执行。
-
-**设计决策**：
-- 新增公开工具 `bh_action_click`，仅在 Act 模式暴露，执行链为 `A11Y_RESOLVE_REF -> IFRAME_ACTION_AUTHORIZE -> IFRAME_CLICK`，复用已有 content-script token 授权和 frame 路由。
-- 工具执行前复用 `checkResolvedActionReadiness`。普通中风险目标可点击；不可见、disabled、ref 过期或高风险目标不执行。
-- 高风险点击目前返回 `APPROVAL_REQUIRED` 并明确 `click was not executed`，不接入默认 approval flow，因为默认 approval 只记录决定，不会自动执行动作。
-- `bh_action_check_readiness` 仍保持只读职责，并补充敏感字段归一化，避免漏判高风险。
-
-**偏差说明**：本次只开放普通 click；提交、支付、删除、上传、发送等高风险点击仍需要后续设计专门 approval flow。
-
-**验证结果**：
-- 新增工具单测覆盖顶层 ref 点击、iframe ref 点击和高风险阻断。
-- 新增 runtime 回归测试覆盖 Act 模式下模型调用 `bh_action_click` 会走到真实 `IFRAME_CLICK`。
-- `npm test -- tests/node/tools/action/action-tools.test.ts tests/node/runtime/run-manager.test.ts tests/node/agent/modes/tool-selector.test.ts tests/node/tools/iframe-frame-naming.test.ts tests/node/tools/frame/iframe-tools.test.ts` 通过：82 passed。
-- `npm run typecheck` 通过。
-- `npm run lint -- --quiet` 通过。
-- `npm run build` 通过。
-
-**待确认**：
-- [ ] 是否需要为高风险点击新增专门 approval flow，让用户批准后重新校验并执行。
-
-## v1.2 Memory / Workflow / Replay 骨架与 ESLint Warn 修复 - 2026-05-31
-
-**目标**：补齐 v1.2 本地记忆、scratchpad、workflow/replay 基础能力，并把 ESLint warning 压到 0，避免 UI 被 memory 查询副作用污染。
-
-**设计决策**：
-- 新增 `bh_memory_*`、`bh_pad_*`、`bh_flow_*` 工具族，先使用本地 repo 与 schema 保护契约，所有写入走脱敏策略。
-- Agent prompt 只注入经过 domain policy 和预算裁剪的 memory/scratchpad/session summary，避免长页面读取被 memory 上下文挤掉。
-- MemoryViewer 不再通过 `executeTool(bh_memory_list)` 自动拉取数据；改为由 `RunSnapshot.memory` 被动携带当前 domain memory，保留当前 `toolResult` 和 debug trace。
-- Workflow replay 先实现 preview/approval/step/score 的受控骨架；高风险 replay 默认需要用户批准。
-
-**偏差说明**：当前 memory/workflow repo 仍是内存实现，尚未落到 IndexedDB/Dexie；session persistence 也先提供接口与 in-memory 实现，后续需要接 `chrome.storage.session`。
-
-**验证结果**：
-- `npm run typecheck` 通过。
-- `npm run lint -- --max-warnings=0` 通过。
-- `npm run test:node -- tests/node/runtime/run/run-store.test.ts tests/node/ui/components/memory-replay-components.test.tsx` 通过，实际覆盖 131 files passed / 1 skipped，795 tests passed / 1 skipped。
-- `npm run build` 通过。
-- `npm run test:e2e` 通过：38 passed / 7 skipped。
-- 真实 Chrome for Testing 扩展会话验证：basic form 自动观察可见；MemoryViewer 显示后台写入的 domain memory；高级面板当前工具仍为 `bh_page_observe`，未被 `bh_memory_save/list` 覆盖。
-
-**待确认**：
-- [ ] 是否把 memory/workflow repo 从内存实现切到 IndexedDB/Dexie。
-- [ ] 是否把 run session persistence 从 in-memory 接到 `chrome.storage.session`。
-- [ ] 是否继续实现完整 workflow replay runner，而不是当前 preview/approval/step 骨架。
-
 ## v1.2 持久化与 Workflow Replay Runner 收口 - 2026-05-31
 
 **目标**：把 v1.2 从内存骨架推进到可验收状态：memory/workflow/scratchpad 落 IndexedDB，run session 状态落 `chrome.storage.session`，workflow replay 批准后按步骤执行。
@@ -130,32 +35,6 @@
 **待确认**：
 - [ ] 是否追加一个专门的 E2E spec 覆盖 workflow replay approval runner，而不是仅保留 node 单测 + 真实浏览器手工脚本验证。
 - [ ] 是否为高风险 workflow step 增加更细的 per-step preview UI，而不只依赖当前整体 replay approval + runtime policy。
-
-## v1.3 DevTools/CDP Deep Debug - 2026-05-31
-
-**目标**：实现 v1.3 DevTools/CDP 深度调试能力，覆盖 debugger attach/detach、network/console/performance/event listeners/request detail、Deep Inspect UI、敏感信息脱敏和 page-health opt-in fallback。
-
-**设计决策**：
-- 新增 `src/background/debugger/`，由 `DebuggerManager` 统一管理 `chrome.debugger` attach 状态和 Network/Runtime/Performance 事件缓存。
-- 新增 `bh_cdp_*` 工具族，仅在 Debug/Full 语义下可用；attach/detach 为 medium risk，只改变扩展 debugger 状态，不直接修改页面。
-- Request/response headers、console 文本、request/response body preview 和 URL query/hash 在进入 tool result、trace、UI 前做脱敏；敏感 headers/cookies/token/API key 默认显示 `[MASKED]`。
-- `page-health-hook.js` 不再默认注入；`bh_debug_collect_page_health` 在 Debug mode 下按需启用临时诊断 hook，且 postMessage 前后都对 URL path/query/fragment 和 provider secret 做脱敏。
-- Side panel 新增 Deep Inspect tab，展示 request inspector、performance metrics 和 console event panel；所有新增 UI 文案走 i18n，`eslint --max-warnings=0` 保持为 0。
-
-**偏差说明**：CDP deep tools 需要 manifest `debugger` 权限。当前 Deep Inspect 以最近一次 CDP tool result 展示对应面板，不做跨工具历史聚合；跨 request 的持久 inspector 状态可后续再做。
-
-**验证结果**：
-- `npm run typecheck` 通过。
-- `npm run lint -- --max-warnings=0` 通过。
-- `npm test` 通过：157 files passed / 1 skipped，1020 tests passed / 1 skipped。
-- `npm run check:release` 通过，工具清单校验为 65 个工具一致，manifest 权限文档校验为 7 required / 3 optional / 4 resources documented。
-- `npm run build` 通过。
-- `npm run test:e2e` 通过：38 passed / 7 skipped。
-- 真实 Chrome for Testing 扩展验证：`bh_cdp_attach` 成功 attach fixture tab；捕获 2 个 network request、2 个 console events、36 个 performance metrics；request detail 可读；缺失 requestId 的 response body 返回 unavailable；Authorization/header/token 在 tool result 和 Deep Inspect UI 中显示为 `[MASKED]`；`bh_cdp_detach` 成功释放 debugger。
-
-**待确认**：
-- [ ] 是否为 Deep Inspect 增加跨 CDP 工具结果的持久聚合视图，而不只展示最近一次结果。
-- [ ] 是否把 CDP 真实浏览器验证脚本固化为专门 E2E spec。
 
 ## v1.4 Vision / Screenshot Agent - 2026-05-31
 
@@ -268,3 +147,133 @@
 **待确认**：
 - [ ] 是否在 v1.6 继续把 workflow replay approval runner 固化为专门 E2E。
 - [ ] 是否为 Form Doctor / Page Inspector 这类产品化英文 UI 名称增加中文别名。
+
+## Review P0/P1 收口修复 - 2026-06-01
+
+**目标**：按外部 review 意见收口 submit approval、prompt budget、release hygiene 和 README 准确性问题。
+
+**设计决策**：
+- submit token 必须绑定 submitTargetRefId 或 formRefId；formRefId-only fallback 只能在原字段所在表单内查找 submit/Enter 路径。
+- PromptBuilder 对 interactive.items 和 refs/forms 一样裁剪到 50 条，并保留 omittedCount。
+- CI 在已执行 `npm run zip` 后改用 `build:landing:from-existing`，避免重复 zip；README/release notes 改为准确描述 provider 数据流、API key 存储和 Debug opt-in page-health。
+
+**偏差说明**：没有重做 v1.3-v1.5 能力；当前代码已包含 CDP、vision、advanced tool skeleton，本次只修 review 中仍存在的收口缺口。
+
+**验证结果**：
+- RED 后 GREEN：`npm test -- tests/dom/page/messaging/content-rpc-handler.test.ts -t "submit tokens|formRef-only"` 通过。
+- RED 后 GREEN：`npm test -- tests/node/runtime/run/prompt-builder.test.ts -t "trims interactive"` 通过。
+- `npm test -- tests/dom/page/messaging/content-rpc-handler.test.ts tests/node/runtime/run/prompt-builder.test.ts tests/node/shared/truncate-json.test.ts` 通过。
+- `npm run typecheck` 通过。
+- `npm run lint -- --max-warnings=0` 通过。
+
+## v1.6 Domain Adapters - 2026-06-01
+
+**目标**：实现站点 adapter registry、site detection、guidance/workflow/locator hints、failure reporting、PromptBuilder 注入和 Cockpit adapter 状态展示，覆盖 GitHub、Gmail、Notion、Linear、Jira、Stripe、Vercel、Supabase 首批 skeleton。
+
+**设计决策**：
+- adapter 只提供 guidance、workflow template 和 locator hint，不直接执行页面动作；真实动作仍走现有 ToolRouter、risk 和 approval 边界。
+- `bh_adapter_*` 工具全部只读 safe：detect/list/apply locator/report failure 只返回元数据或记录失败，并在失败时明确 fallback 到 generic browser tools。
+- Runtime snapshot 只暴露 adapter 启用状态、workflow/locator 数量和 approval enforced 标记；PromptBuilder 注入 guidance/workflow/locator 摘要，不把 selector 当成可直接执行动作。
+
+**偏差说明**：为完成端到端集成，实际改动超出 roadmap 中 `src/adapters/`、`src/tools/adapter/`、`tests/node/adapters/` 和 `tests/node/tools/adapter/` 的示例目录，增加了 shared constants、runtime snapshot、PromptBuilder、Cockpit UI、i18n、README 和 extension E2E 入口；这些是让 adapter 状态进入 agent/runtime/UI 所必需的集成点。
+
+**权衡分析**：
+- 方案一：让 adapter workflow 直接执行页面动作。优点是短期能力强；缺点是会绕过既有 approval 与 generic tool fallback 边界。
+- 方案二：adapter 只做站点知识层，执行仍由通用工具和现有 policy 负责。优点是安全边界清楚、generic tools 不受影响；缺点是 skeleton 阶段能力偏保守。
+- 选择方案二，因为 v1.6 的核心是“站点增强但不降低安全性”。
+
+**验证结果**：
+- TDD RED/GREEN 已覆盖 registry、adapter tools、PromptBuilder 注入、runtime snapshot、Cockpit 状态 UI 和 extension E2E。
+- `npx vitest run tests/node/tools/adapter/adapter-tools.test.ts` 通过：1 file / 6 tests。
+- `npm run typecheck` 通过。
+- `npm run lint -- --max-warnings=0` 通过，ESLint warning 为 0。
+- `npm run check:release` 通过：87 个工具名与 README 一致；release hygiene 和 manifest permissions 通过。
+- `npm test` 通过：179 files passed / 1 skipped，1101 tests passed / 1 skipped。
+- `npm run test:e2e` 通过：52 passed / 12 skipped，真实 Chrome for Testing 扩展宿主覆盖 adapter E2E、Cockpit、审批、页面观察和通用工具回归；skipped 为真实第三方站点 opt-in 冒烟。
+
+**待确认**：
+- [ ] 后续是否把每个 adapter skeleton 拆成独立站点 fixture 与更细的 per-adapter 单测。
+
+## 真实站点与真实模型 E2E 扩展 - 2026-06-01
+
+**目标**：扩展真实站点 E2E 到常见页面场景，并为真实模型 API 增加独立 opt-in E2E，覆盖 12 个真实站点的模型决策、正文/可见文本读取、搜索框填写、低风险注册字段填写和 trace 落盘排障流程。
+
+**设计决策**：
+- `test:e2e:real` 默认走 `test:e2e:real:model`，确保“真实站点 E2E”入口本身就是模型 API 决策路径；旧的确定性真实站点观察/表单/滚动用例保留为 `test:e2e:real:direct`，仅用于低成本诊断。
+- 复杂真实模型失败时把 runtime snapshot/trace 落到 `artifacts/runtime-traces/*.json`，用于核对模型轮次、工具选择、工具结果和最终状态；真实 suite 断言 provider streaming、model decision 和关键工具调用，不接受 mock/fake runtime。
+- 真实第三方页面写入场景必须显式设置 domain policy；测试不绕过域名 consent，只模拟用户已允许目标域名。
+- Amazon/StackOverflow 这类第三方动态拦截页面保留“模型读取并总结当前状态”的路径；Google、YouTube、GitHub、USA.gov、Apple 负责真实低风险填写且不提交。
+
+**偏差说明**：真实模型 API 用例除 `.env` 外也读取本项目实际使用的 `.env.development`，否则会误判缺少 provider 配置。新增复杂用例后暴露并修复了多类真实 loop/DOM 风险：重复正文读取、重复表单/可访问性发现、`clear: true` 被误执行为只清空、受控/隐藏 checkbox 状态未通过 click 路径同步、真实站点重定向域名 consent 不匹配，以及模型误请求 act mode。
+
+**权衡分析**：把真实模型与真实站点观察拆开，牺牲一次命令全覆盖的便利性，换取默认验证稳定性和费用安全。对重复工具调用选择在 decision validator 层 repair 并带上压缩字段清单，而不是单纯提高 maxSteps，因为根因是模型循环和上下文不足，不是步数不足。
+
+**验证结果**：`npm run test:e2e:real` 现已默认进入模型 suite，并在读取 `.env.development` 后通过：12 passed / 3.7m，覆盖 Google、Wikipedia、YouTube、Reddit、Amazon、GitHub、StackOverflow、MDN、BBC、USA.gov、Apple、Anthropic；`npx vitest run tests/node/config/package-scripts.test.ts tests/node/runtime/run/decision-validator.test.ts tests/dom/page/dom/form-fill-dom.test.ts` 通过：65 tests；`npm run typecheck` 和 `npm run lint -- --max-warnings=0` 通过。最新 trace 摘要显示 provider model 为 `deepseek-v4-flash`，Apple 路径实际执行 `bh_page_observe`、`bh_form_read_fields`、`bh_form_fill_many`，Wikipedia 路径实际执行 `bh_page_read_article` 和 `bh_viewport_scroll`。
+
+**待确认**：
+- [ ] 后续是否把 Amazon 这类真实站点的失败 fill_field 降级为 agent 可恢复错误，而不是测试层改成读取/总结。
+
+## successCriteria 完成门控审查修复 - 2026-06-01
+
+**目标**：复核 review 中“成功标准未验证就完成”的风险，确保显式 successCriteria 不会在 observe/fallback 或模型 finish 时丢失。
+
+**设计决策**：只强制用户显式传入的 successCriteria；默认 mode criteria 继续作为提示，不阻塞普通 ask/observe 任务完成。observe/fallback 合并 snapshot 时保留既有 goal、plan、taskState；若模型 finish 但显式标准未满足，run 转为 `waiting_for_user` 并追加 `success_criteria_unmet` 状态事件。
+
+**偏差说明**：没有把所有默认 criteria 升级为硬门控，因为现有大量 ask/stream 测试依赖“回答即可结束”的语义。
+
+**验证结果**：RED/GREEN 覆盖 `blocks finish when explicit success criteria remain unverified`；`npm test`、`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm run check:release`、`npm run build` 均通过。
+
+**待确认**：
+- [ ] 是否把普通域名写操作默认也升级为域级显式 consent。
+
+## Review P1/P2 全量审查补齐 - 2026-06-01
+
+**目标**：继续按外部 review 审查未闭合项，补齐域名 consent、prompt budget、web-accessible 暴露面和 pre-push 本地验证入口。
+
+**设计决策**：
+- ToolSelector 和 direct `executeTool` 都要求普通外部域名显式启用后才暴露或执行 form fill/submit、动作点击、CDP/page-health 等写入或诊断 hook 工具；localhost/loopback 保持开发测试可用。
+- system prompt 中工具 argsSchema 改为紧凑摘要，保留字段名、required、type/enum，避免工具族增多后挤掉 taskState/runtime facts。
+- manifest 不再把 `assets/*` 暴露为 web-accessible resource；仅保留 `sidepanel.html`、`page-health-hook.js` 和浮动入口需要的 `icons/*`。
+- 新增 `setup:pre-push` 安装脚本，给需要本地保护的开发者手动启用 `npm run preflight`。
+
+**验证结果**：`npm test` 通过：180 files passed / 1 skipped，1118 tests passed / 1 skipped；`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm run check:release` 通过；`npm run test:e2e` 通过：52 passed / 15 skipped。
+
+**待确认**：
+- [ ] 真实站点和真实模型 E2E 仍为 opt-in，本轮未默认运行。
+
+## v1.6 Domain Adapter Review 收口 - 2026-06-01
+
+**目标**：补齐 v1.6 审查发现的 adapter 禁用、workflow 失败自动记录、Cockpit enabled 状态 E2E 和 per-adapter 单测缺口。
+
+**设计决策**：新增 adapter 偏好设置与 runtime enable/disable 消息，禁用后 registry/snapshot/prompt 都回退到 generic；`bh_adapter_list_workflows` 在指定 workflow 不存在时记录 failure 并返回 `ADAPTER_WORKFLOW_FAILED`；E2E 用路由后的 GitHub 页面覆盖启用、禁用、再启用。
+
+**偏差说明**：为让执行工具读取最新 adapter 偏好，`RunManager.executeTool` 改为先水合 settings 与 domain consent，再调用 tool router；同时收紧 prompt 历史预算，避免新增 adapter context 使 provider 消息超过 32k 上限。
+
+**权衡分析**：选择持久化用户偏好而不是只做单次 UI 状态，因为禁用 adapter 是用户显式安全/可靠性选择；代价是 runtime/storage/snapshot 多一层同步。
+
+**验证结果**：`npm test` 通过：180 files passed / 1 skipped，1119 tests passed / 1 skipped；`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm run check:release` 通过；`npm run test:e2e` 通过：52 passed / 15 skipped；两个此前 full E2E 偶发失败用例定向重跑也通过。
+
+**待确认**：
+- [ ] 后续是否为 8 个 adapter 各自增加站点 fixture 级别 E2E，而不是当前 registry 单测覆盖。
+
+## v1.2-v1.5 验收补齐：Workflow 复用闭环与 iframe 写动作 E2E - 2026-06-01
+
+**目标**：按 v1.2-v1.5 验收标准逐项补缺，重点闭合 v1.2 同域 workflow 命中确认、成功 run 生成未保存 workflow 草稿并 preview/approval，以及 v1.5 公共点击工具对 iframe 普通目标的真实写动作验证。
+
+**设计决策**：
+- `RunManager.getSnapshot()` 在已有 snapshot 基础上按当前 domain 注入 memory entries、workflow replay previews 和成功 run 的 `workflowDraft`；draft 只附在 snapshot，不静默保存到 workflow repo。
+- Cockpit 复用现有 `ReplayPreview` approval UI：同域 workflow hit 直接显示可确认 replay；workflow draft 先走 `bh_flow_save`，拿到 id 后走 `bh_flow_preview`，再进入同一确认 replay 路径。
+- v1.5 新增 extension E2E 只验证公共 `bh_action_click`，不绕过到私有 iframe click 工具；断言 iframe DOM 真实变更且 `requiresObserve: true`。
+
+**偏差说明**：本轮补的是验收缺口和产品闭环，没有扩大 workflow 自动保存策略，也没有放宽 iframe 高风险工具审批边界。
+
+**验证结果**：
+- `npx vitest run tests/node/runtime/run-manager.test.ts tests/node/ui/sidepanel/cockpit-app.test.tsx tests/node/ui/components/memory-replay-components.test.tsx` 通过：3 files / 71 tests。
+- `npm run typecheck`、`npm run lint -- --max-warnings=0` 通过。
+- `npm test` 通过：180 files passed / 1 skipped，1129 tests passed / 1 skipped。
+- `npm run test:e2e -- tests/e2e/specs/extension/page-observation.spec.ts` 通过：7 passed。
+- `npm run test:e2e` 通过：53 passed / 24 skipped。
+- `npm run check:release` 与 `git diff --check` 通过。
+
+**待确认**：
+- [ ] 真实第三方站点与真实模型 E2E 仍保持 opt-in，本轮未默认运行。

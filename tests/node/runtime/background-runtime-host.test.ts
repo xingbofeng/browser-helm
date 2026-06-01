@@ -57,6 +57,11 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
         message: '连接正常',
         supportsStreaming: true
       }),
+      setDomainAdapterEnabled: async (input) => ({
+        runId: input.runId,
+        mode: 'ask',
+        status: 'observed'
+      }),
       subscribeRun: () => () => undefined
     });
 
@@ -155,6 +160,11 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
         message: '连接正常',
         supportsStreaming: true
       }),
+      setDomainAdapterEnabled: async (input) => ({
+        runId: input.runId,
+        mode: 'ask',
+        status: 'observed'
+      }),
       subscribeRun: () => () => undefined
     });
 
@@ -213,6 +223,11 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
         message: '连接正常',
         supportsStreaming: true
       }),
+      setDomainAdapterEnabled: async (input) => ({
+        runId: input.runId,
+        mode: 'ask',
+        status: 'observed'
+      }),
       subscribeRun: () => () => undefined
     });
 
@@ -263,6 +278,11 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
         message: '连接正常',
         supportsStreaming: true
       }),
+      setDomainAdapterEnabled: async (input) => ({
+        runId: input.runId,
+        mode: 'ask',
+        status: 'observed'
+      }),
       subscribeRun: (_runId, listener) => {
         listeners.push(listener);
         return () => {
@@ -312,6 +332,11 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
         code: 'OK',
         message: `tested ${settings.model}`,
         supportsStreaming: settings.streamingEnabled
+      }),
+      setDomainAdapterEnabled: async (input) => ({
+        runId: input.runId,
+        mode: 'ask',
+        status: 'observed'
       }),
       subscribeRun: () => () => undefined
     });

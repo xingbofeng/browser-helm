@@ -12,6 +12,7 @@ import {
   type RuntimeToolExecutionResult,
   type RunSnapshot,
   type ReviseGoalInput,
+  type SetDomainAdapterEnabledInput,
   type StartRunInput,
   type TestProviderSettingsInput
 } from './runtime-messages';
@@ -154,6 +155,20 @@ export class ExtensionRuntimePort implements RuntimePort {
 
   setDomainPolicy(policy: BrowserHelmDomainPolicy): Promise<void> {
     return this.settingsStore.setDomainPolicy(policy);
+  }
+
+  async setDomainAdapterEnabled(input: SetDomainAdapterEnabledInput): Promise<RunSnapshot> {
+    const response = await sendRuntimeMessage({
+      type: RUNTIME_MESSAGES.SET_DOMAIN_ADAPTER_ENABLED,
+      input
+    });
+    if (!response.ok) {
+      throw new Error(response.message);
+    }
+    if (!isRunSnapshot(response.data)) {
+      throw new Error('Runtime domain adapter response is invalid');
+    }
+    return response.data;
   }
 
   async testProviderSettings(

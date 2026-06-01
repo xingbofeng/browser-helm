@@ -35,7 +35,7 @@
 
 | | BrowserHelm | 其他浏览器 Agent |
 |---|---|---|
-| 🔒 **数据隐私** | 全部本地运行，不经过任何第三方 | 通常需要云服务中转 |
+| 🔒 **数据隐私** | BrowserHelm 本体本地运行；云模型直连你配置的 provider | 通常需要云服务中转 |
 | 🧠 **模型自由** | BYOK，用你自己的 API Key | 通常绑定特定模型 |
 | 👁️ **先观察后执行** | 强制页面观察 → 风险审批 → 执行 | 直接操作，缺乏透明度 |
 | 📋 **完整可追溯** | 每一步都有结构化 trace 记录 | 黑盒操作 |
@@ -87,12 +87,11 @@
 - 结构化 trace 记录每一步的决策、工具调用、参数和结果
 - 高级开发者面板提供完整 trace 回放和诊断报告
 - 流式模型输出实时可见
-- 调试模式支持 `bh_debug_collect_page_health` 收集 Console Error / Network Failure（需开启 Debug run mode）
-- 注：Page Health Hook 默认注入页面以监听错误事件；不收集 cookie、密码字段或用户输入。未来版本将改为 Debug mode opt-in。
+- 调试模式支持 `bh_debug_collect_page_health` 按需启用 Page Health Hook，收集本地 Console Error / Network Failure 摘要（需开启 Debug run mode）
 
 ### 🔌 模型自由
 
-不内置任何模型服务。支持所有 OpenAI 兼容接口，包括 Ollama、vLLM、DeepSeek、通义千问等本地或云端模型。自定义 Base URL，API Key 本地存储。
+不内置任何模型服务。支持所有 OpenAI 兼容接口，包括 Ollama、vLLM、DeepSeek、通义千问等本地或云端模型。自定义 Base URL，API Key 保存在 `chrome.storage.local`，不会进入 trace 或发送到 BrowserHelm 自有后端。
 
 ### 🏠 本地优先
 
@@ -130,7 +129,7 @@ BrowserHelm 内置 **70+ 个 `bh_` 前缀工具**，覆盖页面观察、表单�
 ### 安装
 
 ```bash
-git clone https://github.com/your-org/browser-helm.git
+git clone https://github.com/xingbofeng/browser-helm.git
 cd browser-helm
 npm install
 npm run build

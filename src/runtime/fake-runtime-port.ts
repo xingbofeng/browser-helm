@@ -10,10 +10,13 @@ import type {
   RuntimeToolExecutionResult,
   RunSnapshot,
   ReviseGoalInput,
+  SetDomainAdapterEnabledInput,
   StartRunInput,
   TestProviderSettingsInput
 } from './runtime-messages';
 import type { RuntimePort } from './runtime-port';
+import { defaultDomainAdapterPreferences } from '../adapters/preferences';
+import { defaultDomainAdapterRegistry } from '../adapters/registry';
 import { initializeGoalState } from '../agent/goal/goal-state';
 import { readLocale } from '../i18n/locale';
 import { t } from '../i18n/t';
@@ -291,6 +294,27 @@ export class FakeRuntimePort implements RuntimePort {
     return Promise.resolve();
   }
 
+  setDomainAdapterEnabled(input: SetDomainAdapterEnabledInput): Promise<RunSnapshot> {
+    defaultDomainAdapterPreferences.setEnabled(input.adapterId, input.enabled);
+    const snapshot = this.snapshots.get(input.runId) ?? {
+      runId: input.runId,
+      mode: 'ask' as const,
+      status: 'not_found' as const
+    };
+    const nextSnapshot: RunSnapshot = {
+      ...snapshot,
+      domainAdapter: snapshot.observation?.url
+        ? fakeDomainAdapterSnapshot(snapshot.observation.url)
+        : snapshot.domainAdapter
+    };
+    this.snapshots.set(input.runId, nextSnapshot);
+    this.emit(input.runId, {
+      runId: input.runId,
+      type: 'snapshot_updated'
+    });
+    return Promise.resolve(nextSnapshot);
+  }
+
   async testProviderSettings(input: TestProviderSettingsInput): Promise<RuntimeProviderTestResult> {
     const locale = await readLocale();
     return Promise.resolve({
@@ -307,6 +331,33 @@ export class FakeRuntimePort implements RuntimePort {
       listener(event);
     }
   }
+}
+
+function fakeDomainAdapterSnapshot(url: string): RunSnapshot['domainAdapter'] {
+  const detection = defaultDomainAdapterRegistry.detect(url);
+  if (!detection.enabled) {
+    return {
+      enabled: false,
+      fallback: detection.fallback,
+      reason: detection.reason,
+      ...(detection.disabledAdapter
+        ? {
+            disabledAdapter: {
+              id: detection.disabledAdapter.id,
+              label: detection.disabledAdapter.label
+            }
+          }
+        : {})
+    };
+  }
+  return {
+    enabled: true,
+    id: detection.adapter.id,
+    label: detection.adapter.label,
+    workflowCount: detection.adapter.workflows.length,
+    locatorCount: detection.adapter.locators.length,
+    approvalEnforced: true
+  };
 }
 
 function fakeInitialMessages(

@@ -277,6 +277,14 @@ describe('fillSingleField', () => {
     const r = fillSingleField(document, refMap, { fieldRefId: refId, value: '', clear: true });
     expect(r.status).toBe('cleared');
   });
+
+  it('fills field after clear is requested with a replacement value', () => {
+    setupPage('<input type="text" value="old" name="q">');
+    const refId = reg(document.querySelector('input')!, { name: 'q' });
+    const r = fillSingleField(document, refMap, { fieldRefId: refId, value: 'new', clear: true });
+    expect(r.status).toBe('filled');
+    expect((document.querySelector('input')!).value).toBe('new');
+  });
 });
 
 describe('fillManyFields', () => {

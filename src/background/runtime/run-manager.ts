@@ -11,16 +11,22 @@ import type {
   StartRunInput,
   TestProviderSettingsInput
 } from '../../runtime/runtime-messages';
+import type { SetDomainAdapterEnabledInput } from '../../runtime/runtime-messages';
 import { ApprovalManager } from '../../runtime/approval/approval-manager';
 import { ChromeSettingsStore } from '../../storage/chrome/chrome-settings-store';
 import type { SettingsStore } from '../../storage/interfaces/settings-store';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
-import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
+import { CONTENT_RPC_MESSAGES, TRACE_EVENT_NAMES } from '../../shared/constants/event-names';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import type { AgentMessage } from '../../shared/schemas/agent-message.schema';
 import type { ToolResult } from '../../shared/schemas/tool-result.schema';
+import { buildRunSummary } from '../../agent/memory/run-summary-builder';
+import { buildWorkflowDraft } from '../../agent/memory/plan-to-workflow-draft';
+import { defaultMemoryRepo } from '../../storage/memory-repo';
+import { defaultWorkflowRepo } from '../../storage/workflow-repo';
 import { createToolRegistry } from '../../tools';
 import { ToolRouter } from '../../tools/core/tool-router';
+import { toolRequiresExplicitDomainConsent } from '../../tools/core/tool-selector';
 import { approvalRequiredResult } from '../../tools/core/tool-result-factory';
 import { RunLifecycleService } from './run/run-lifecycle-service';
 import {
@@ -34,6 +40,7 @@ import {
 } from './run/run-message-presenter';
 import {
   fallbackSnapshotFields,
+  buildDomainAdapterSnapshot,
   snapshotFromObserveResult,
   snapshotToolResult
 } from './run/run-snapshot-assembler';
@@ -52,6 +59,10 @@ import type { Locale } from '../../i18n/types';
 import { t } from '../../i18n/t';
 import { createProviderClient } from './provider-client-factory';
 import { VisionClient } from '../../agent/model/vision-client';
+import {
+  evaluateBrowserHelmDomainPolicy,
+  type BrowserHelmDomainPolicy
+} from '../../shared/domain-policy';
 
 export class RunManager {
   private readonly store: RunStore;
@@ -84,7 +95,7 @@ export class RunManager {
       createProviderModelClient: deps.createProviderModelClient,
       initialMessages,
       errorMessage,
-      executeTool: async (input) => await this.tools.execute(input)
+      executeTool: async (input) => await this.executeTool(input)
     });
 
     this.tools = new ToolExecutionService({
@@ -140,11 +151,11 @@ export class RunManager {
   getSnapshot(runId: string): RunSnapshot {
     const snapshot = this.store.getSnapshot(runId);
     const record = this.store.getRecord(runId);
-    return {
+    return enrichSnapshotWithMemoryReuse({
       ...snapshot,
       ...(record?.tabId ? { targetTabId: record.tabId } : {}),
       ...(record?.taskState ? { taskState: record.taskState } : {})
-    };
+    }, record);
   }
 
   cancelRun(runId: string): Promise<{ runId: string; status: 'cancelled' }> {
@@ -156,7 +167,84 @@ export class RunManager {
   }
 
   executeTool(input: ExecuteToolInput): Promise<ToolResult> {
-    return this.tools.execute(input);
+    return this.executeToolWithAdapterSettings(input);
+  }
+
+  private async executeToolWithAdapterSettings(input: ExecuteToolInput): Promise<ToolResult> {
+    await this.settingsStore.getDomainAdapterSettings?.();
+    const domainGateResult = await this.domainConsentGateResult(input);
+    if (domainGateResult) {
+      return domainGateResult;
+    }
+    return await this.tools.execute(input);
+  }
+
+  private async domainConsentGateResult(input: ExecuteToolInput): Promise<ToolResult | undefined> {
+    if (typeof this.settingsStore.getDomainPolicy !== 'function') {
+      return undefined;
+    }
+    const record = this.store.getRecord(input.runId);
+    if (!record?.tabId) {
+      return undefined;
+    }
+    const contract = this.createToolRouter(record.tabId).getToolContract(input.tool, record.mode);
+    if (!contract || !toolRequiresExplicitDomainConsent(contract)) {
+      return undefined;
+    }
+    const snapshot = this.store.getSnapshot(input.runId);
+    const domain = snapshot.observation?.currentDomain;
+    const policy = await this.settingsStore.getDomainPolicy();
+    const decision = evaluateDomainConsent(domain, policy);
+    if (decision.allowed) {
+      return undefined;
+    }
+    const code = decision.reason ?? 'DOMAIN_NOT_ENABLED';
+    const result: ToolResult = {
+      ok: false,
+      code,
+      summary: `Domain ${domain ?? 'unknown'} is not enabled for mutating or diagnostic hook tools`,
+      changedPage: false,
+      requiresObserve: false,
+      error: {
+        message: `Enable ${domain ?? 'this domain'} before running ${input.tool}`
+      }
+    };
+    this.store.appendTrace(record, {
+      runId: input.runId,
+      type: TRACE_EVENT_NAMES.TOOL_RESULT,
+      payload: {
+        tool: input.tool,
+        ok: false,
+        code,
+        summary: result.summary,
+        changedPage: false,
+        requiresObserve: false
+      }
+    });
+    this.store.setSnapshot(input.runId, {
+      ...snapshot,
+      status: 'waiting_for_user',
+      toolResult: snapshotToolResult(input.tool, result),
+      trace: record.trace
+    });
+    return result;
+  }
+
+  async setDomainAdapterEnabled(input: SetDomainAdapterEnabledInput): Promise<RunSnapshot> {
+    const settings = await this.settingsStore.setDomainAdapterEnabled?.(input.adapterId, input.enabled);
+    if (!settings) {
+      throw new Error('Domain adapter settings store is unavailable');
+    }
+    const snapshot = this.store.getSnapshot(input.runId);
+    const nextSnapshot: RunSnapshot = {
+      ...snapshot,
+      ...(snapshot.observation?.url
+        ? { domainAdapter: buildDomainAdapterSnapshot(snapshot.observation.url) }
+        : {})
+    };
+    this.store.setSnapshot(input.runId, nextSnapshot);
+    this.store.notifySnapshotUpdated(input.runId);
+    return this.getSnapshot(input.runId);
   }
 
   decideApproval(input: DecideApprovalInput): Promise<ToolResult> {
@@ -306,6 +394,41 @@ export class RunManager {
   }
 }
 
+function enrichSnapshotWithMemoryReuse(snapshot: RunSnapshot, record: RunRecord | undefined): RunSnapshot {
+  const domain = snapshot.observation?.currentDomain;
+  if (!domain) {
+    return snapshot;
+  }
+  const workflowPreviews = record
+    ? defaultWorkflowRepo.lookup({ domain, query: record.task, limit: 3 })
+      .flatMap((workflow) => {
+        const preview = defaultWorkflowRepo.preview(workflow.id);
+        return preview ? [preview] : [];
+      })
+    : [];
+  const workflowDraft = record && snapshot.status === 'finished'
+    ? buildWorkflowDraft({
+      domain,
+      runSummary: buildRunSummary({
+        runId: snapshot.runId,
+        task: record.task,
+        trace: record.trace,
+        snapshot
+      })
+    })
+    : undefined;
+
+  return {
+    ...snapshot,
+    memory: {
+      domain,
+      entries: defaultMemoryRepo.list(domain),
+      ...(workflowPreviews.length ? { workflowPreviews } : {})
+    },
+    ...(workflowDraft ? { workflowDraft } : {})
+  };
+}
+
 function upsertToolStatusMessage(messages: AgentMessage[], message: AgentMessage): void {
   const index = messages.findIndex((item) => item.id === message.id);
   if (index >= 0) {
@@ -347,4 +470,35 @@ function isCurrentRunReplyMessage(message: AgentMessage): boolean {
 function runIdFromMessageId(id: string): string {
   const index = id.indexOf(':');
   return index >= 0 ? id.slice(0, index) : id;
+}
+
+function evaluateDomainConsent(
+  domain: string | undefined,
+  policy: BrowserHelmDomainPolicy | undefined
+) {
+  if (domain && isLoopbackOrLocalhost(domain)) {
+    return { allowed: true, hostname: domain, restricted: false };
+  }
+  return evaluateBrowserHelmDomainPolicy(domain, {
+    enabledDomains: policy?.enabledDomains ?? [],
+    blockedDomains: policy?.blockedDomains,
+    allowRestrictedDomains: policy?.allowRestrictedDomains,
+    defaultEnabled: false
+  });
+}
+
+function isLoopbackOrLocalhost(domain: string): boolean {
+  const hostname = normalizeHostname(domain);
+  return hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname.endsWith('.localhost');
+}
+
+function normalizeHostname(domain: string): string {
+  try {
+    return new URL(`http://${domain}`).hostname.toLowerCase();
+  } catch {
+    return domain.toLowerCase().replace(/^\.+|\.+$/gu, '').replace(/:\d+$/u, '');
+  }
 }

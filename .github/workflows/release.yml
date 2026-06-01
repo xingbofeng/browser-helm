@@ -151,13 +151,13 @@ jobs:
           - No BrowserHelm backend. Settings and traces stored in \`chrome.storage.local\`.
           - When using a cloud AI provider, trimmed/redacted page context is sent to your configured endpoint.
           - API keys stored locally (unencrypted; WebCrypto encryption planned).
-          - Page-health hook injects by default to monitor console errors / network failures; does not read form inputs, cookies, or passwords. Will become Debug opt-in in a future release.
-          - Permissions: \`activeTab\`, \`storage\`, \`tabs\`, \`scripting\`, \`sidePanel\`, \`webNavigation\`, optional \`<all_urls>\`.
+          - Page-health hook is Debug-mode opt-in through \`bh_debug_collect_page_health\` and stores only local diagnostic summaries.
+          - Permissions include \`activeTab\`, \`storage\`, \`tabs\`, \`scripting\`, \`sidePanel\`, \`webNavigation\`, \`debugger\`, \`downloads\`, \`offscreen\`, clipboard permissions, and optional host permissions.
 
           ### ⚠️ Known Limitations
 
-          - Memory, workflow replay, CDP deep tools not yet implemented (roadmap v1.2–v1.5).
-          - \`bh_iframe_click\` / \`bh_iframe_type\` hidden; iframe mutating actions not exposed.
+          - CDP, vision, download, document and clipboard tools are permission-gated and intentionally narrower than full DevTools/browser automation.
+          - \`bh_iframe_click\` / \`bh_iframe_type\` remain internal; public mutation tools must go through action/form/approval boundaries.
           - No WebCrypto API key encryption.
           - No Chrome Web Store listing yet.
 

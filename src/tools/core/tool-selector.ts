@@ -14,6 +14,7 @@ type SelectToolsInput = {
   permissions?: {
     allowedRisks?: ToolRisk[];
     allowedDomains?: string[];
+    requireExplicitDomainConsent?: boolean | undefined;
   };
   pendingApproval?: boolean;
   pageDomain?: string;
@@ -92,7 +93,7 @@ export function selectToolsForRun(input: SelectToolsInput): ToolSelection {
       input.pageDomain &&
       input.permissions?.allowedDomains &&
       input.permissions.allowedDomains.length > 0 &&
-      !input.permissions.allowedDomains.includes(input.pageDomain)
+      !matchesAllowedDomain(input.pageDomain, input.permissions.allowedDomains)
     ) {
       hiddenTools.push({
         tool: tool.name,
@@ -100,6 +101,24 @@ export function selectToolsForRun(input: SelectToolsInput): ToolSelection {
       });
       if (!limitations.includes(`Domain ${input.pageDomain} is not allowed`)) {
         limitations.push(`Domain ${input.pageDomain} is not allowed`);
+      }
+      continue;
+    }
+
+    if (
+      input.permissions?.requireExplicitDomainConsent === true &&
+      input.pageDomain &&
+      !isLocalDevelopmentDomain(input.pageDomain) &&
+      toolRequiresExplicitDomainConsent(tool) &&
+      !matchesAllowedDomain(input.pageDomain, input.permissions?.allowedDomains)
+    ) {
+      const reason = `Domain ${input.pageDomain} requires explicit consent before mutating or diagnostic hook tools are exposed`;
+      hiddenTools.push({
+        tool: tool.name,
+        reason
+      });
+      if (!limitations.includes(`Domain ${input.pageDomain} requires explicit consent`)) {
+        limitations.push(`Domain ${input.pageDomain} requires explicit consent`);
       }
       continue;
     }
@@ -189,4 +208,53 @@ function taskNeedsAdvancedFamily(task: string, pattern: RegExp): string | undefi
     return undefined;
   }
   return 'Advanced tool family is not needed for current task';
+}
+
+export function toolRequiresExplicitDomainConsent(tool: ToolPromptContract): boolean {
+  return tool.name.startsWith('bh_form_fill_') ||
+    tool.name.startsWith('bh_form_submit') ||
+    tool.name.startsWith('bh_action_') ||
+    tool.name.startsWith('bh_pointer_') ||
+    tool.name === TOOL_NAMES.TAB_FOCUS ||
+    tool.name === TOOL_NAMES.FILE_UPLOAD_WITH_APPROVAL ||
+    tool.name === TOOL_NAMES.CLIPBOARD_WRITE_WITH_APPROVAL ||
+    (tool.risk === 'high' && !tool.readOnly) ||
+    tool.name.startsWith('bh_debug_') ||
+    tool.name.startsWith('bh_cdp_');
+}
+
+function matchesAllowedDomain(
+  pageDomain: string,
+  allowedDomains: string[] | undefined
+): boolean {
+  if (!allowedDomains?.length) {
+    return false;
+  }
+  const normalizedPageDomain = normalizeDomain(pageDomain);
+  if (!normalizedPageDomain) {
+    return false;
+  }
+  return allowedDomains.some((domain) => {
+    const normalized = normalizeDomain(domain);
+    return normalized
+      ? normalizedPageDomain === normalized || normalizedPageDomain.endsWith(`.${normalized}`)
+      : false;
+  });
+}
+
+function normalizeDomain(value: string): string | undefined {
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    const normalized = value.toLowerCase().replace(/^\.+|\.+$/gu, '');
+    return normalized.length > 0 ? normalized : undefined;
+  }
+}
+
+function isLocalDevelopmentDomain(value: string): boolean {
+  const normalized = normalizeDomain(value);
+  return normalized === 'localhost' ||
+    normalized === '127.0.0.1' ||
+    normalized === '::1' ||
+    normalized?.endsWith('.localhost') === true;
 }

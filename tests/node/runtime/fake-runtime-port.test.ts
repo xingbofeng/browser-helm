@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
+import { defaultDomainAdapterPreferences } from '../../../src/adapters/preferences';
 import { FakeRuntimePort } from '../../../src/runtime/fake-runtime-port';
 
 describe('FakeRuntimePort', () => {
+  beforeEach(() => {
+    defaultDomainAdapterPreferences.clear();
+  });
+
   it('starts runs, stores snapshots, emits events and cancels runs', async () => {
     const port = new FakeRuntimePort({
       snapshots: [
@@ -215,5 +220,59 @@ describe('FakeRuntimePort', () => {
     });
     expect(snapshot.plan?.mode).toBe('form');
     expect(events).toContain('plan_updated');
+  });
+
+  it('updates domain adapter snapshots when toggling adapter preferences', async () => {
+    const port = new FakeRuntimePort({
+      snapshots: [
+        {
+          runId: 'seed_adapter',
+          mode: 'ask',
+          status: 'observed',
+          refs: [],
+          observation: {
+            url: 'https://github.com/openai/browser-helm/issues',
+            title: 'Issues',
+            currentDomain: 'github.com',
+            origin: 'https://github.com',
+            visibleTextSummary: 'Issues',
+            pageStateSummary: 'GitHub issues page',
+            interactiveCount: 1,
+            warnings: []
+          },
+          domainAdapter: {
+            enabled: true,
+            id: 'github',
+            label: 'GitHub adapter',
+            workflowCount: 1,
+            locatorCount: 1,
+            approvalEnforced: true
+          }
+        }
+      ]
+    });
+
+    const disabled = await port.setDomainAdapterEnabled({
+      runId: 'seed_adapter',
+      adapterId: 'github',
+      enabled: false
+    });
+    expect(disabled.domainAdapter).toMatchObject({
+      enabled: false,
+      disabledAdapter: {
+        id: 'github'
+      }
+    });
+
+    const enabled = await port.setDomainAdapterEnabled({
+      runId: 'seed_adapter',
+      adapterId: 'github',
+      enabled: true
+    });
+    expect(enabled.domainAdapter).toMatchObject({
+      enabled: true,
+      id: 'github',
+      label: 'GitHub'
+    });
   });
 });

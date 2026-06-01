@@ -1,0 +1,92 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+
+import { defaultDomainAdapterRegistry } from '../../../src/adapters/registry';
+import { defaultDomainAdapterPreferences } from '../../../src/adapters/preferences';
+
+const adapterUrls = {
+  github: 'https://github.com/openai/browser-helm/issues',
+  gmail: 'https://mail.google.com/mail/u/0/#inbox',
+  notion: 'https://example.notion.site/project',
+  linear: 'https://linear.app/browser-helm/issue/BH-1/test',
+  jira: 'https://browserhelm.atlassian.net/browse/BH-1',
+  stripe: 'https://dashboard.stripe.com/customers',
+  vercel: 'https://vercel.com/counter/browser-helm',
+  supabase: 'https://app.supabase.com/project/example'
+} as const;
+
+describe('domain adapter registry', () => {
+  beforeEach(() => {
+    defaultDomainAdapterPreferences.clear();
+  });
+
+  it('detects supported domains and exposes guidance plus workflows', () => {
+    const detection = defaultDomainAdapterRegistry.detect('https://github.com/openai/browser-helm/issues/1');
+
+    expect(detection).toMatchObject({
+      enabled: true,
+      adapter: {
+        id: 'github',
+        label: 'GitHub'
+      }
+    });
+    if (!detection.enabled) {
+      throw new Error('Expected GitHub adapter detection');
+    }
+    expect(detection.adapter.guidance.summary).toContain('GitHub');
+    expect(detection.adapter.workflows.map((workflow) => workflow.id)).toContain('github-open-issue');
+  });
+
+  it('returns a generic fallback when no supported adapter matches', () => {
+    const detection = defaultDomainAdapterRegistry.detect('https://example.com/docs');
+
+    expect(detection).toEqual({
+      enabled: false,
+      fallback: 'generic_browser_tools',
+      reason: 'No domain adapter matches https://example.com'
+    });
+  });
+
+  it('includes the first batch of v1.6 adapter skeletons', () => {
+    expect(defaultDomainAdapterRegistry.list().map((adapter) => adapter.id)).toEqual([
+      'github',
+      'gmail',
+      'notion',
+      'linear',
+      'jira',
+      'stripe',
+      'vercel',
+      'supabase'
+    ]);
+  });
+
+  it('exposes guidance, workflow, and locator hints for every first-batch adapter', () => {
+    for (const [adapterId, url] of Object.entries(adapterUrls)) {
+      const detection = defaultDomainAdapterRegistry.detect(url);
+      expect(detection.enabled, adapterId).toBe(true);
+      if (!detection.enabled) {
+        throw new Error(`Expected ${adapterId} adapter detection`);
+      }
+      expect(detection.adapter.id).toBe(adapterId);
+      expect(detection.adapter.guidance.summary.length).toBeGreaterThan(0);
+      expect(detection.adapter.workflows.length).toBeGreaterThan(0);
+      expect(detection.adapter.locators.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('falls back to generic tools when the matched adapter is disabled by the user', () => {
+    defaultDomainAdapterPreferences.setEnabled('github', false);
+
+    const detection = defaultDomainAdapterRegistry.detect(adapterUrls.github);
+
+    expect(detection).toEqual({
+      enabled: false,
+      fallback: 'generic_browser_tools',
+      reason: 'GitHub adapter disabled by user',
+      disabledAdapter: {
+        id: 'github',
+        label: 'GitHub',
+        domain: 'github.com'
+      }
+    });
+  });
+});

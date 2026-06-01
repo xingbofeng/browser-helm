@@ -47,6 +47,15 @@ test('路由 iframe 读取并在变更前阻止高风险点击和输入', async 
   }
 });
 
+test('公共点击工具可执行 iframe 内普通目标并要求重新观察', async () => {
+  const flow = await PageObservationFlow.start();
+  try {
+    await flow.expectPublicActionClickMutatesSafeIframeTarget();
+  } finally {
+    await flow.close();
+  }
+});
+
 test('通过运行时审批 API 拒绝高风险 iframe 工具', async () => {
   const flow = await PageObservationFlow.start();
   try {

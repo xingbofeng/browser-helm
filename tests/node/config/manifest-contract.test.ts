@@ -134,10 +134,10 @@ describe('manifest action / web_accessible_resources 契约', () => {
     expect(allResources).toContain('icons/*');
   });
 
-  it('web_accessible_resources 包含 assets/*', () => {
+  it('web_accessible_resources 不暴露构建资产通配符', () => {
     const resources = manifest.web_accessible_resources as Array<{ resources: string[] }>;
     const allResources = resources.flatMap((entry) => entry.resources);
-    expect(allResources).toContain('assets/*');
+    expect(allResources).not.toContain('assets/*');
   });
 
   it('web_accessible_resources 只暴露给 http/https 页面', () => {

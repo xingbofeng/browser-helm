@@ -49,6 +49,17 @@ const tools: ToolPromptContract[] = [
     contextVisibility: 'summary'
   },
   {
+    name: 'bh_debug_collect_page_health',
+    title: 'Page health',
+    description: 'Collect shallow debug hook signals',
+    modes: ['debug'],
+    risk: 'safe',
+    argsSchema: {},
+    readOnly: true,
+    requiresApproval: false,
+    contextVisibility: 'summary'
+  },
+  {
     name: 'bh_file_upload_with_approval',
     title: 'Upload file',
     description: 'Upload file with approval',
@@ -98,6 +109,83 @@ describe('core ToolSelector', () => {
       tool: 'bh_form_submit_with_approval',
       reason: 'High-risk tools require explicit approval boundary'
     });
+  });
+
+  it('requires explicit domain consent before exposing mutating form tools on ordinary domains', () => {
+    const result = selectToolsForRun({
+      mode: 'form',
+      task: '填写表单',
+      tools,
+      capabilities: {
+        hasActiveTab: true,
+        hasDebuggerPermission: false,
+        hasClipboardPermission: false,
+        hasDownloadsPermission: false,
+        hostPermissions: [],
+        shallowDebugAvailable: true,
+        cdp: 'reserved'
+      },
+      permissions: { requireExplicitDomainConsent: true },
+      pageDomain: 'docs.example.com',
+      pageState: {
+        hasForm: true
+      }
+    });
+
+    expect(result.visibleTools).toEqual(['bh_page_observe']);
+    expect(result.hiddenTools).toContainEqual({
+      tool: 'bh_form_fill_many',
+      reason: 'Domain docs.example.com requires explicit consent before mutating or diagnostic hook tools are exposed'
+    });
+  });
+
+  it('exposes mutating and debug hook tools when the current domain is explicitly enabled', () => {
+    const formResult = selectToolsForRun({
+      mode: 'form',
+      task: '填写表单',
+      tools,
+      capabilities: {
+        hasActiveTab: true,
+        hasDebuggerPermission: false,
+        hasClipboardPermission: false,
+        hasDownloadsPermission: false,
+        hostPermissions: [],
+        shallowDebugAvailable: true,
+        cdp: 'reserved'
+      },
+      permissions: {
+        allowedDomains: ['example.com'],
+        requireExplicitDomainConsent: true
+      },
+      pageDomain: 'docs.example.com',
+      pageState: {
+        hasForm: true
+      }
+    });
+
+    expect(formResult.visibleTools).toContain('bh_form_fill_many');
+
+    const debugResult = selectToolsForRun({
+      mode: 'debug',
+      task: '检查 console 错误',
+      tools,
+      capabilities: {
+        hasActiveTab: true,
+        hasDebuggerPermission: false,
+        hasClipboardPermission: false,
+        hasDownloadsPermission: false,
+        hostPermissions: [],
+        shallowDebugAvailable: true,
+        cdp: 'reserved'
+      },
+      permissions: {
+        allowedDomains: ['example.com'],
+        requireExplicitDomainConsent: true
+      },
+      pageDomain: 'docs.example.com'
+    });
+
+    expect(debugResult.visibleTools).toContain('bh_debug_collect_page_health');
   });
 
   it('pauses risky tools while an approval request is pending', () => {

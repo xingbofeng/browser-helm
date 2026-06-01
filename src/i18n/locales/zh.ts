@@ -172,6 +172,16 @@ export const zh = {
   'debug.tab.streaming': 'Streaming',
   'debug.tab.aria': '高级开发者选项',
 
+  // ── Domain Adapter ──
+  'adapter.statusAria': '站点 adapter 状态',
+  'adapter.enabledTitle': '{label} adapter',
+  'adapter.enabledMeta': '{workflows} 个 workflow，{locators} 个 locator hints',
+  'adapter.approvalEnforced': 'Approval policy enforced',
+  'adapter.genericTitle': 'Generic browser tools',
+  'adapter.genericReason': '当前使用通用 browser tools',
+  'adapter.disableAction': '禁用 {label} adapter',
+  'adapter.enableAction': '启用 {label} adapter',
+
   // ── Debug Trace Tab ──
   'debug.trace.title': '事件摘要',
   'debug.trace.downloadAria': '下载 trace JSONL',
@@ -351,6 +361,10 @@ export const zh = {
   'tool.description.bh_a11y_snapshot': '返回带稳定引用的类无障碍树快照。',
   'tool.description.bh_action_check_readiness': '只读检查拟执行动作是否就绪、是否需要用户确认；不会执行该动作。',
   'tool.description.bh_action_click': '点击已就绪且非高风险的稳定引用目标；高风险目标不会自动点击。',
+  'tool.description.bh_adapter_detect_site': '检测 URL 是否命中站点专用 adapter。',
+  'tool.description.bh_adapter_list_workflows': '列出站点专用 workflow 模板，不执行 workflow。',
+  'tool.description.bh_adapter_apply_locator': '将 adapter locator hint 应用到已观察候选，失败时回退通用工具。',
+  'tool.description.bh_adapter_report_failure': '记录 adapter workflow 或 locator 失败，用于回退和后续改进。',
   'tool.description.bh_agent_ask_user': '在继续执行前请求用户补充输入。',
   'tool.description.bh_agent_fail': '用结构化错误结束当前运行。',
   'tool.description.bh_agent_finish': '用最终摘要完成当前运行。',
@@ -450,6 +464,9 @@ export const zh = {
   'replay.preview.lowRisk': '需要确认',
   'replay.preview.approve': '确认 replay',
   'replay.preview.deny': '拒绝',
+  'workflow.draft.title': 'Workflow 草稿',
+  'workflow.draft.unsaved': '未保存',
+  'workflow.draft.saveForPreview': '保存并预览',
 
   // ── Elements State ──
   'elements.sensitiveField': '敏感字段',
@@ -899,6 +916,10 @@ export const zh = {
   'tool.error.formNoDisabledSubmitReason': '未找到禁用提交原因',
   'tool.title.bh_action_check_readiness': '检查动作就绪状态',
   'tool.title.bh_action_click': '点击目标',
+  'tool.title.bh_adapter_detect_site': '检测站点 Adapter',
+  'tool.title.bh_adapter_list_workflows': '列出 Adapter Workflows',
+  'tool.title.bh_adapter_apply_locator': '应用 Adapter Locator',
+  'tool.title.bh_adapter_report_failure': '记录 Adapter 失败',
 
   'tool.title.bh_agent_ask_user': '询问用户',
   // ── Fill Plan Inference ──

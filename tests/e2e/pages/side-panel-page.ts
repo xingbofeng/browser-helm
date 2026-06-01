@@ -1,6 +1,8 @@
 import type { BrowserContext, Page } from '@playwright/test';
 
 import { RUNTIME_MESSAGES } from '../../../src/shared/constants/event-names';
+import type { BrowserHelmDomainPolicy } from '../../../src/shared/domain-policy';
+import { BROWSER_HELM_DOMAIN_POLICY_STORAGE_KEY } from '../../../src/shared/domain-policy';
 import type { RunMode } from '../../../src/shared/schemas/tool.schema';
 import type { RunSnapshot } from '../../../src/runtime/runtime-messages';
 
@@ -29,6 +31,8 @@ export class SidePanelPage {
     baseUrl: string;
     model: string;
     apiKey: string;
+    streamingEnabled?: boolean;
+    allowLocalProviderEndpoints?: boolean;
   }): Promise<void> {
     const page = this.pageObject;
     await page.evaluate(async (providerSettings) => {
@@ -37,14 +41,27 @@ export class SidePanelPage {
     await page.reload();
   }
 
+  async setDomainPolicy(policy: BrowserHelmDomainPolicy): Promise<void> {
+    const page = this.pageObject;
+    await page.evaluate(async ({ key, value }) => {
+      await chrome.storage.local.set({ [key]: value });
+    }, {
+      key: BROWSER_HELM_DOMAIN_POLICY_STORAGE_KEY,
+      value: policy
+    });
+    await page.reload();
+  }
+
   async runOnTab(input: {
     tabId: number;
     task: string;
     mode: RunMode;
     runKind?: 'observe_only' | 'diagnose' | 'answer' | 'form_assist';
+    pollAttempts?: number;
+    pollIntervalMs?: number;
   }): Promise<RunSnapshot> {
     const page = await this.open(input.tabId);
-    return await page.evaluate(async ({ runtimeMessages, ...runInput }) => {
+    return await page.evaluate(async ({ runtimeMessages, pollAttempts, pollIntervalMs, ...runInput }) => {
       type RuntimeSuccess<T> = { ok: true; data: T };
       type RuntimeFailure = { ok: false; message: string };
       const isSuccess = <T>(value: unknown): value is RuntimeSuccess<T> =>
@@ -69,7 +86,9 @@ export class SidePanelPage {
       }
 
       let snapshot: RuntimeSuccess<RunSnapshot> | undefined;
-      for (let attempt = 0; attempt < 40; attempt += 1) {
+      const maxAttempts = typeof pollAttempts === 'number' ? pollAttempts : 200;
+      const intervalMs = typeof pollIntervalMs === 'number' ? pollIntervalMs : 100;
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
         const nextSnapshot: unknown = await chrome.runtime.sendMessage({
           type: runtimeMessages.GET_SNAPSHOT,
           runId: started.data.runId
@@ -83,7 +102,7 @@ export class SidePanelPage {
         if (!stillRunning) {
           break;
         }
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
       }
       if (!snapshot) {
         throw new Error('Unable to read run snapshot');

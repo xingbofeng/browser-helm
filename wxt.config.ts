@@ -69,7 +69,7 @@ export default defineConfig({
     optional_host_permissions: ['http://*/*', 'https://*/*', '<all_urls>'],
     web_accessible_resources: [
       {
-        resources: ['sidepanel.html', 'page-health-hook.js', 'assets/*', 'icons/*'],
+        resources: ['sidepanel.html', 'page-health-hook.js', 'icons/*'],
         matches: ['http://*/*', 'https://*/*']
       }
     ]

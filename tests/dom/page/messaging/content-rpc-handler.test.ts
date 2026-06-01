@@ -121,6 +121,91 @@ describe('content-rpc-handler iframe actions', () => {
     });
   });
 
+  it('rejects submit tokens that are not bound to a submit target or form', () => {
+    document.body.innerHTML = `
+      <form>
+        <input id="email" name="email" value="counter@example.com" />
+        <button id="submit" type="submit">Submit</button>
+      </form>
+    `;
+    const handler = new ContentRpcHandler(document);
+    const snapshot = handler.handle({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
+    if (!snapshot.ok || !('snapshot' in snapshot)) {
+      throw new Error('expected snapshot');
+    }
+    const fieldRefId = snapshot.snapshot.elements.find(
+      (element) => element.tagName === 'input'
+    )?.refId ?? '';
+
+    const grant = handler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+      action: 'submit',
+      fieldRefIds: [fieldRefId],
+      runId: 'run_1',
+      stepId: 'run_1:submit'
+    });
+    if (!grant.ok || !('actionToken' in grant)) {
+      throw new Error('expected form action token');
+    }
+
+    expect(handler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT,
+      actionToken: grant.actionToken,
+      runId: 'run_1',
+      stepId: 'run_1:submit'
+    })).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED
+    });
+  });
+
+  it('scopes formRef-only submit fallback to the approved field form', () => {
+    document.body.innerHTML = `
+      <form id="first">
+        <button id="first-submit" type="submit">Submit first</button>
+      </form>
+      <form id="approved">
+        <label for="email">Email</label>
+        <input id="email" name="email" value="counter@example.com" />
+        <button id="approved-submit" type="submit">Submit approved</button>
+      </form>
+    `;
+    const firstSubmit = vi.fn();
+    const approvedSubmit = vi.fn();
+    document.getElementById('first-submit')?.addEventListener('click', firstSubmit);
+    document.getElementById('approved-submit')?.addEventListener('click', approvedSubmit);
+    const handler = new ContentRpcHandler(document);
+    const snapshot = handler.handle({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
+    if (!snapshot.ok || !('snapshot' in snapshot)) {
+      throw new Error('expected snapshot');
+    }
+    const fieldRefId = snapshot.snapshot.elements.find(
+      (element) => element.tagName === 'input'
+    )?.refId ?? '';
+
+    const grant = handler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+      action: 'submit',
+      fieldRefIds: [fieldRefId],
+      formRefId: 'approved-form',
+      runId: 'run_1',
+      stepId: 'run_1:submit'
+    });
+    if (!grant.ok || !('actionToken' in grant)) {
+      throw new Error('expected form action token');
+    }
+
+    expect(handler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT,
+      formRefId: 'approved-form',
+      actionToken: grant.actionToken,
+      runId: 'run_1',
+      stepId: 'run_1:submit'
+    })).toMatchObject({ ok: true });
+    expect(firstSubmit).not.toHaveBeenCalled();
+    expect(approvedSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it('reads, clicks, and types iframe-routed targets inside the current frame', () => {
     document.body.innerHTML = `
       <button id="toggle" type="button">展开详情</button>

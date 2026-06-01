@@ -63,7 +63,7 @@ jobs:
         run: npm run test:e2e:no-build
 
       - name: Package extension for landing download
-        run: npm run build:landing
+        run: npm run build:landing:from-existing
 
       - name: Upload landing artifact
         uses: actions/upload-artifact@v4

@@ -8,6 +8,7 @@ import type {
   RunSnapshot,
   HighlightRefInput,
   ReviseGoalInput,
+  SetDomainAdapterEnabledInput,
   StartRunInput,
   TestProviderSettingsInput
 } from './runtime-messages';
@@ -27,5 +28,6 @@ export interface RuntimePort {
   setProviderSettings(settings: RuntimeProviderSettings): Promise<void>;
   getDomainPolicy(): Promise<BrowserHelmDomainPolicy | undefined>;
   setDomainPolicy(policy: BrowserHelmDomainPolicy): Promise<void>;
+  setDomainAdapterEnabled(input: SetDomainAdapterEnabledInput): Promise<RunSnapshot>;
   testProviderSettings(input: TestProviderSettingsInput): Promise<RuntimeProviderTestResult>;
 }

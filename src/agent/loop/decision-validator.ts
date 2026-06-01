@@ -28,6 +28,8 @@ export type ModelDecisionKind =
   | 'tool_not_found'
   | 'repeated_form_fill'
   | 'repeated_form_verify'
+  | 'repeated_form_inspect'
+  | 'repeated_page_read'
   | 'parse_failure';
 
 export type ModelDecisionError = {
@@ -95,6 +97,30 @@ export function validateRepairDecision(
         `Do not call tools such as ${decision.tool} during this repair.`
       ].join(' '),
       kind: 'repeated_action_readiness',
+      detail: lastRepairError.detail
+    };
+  }
+  if (lastRepairError.kind === 'repeated_page_read') {
+    return {
+      code: ERROR_CODES.TOOL_ARGS_INVALID,
+      message: [
+        lastRepairError.message,
+        'Repeated page read repair must return finish, ask_user, or fail.',
+        `Do not call tools such as ${decision.tool} during this repair.`
+      ].join(' '),
+      kind: 'repeated_page_read',
+      detail: lastRepairError.detail
+    };
+  }
+  if (lastRepairError.kind === 'repeated_form_inspect' && isFieldDiscoveryTool(decision.tool)) {
+    return {
+      code: ERROR_CODES.TOOL_ARGS_INVALID,
+      message: [
+        lastRepairError.message,
+        'Repeated form inspection repair must not call another form or accessibility discovery tool.',
+        `Do not call tools such as ${decision.tool} during this repair.`
+      ].join(' '),
+      kind: 'repeated_form_inspect',
       detail: lastRepairError.detail
     };
   }
@@ -171,6 +197,22 @@ export function repeatedToolDecisionError(
   if (snapshot.toolResult?.ok !== true) {
     return repeatedTraceToolDecisionError(decision, record);
   }
+  if (isFieldDiscoveryTool(decision.tool) && hasPriorSuccessfulFormInspection(record)) {
+    return {
+      code: ERROR_CODES.TOOL_ARGS_INVALID,
+      message: [
+        'The form fields were already discovered successfully on the unchanged page.',
+        'Do not keep calling form or accessibility discovery tools.',
+        'If the user supplied explicit fill values and a writable field is available, call a form fill tool now; otherwise return finish, ask_user, or fail.'
+      ].join(' '),
+      kind: 'repeated_form_inspect',
+      detail: {
+        kind: 'repeated_form_inspect',
+        nextTool: decision.tool,
+        fields: compactKnownFormFields(snapshot)
+      }
+    };
+  }
   const lastTool = snapshot.toolResult.tool;
   if (
     isFormFillTool(lastTool) &&
@@ -192,6 +234,52 @@ export function repeatedToolDecisionError(
       message: 'The previous form verification already succeeded. Do not call bh_form_verify again; return finish or request submit approval if the user asked to submit.',
       kind: 'repeated_form_verify'
     };
+  }
+  if (
+    (isFormInspectionTool(lastTool) && isFieldDiscoveryTool(decision.tool)) ||
+    repeatsFormInspection(lastTool, decision.tool)
+  ) {
+    return {
+      code: ERROR_CODES.TOOL_ARGS_INVALID,
+      message: [
+        'The form structure was already inspected successfully on the unchanged page.',
+        'Do not repeat form list/read/inspect planning calls.',
+        'If the user supplied explicit fill values and a writable field is available, call a form fill tool now; otherwise return finish, ask_user, or fail.'
+      ].join(' '),
+      kind: 'repeated_form_inspect',
+      detail: {
+        kind: 'repeated_form_inspect',
+        lastTool,
+        nextTool: decision.tool,
+        fields: compactKnownFormFields(snapshot)
+      }
+    };
+  }
+  if (isPageContentReadTool(lastTool) && isPageContentReadTool(decision.tool)) {
+    const nextCursor = pageReadNextCursor(snapshot.toolResult);
+    if (
+      !(
+        snapshot.toolResult.detail &&
+        pageReadHasMore(snapshot.toolResult) &&
+        typeof nextCursor === 'number' &&
+        numberField(decision.args, 'cursor') === nextCursor
+      )
+    ) {
+      return {
+        code: ERROR_CODES.TOOL_ARGS_INVALID,
+        message: [
+          'The current page content was already read successfully on the unchanged page.',
+          'Do not repeat the page read. Use the available text and return finish, ask_user, or fail.',
+          'Only continue reading when the previous result has hasMore=true and you pass its exact nextCursor.'
+        ].join(' '),
+        kind: 'repeated_page_read',
+        detail: {
+          kind: 'repeated_page_read',
+          lastTool,
+          nextCursor
+        }
+      };
+    }
   }
   return repeatedTraceToolDecisionError(decision, record);
 }
@@ -260,6 +348,29 @@ function hasPriorSuccessfulActionReadiness(
     pendingArgs = undefined;
   }
   return sawMatchingReadiness;
+}
+
+function hasPriorSuccessfulFormInspection(record: RunRecord): boolean {
+  let sawInspection = false;
+  for (const event of record.trace ?? []) {
+    const payload = eventPayload(event);
+    if (event.type !== TRACE_EVENT_NAMES.TOOL_RESULT) {
+      continue;
+    }
+    const tool = stringField(payload, 'tool');
+    if (
+      payload.changedPage === true ||
+      tool === TOOL_NAMES.PAGE_OBSERVE ||
+      tool === TOOL_NAMES.A11Y_REFRESH_REFS
+    ) {
+      sawInspection = false;
+      continue;
+    }
+    if (payload.ok === true && tool && isFormInspectionTool(tool)) {
+      sawInspection = true;
+    }
+  }
+  return sawInspection;
 }
 
 function repeatedTraceToolDecisionError(
@@ -345,6 +456,20 @@ function readDecisionFieldRefIds(decision: ToolCallDecision): string[] {
     );
   }
   return readDecisionFillFields(decision)?.map((field) => field.fieldRefId) ?? [];
+}
+
+function compactKnownFormFields(snapshot: RunSnapshot): Array<Record<string, string | boolean | undefined>> {
+  return (snapshot.structuredPageData?.forms.items ?? [])
+    .slice(0, 30)
+    .map((field) => ({
+      refId: field.refId,
+      label: field.label,
+      name: field.name,
+      type: field.type,
+      valuePreview: field.valuePreview,
+      actualValue: field.sensitive ? undefined : field.writable?.actualValue,
+      checked: field.writable?.checked
+    }));
 }
 
 function actionReadinessIntentFromArgs(args: unknown): { kind: string; refId: string } | undefined {
@@ -436,6 +561,45 @@ export function buildRepairMessages(
       }
     ];
   }
+  if (error.kind === 'repeated_page_read') {
+    return [
+      ...messages,
+      {
+        role: 'user' as const,
+        content: [
+          '═══ REPAIR (1 of 1) ═══',
+          `Error: ${error.message}`,
+          'The page content has already been read for this unchanged page.',
+          'You must NOT call any page read tool for this repair.',
+          'Return finish with the answer using lastToolResult / priorityPageReadText, ask_user only for missing user input, or fail if the task cannot be answered.',
+          'System policy, tool list, approval rules, and output schema are unchanged.',
+          'Return one JSON AgentDecision only — no markdown, no explanation.'
+        ].join('\n')
+      }
+    ];
+  }
+  if (error.kind === 'repeated_form_inspect') {
+    const fields = isRecord(error.detail) && Array.isArray(error.detail.fields)
+      ? JSON.stringify(error.detail.fields)
+      : '[]';
+    return [
+      ...messages,
+      {
+        role: 'user' as const,
+        content: [
+          '═══ REPAIR (1 of 1) ═══',
+          `Error: ${error.message}`,
+          'The form fields are already known for this unchanged page.',
+          `Known fields: ${fields}`,
+          'Do not call bh_form_list, bh_form_read_fields, bh_form_inspect, bh_form_infer_fill_plan, bh_a11y_snapshot, or bh_a11y_find_interactive again.',
+          'If the user provided an explicit value and there is a writable target field, call bh_form_fill_field or bh_form_fill_many now.',
+          'Otherwise return finish, ask_user, or fail.',
+          'System policy, tool list, approval rules, and output schema are unchanged.',
+          'Return one JSON AgentDecision only — no markdown, no explanation.'
+        ].join('\n')
+      }
+    ];
+  }
   // parse_failure, tool_not_found, and other errors
   return [
     ...messages,
@@ -460,6 +624,54 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function isPageContentReadTool(tool: string): boolean {
+  return tool === TOOL_NAMES.PAGE_READ_ARTICLE || tool === TOOL_NAMES.PAGE_READ_VISIBLE_TEXT;
+}
+
+function repeatsFormInspection(lastTool: string, nextTool: string): boolean {
+  if (lastTool === TOOL_NAMES.FORM_LIST) {
+    return nextTool === TOOL_NAMES.FORM_LIST || nextTool === TOOL_NAMES.FORM_INSPECT;
+  }
+  if (lastTool === TOOL_NAMES.FORM_READ_FIELDS || lastTool === TOOL_NAMES.FORM_INSPECT) {
+    return isFormInspectionTool(nextTool);
+  }
+  if (lastTool === TOOL_NAMES.FORM_INFER_FILL_PLAN) {
+    return isFormInspectionTool(nextTool) || nextTool === TOOL_NAMES.FORM_INFER_FILL_PLAN;
+  }
+  return false;
+}
+
+function isFormInspectionTool(tool: string): boolean {
+  return tool === TOOL_NAMES.FORM_LIST ||
+    tool === TOOL_NAMES.FORM_READ_FIELDS ||
+    tool === TOOL_NAMES.FORM_INSPECT ||
+    tool === TOOL_NAMES.FORM_INFER_FILL_PLAN;
+}
+
+function isFieldDiscoveryTool(tool: string): boolean {
+  return isFormInspectionTool(tool) ||
+    tool === TOOL_NAMES.A11Y_SNAPSHOT ||
+    tool === TOOL_NAMES.A11Y_FIND_INTERACTIVE;
+}
+
+function pageReadHasMore(result: NonNullable<RunSnapshot['toolResult']>): boolean {
+  const data = toolResultData(result);
+  return data?.hasMore === true;
+}
+
+function pageReadNextCursor(result: NonNullable<RunSnapshot['toolResult']>): number | undefined {
+  const data = toolResultData(result);
+  return data ? numberField(data, 'nextCursor') : undefined;
+}
+
+function toolResultData(result: NonNullable<RunSnapshot['toolResult']>): Record<string, unknown> | undefined {
+  const detail = result.detail;
+  if (!isRecord(detail) || !isRecord(detail.data)) {
+    return undefined;
+  }
+  return detail.data;
+}
+
 function eventPayload(event: RunRecord['trace'][number]): Record<string, unknown> {
   return isRecord(event.payload) ? event.payload : {};
 }
@@ -467,4 +679,9 @@ function eventPayload(event: RunRecord['trace'][number]): Record<string, unknown
 function stringField(record: Record<string, unknown>, key: string): string | undefined {
   const value = record[key];
   return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function numberField(record: Record<string, unknown>, key: string): number | undefined {
+  const value = record[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }

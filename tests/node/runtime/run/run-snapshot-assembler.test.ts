@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   snapshotFromObserveResult,
   extractSnapshotFields,
@@ -9,6 +9,7 @@ import {
 import type { ToolResult } from '../../../../src/shared/schemas/tool-result.schema';
 import type { TraceEvent } from '../../../../src/shared/schemas/trace.schema';
 import { TRACE_EVENT_NAMES } from '../../../../src/shared/constants/event-names';
+import { defaultDomainAdapterPreferences } from '../../../../src/adapters/preferences';
 
 let eventSequence = 0;
 
@@ -44,6 +45,10 @@ function finding(title: string) {
 }
 
 describe('snapshotFromObserveResult', () => {
+  beforeEach(() => {
+    defaultDomainAdapterPreferences.clear();
+  });
+
   const baseObservation = {
     url: 'https://example.com',
     title: 'Example',
@@ -115,6 +120,54 @@ describe('snapshotFromObserveResult', () => {
     const trace = [{ runId: 'run_1', type: 'test_event', timestamp: 1000 }];
     const snapshot = snapshotFromObserveResult('run_1', 'ask', baseObserveResult, trace);
     expect(snapshot.trace).toBe(trace);
+  });
+
+  it('includes detected domain adapter status for supported sites', () => {
+    const githubResult: ToolResult = {
+      ...baseObserveResult,
+      data: {
+        ...baseObservation,
+        url: 'https://github.com/openai/browser-helm/issues',
+        currentDomain: 'github.com',
+        origin: 'https://github.com'
+      }
+    };
+
+    const snapshot = snapshotFromObserveResult('run_1', 'ask', githubResult, []);
+
+    expect(snapshot.domainAdapter).toEqual({
+      enabled: true,
+      id: 'github',
+      label: 'GitHub',
+      workflowCount: 1,
+      locatorCount: 1,
+      approvalEnforced: true
+    });
+  });
+
+  it('marks matched domain adapter disabled when the user disabled it', () => {
+    defaultDomainAdapterPreferences.setEnabled('github', false);
+    const githubResult: ToolResult = {
+      ...baseObserveResult,
+      data: {
+        ...baseObservation,
+        url: 'https://github.com/openai/browser-helm/issues',
+        currentDomain: 'github.com',
+        origin: 'https://github.com'
+      }
+    };
+
+    const snapshot = snapshotFromObserveResult('run_1', 'ask', githubResult, []);
+
+    expect(snapshot.domainAdapter).toEqual({
+      enabled: false,
+      fallback: 'generic_browser_tools',
+      reason: 'GitHub adapter disabled by user',
+      disabledAdapter: {
+        id: 'github',
+        label: 'GitHub'
+      }
+    });
   });
 });
 

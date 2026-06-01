@@ -20,6 +20,7 @@ export type RuntimeSenderContext = {
 const CONTENT_SCRIPT_BLOCKED_MESSAGES = new Set([
   RUNTIME_MESSAGES.DECIDE_APPROVAL,
   RUNTIME_MESSAGES.TEST_PROVIDER_CONNECTION,
+  RUNTIME_MESSAGES.SET_DOMAIN_ADAPTER_ENABLED,
   RUNTIME_MESSAGES.EXECUTE_TOOL
 ]);
 
@@ -33,6 +34,7 @@ type RuntimeRunManager = Pick<
   | 'executeTool'
   | 'decideApproval'
   | 'testProviderSettings'
+  | 'setDomainAdapterEnabled'
   | 'subscribeRun'
 >;
 
@@ -98,6 +100,11 @@ export class BackgroundRuntimeHost {
         return {
           ok: true,
           data: await this.runManager.testProviderSettings(parsed.data.input)
+        };
+      case RUNTIME_MESSAGES.SET_DOMAIN_ADAPTER_ENABLED:
+        return {
+          ok: true,
+          data: await this.runManager.setDomainAdapterEnabled(parsed.data.input)
         };
     }
   }

@@ -13,6 +13,7 @@ import { initializeGoalState } from '../../../agent/goal/goal-state';
 import { buildPlanState } from '../../../agent/planning/plan-builder';
 import { t } from '../../../i18n/t';
 import type { Locale } from '../../../i18n/types';
+import { defaultDomainAdapterRegistry } from '../../../adapters/registry';
 import {
   buildDebugReport,
   buildFormDoctorFindings,
@@ -70,6 +71,7 @@ export function snapshotFromObserveResult(
     },
     refs,
     structuredPageData,
+    domainAdapter: buildDomainAdapterSnapshot(observation.url),
     toolResult,
     trace
   };
@@ -236,6 +238,33 @@ function readFormDataFromObservation(observation: Observation): Parameters<
         ? record.submit as never
         : undefined,
     warnings: Array.isArray(record.warnings) ? record.warnings as never : []
+  };
+}
+
+export function buildDomainAdapterSnapshot(url: string): RunSnapshot['domainAdapter'] {
+  const detection = defaultDomainAdapterRegistry.detect(url);
+  if (!detection.enabled) {
+    return {
+      enabled: false,
+      fallback: detection.fallback,
+      reason: detection.reason,
+      ...(detection.disabledAdapter
+        ? {
+            disabledAdapter: {
+              id: detection.disabledAdapter.id,
+              label: detection.disabledAdapter.label
+            }
+          }
+        : {})
+    };
+  }
+  return {
+    enabled: true,
+    id: detection.adapter.id,
+    label: detection.adapter.label,
+    workflowCount: detection.adapter.workflows.length,
+    locatorCount: detection.adapter.locators.length,
+    approvalEnforced: true
   };
 }
 

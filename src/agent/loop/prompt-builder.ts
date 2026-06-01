@@ -16,6 +16,7 @@ import { defaultMemoryRepo } from '../../storage/memory-repo';
 import { defaultScratchpadRepo } from '../../storage/scratchpad-repo';
 import { defaultWorkflowRepo } from '../../storage/workflow-repo';
 import { buildSessionSummary } from '../memory/session-summary-builder';
+import { defaultDomainAdapterRegistry } from '../../adapters/registry';
 
 // ── Context budget limits ──
 const MAX_OBSERVATION_CHARS = 8000;
@@ -27,11 +28,11 @@ const MAX_PAGE_READ_HEADINGS = 20;
 const MAX_PAGE_READ_LINKS = 20;
 const MAX_TOTAL_PROMPT_CHARS = 32000;
 const MAX_USER_PROMPT_CHARS = 16000;
-const MAX_CONVERSATION_HISTORY_CHARS = 6000;
+const MAX_CONVERSATION_HISTORY_CHARS = 3000;
 const MAX_HISTORY_LINE_CHARS = 1200;
 const MAX_PREVIOUS_TRACE_HISTORY_EVENTS = 12;
 const MAX_TRACE_HISTORY_SUMMARY_CHARS = 80;
-const PROMPT_BUDGET_MARGIN_CHARS = 500;
+const PROMPT_BUDGET_MARGIN_CHARS = 1000;
 
 // ── Types ──
 
@@ -115,6 +116,7 @@ export function buildMessages(input: BuildMessagesInput): ModelMessage[] {
     workflowRepo: defaultWorkflowRepo,
     scratchpadRepo: defaultScratchpadRepo
   });
+  const domainAdapter = buildDomainAdapterContext(snapshot);
 
   // Dynamic user content: all untrusted / page-derived data
   const userContent = {
@@ -126,6 +128,7 @@ export function buildMessages(input: BuildMessagesInput): ModelMessage[] {
     ...(loopGuard ? { loopGuard } : {}),
     ...(recentActions.length ? { recentActions } : {}),
     ...(memoryContext ? { memoryContext } : {}),
+    ...(domainAdapter ? { domainAdapter } : {}),
     sessionSummary,
     observation,
     structuredPageData
@@ -137,7 +140,7 @@ export function buildMessages(input: BuildMessagesInput): ModelMessage[] {
   const baseOverhead = JSON.stringify([systemMessage, ...historyMessages]).length;
   const availableUserBudget = MAX_TOTAL_PROMPT_CHARS - baseOverhead - PROMPT_BUDGET_MARGIN_CHARS;
   const userBudget = Math.max(
-    400,
+    100,
     Math.min(MAX_USER_PROMPT_CHARS, availableUserBudget)
   );
   const userJson = truncateJson(userContent, userBudget);
@@ -286,11 +289,55 @@ function readObservationDomain(snapshot: RunSnapshot): string | undefined {
   return snapshot.observation?.currentDomain ?? snapshot.observation?.origin;
 }
 
+function buildDomainAdapterContext(snapshot: RunSnapshot): unknown {
+  const url = snapshot.observation?.url;
+  if (!url) {
+    return undefined;
+  }
+  const detection = defaultDomainAdapterRegistry.detect(url);
+  if (!detection.enabled) {
+    return {
+      enabled: false,
+      fallback: detection.fallback,
+      reason: detection.reason
+    };
+  }
+  return {
+    enabled: true,
+    id: detection.adapter.id,
+    label: detection.adapter.label,
+    guidance: detection.adapter.guidance,
+    workflows: detection.adapter.workflows.map((workflow) => ({
+      id: workflow.id,
+      title: workflow.title,
+      intent: workflow.intent,
+      risk: workflow.risk,
+      requiresApproval: workflow.requiresApproval,
+      steps: workflow.steps
+    })),
+    locators: detection.adapter.locators.map((locator) => ({
+      id: locator.id,
+      label: locator.label,
+      risk: locator.risk,
+      fallbackText: locator.fallbackText
+    }))
+  };
+}
+
 function compactStructuredPageData(data: RunSnapshot['structuredPageData']): unknown {
   if (!data) return undefined;
   return redactEmbeddedUrls({
     ...data,
     refs: Array.isArray(data.refs) ? data.refs.slice(0, MAX_STRUCTURED_DATA_ITEMS) : data.refs,
+    interactive: data.interactive ? {
+      ...data.interactive,
+      items: Array.isArray(data.interactive.items)
+        ? data.interactive.items.slice(0, MAX_STRUCTURED_DATA_ITEMS)
+        : data.interactive.items,
+      ...(Array.isArray(data.interactive.items) && data.interactive.items.length > MAX_STRUCTURED_DATA_ITEMS
+        ? { omittedCount: data.interactive.items.length - MAX_STRUCTURED_DATA_ITEMS }
+        : {})
+    } : data.interactive,
     forms: data.forms ? {
       ...data.forms,
       items: Array.isArray(data.forms.items) ? data.forms.items.slice(0, MAX_STRUCTURED_DATA_ITEMS) : data.forms.items

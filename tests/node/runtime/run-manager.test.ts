@@ -11,6 +11,7 @@ import {
 } from '../../../src/shared/constants/event-names';
 import { TOOL_NAMES } from '../../../src/shared/constants/tool-names';
 import type { AgentMessage } from '../../../src/shared/schemas/agent-message.schema';
+import { defaultWorkflowRepo } from '../../../src/storage/workflow-repo';
 
 describe('RunManager', () => {
   it('starts a run by observing the target tab through registered page tools', async () => {
@@ -111,6 +112,82 @@ describe('RunManager', () => {
       tool: TOOL_NAMES.PAGE_OBSERVE,
       code: ERROR_CODES.OK
     });
+  });
+
+  it('surfaces same-domain workflow hits as replay previews for user confirmation', async () => {
+    const domain = `workflow-hit-${Date.now()}.example.com`;
+    const workflow = defaultWorkflowRepo.save({
+      domain,
+      intent: '打开账单报表',
+      taskDescription: '进入 Billing 后打开 Invoices',
+      steps: [{
+        id: 'step_1',
+        tool: TOOL_NAMES.PAGE_OBSERVE,
+        summary: '观察账单页面',
+        args: {},
+        risk: 'safe',
+        requiresApproval: false
+      }]
+    });
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse({
+        url: `https://${domain}/dashboard`,
+        title: 'Billing Dashboard',
+        currentDomain: domain,
+        origin: `https://${domain}`,
+        visibleTextSummary: 'Billing Invoices'
+      }))
+    });
+
+    const started = await manager.startRun({
+      task: '打开账单报表',
+      mode: 'ask',
+      runKind: 'observe_only'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'observed');
+
+    expect(snapshot.memory?.workflowPreviews?.[0]).toMatchObject({
+      workflowId: workflow.id,
+      intent: '打开账单报表',
+      requiresApproval: true
+    });
+
+    defaultWorkflowRepo.delete(workflow.id);
+  });
+
+  it('attaches an unsaved workflow draft to successful runs without silently saving executable workflow memory', async () => {
+    const domain = `workflow-draft-${Date.now()}.example.com`;
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse({
+        url: `https://${domain}/billing`,
+        title: 'Billing',
+        currentDomain: domain,
+        origin: `https://${domain}`,
+        visibleTextSummary: 'Billing page ready'
+      })),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => decisionModel([{
+        type: 'finish',
+        message: '账单页面已经确认。'
+      }])
+    });
+
+    const started = await manager.startRun({
+      task: '确认账单页面',
+      mode: 'ask'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'finished');
+
+    expect(snapshot.workflowDraft).toMatchObject({
+      domain,
+      intent: '确认账单页面',
+      requiresPreview: true,
+      requiresApproval: true,
+      saved: false
+    });
+    expect(defaultWorkflowRepo.lookup({ domain })).toEqual([]);
   });
 
   it('stores structured content unavailable errors from page tools', async () => {
@@ -1788,6 +1865,146 @@ describe('RunManager', () => {
       recommendedNextDecision: 'finish'
     });
     expect(snapshot.taskState?.filledFieldRefs).toEqual(['ref_last', 'ref_first']);
+  });
+
+  it('blocks finish when explicit success criteria remain unverified', async () => {
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse({
+        title: 'Debug page',
+        currentDomain: 'debug.example',
+        visibleTextSummary: 'Console error: payment token missing'
+      })),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => ({
+        async complete() {
+          return {
+            text: decisionText({
+              type: 'finish',
+              message: '页面检查完成。',
+              taskStateUpdate: {
+                completed: ['已查看 console error'],
+                remaining: []
+              }
+            })
+          };
+        }
+      })
+    });
+
+    const started = await manager.startRun({
+      task: '解释页面错误',
+      mode: 'debug',
+      goal: '解释页面错误',
+      successCriteria: ['解释 console error 的根因']
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'waiting_for_user');
+
+    expect(snapshot.status).toBe('waiting_for_user');
+    expect(snapshot.messages?.some((message) =>
+      message.content.includes('解释 console error 的根因')
+    )).toBe(true);
+    expect(snapshot.trace?.some((event) => event.type === TRACE_EVENT_NAMES.RUN_FINISHED)).toBe(false);
+  });
+
+  it('keeps mutating and diagnostic hook tools out of the prompt without domain consent', async () => {
+    const completeCalls: string[] = [];
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse({
+        url: 'https://docs.example.com/form',
+        currentDomain: 'docs.example.com',
+        origin: 'https://docs.example.com'
+      })),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'demo-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: false
+          };
+        },
+        async setProviderSettings() {},
+        async getDomainPolicy() {
+          return undefined;
+        }
+      },
+      createProviderModelClient: () => ({
+        async complete(input) {
+          completeCalls.push(input.messages.map((message) => message.content).join('\n'));
+          return {
+            text: decisionText({
+              type: 'finish',
+              message: '只读观察完成。'
+            })
+          };
+        }
+      })
+    });
+
+    const started = await manager.startRun({
+      task: '帮我填写邮箱 user@example.com',
+      mode: 'form'
+    });
+    await waitForSnapshot(manager, started.runId, 'finished');
+
+    expect(completeCalls[0]).toContain(TOOL_NAMES.PAGE_OBSERVE);
+    expect(completeCalls[0]).not.toContain(TOOL_NAMES.FORM_FILL_MANY);
+    expect(completeCalls[0]).not.toContain(TOOL_NAMES.FORM_FILL_FIELD);
+    expect(completeCalls[0]).not.toContain(TOOL_NAMES.DEBUG_COLLECT_PAGE_HEALTH);
+  });
+
+  it('blocks direct mutating tool execution without domain consent', async () => {
+    const rpcMessages: string[] = [];
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        rpcMessages.push(message.type);
+        return observationResponse({
+          url: 'https://docs.example.com/form',
+          currentDomain: 'docs.example.com',
+          origin: 'https://docs.example.com'
+        });
+      }),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'demo-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: false
+          };
+        },
+        async setProviderSettings() {},
+        async getDomainPolicy() {
+          return undefined;
+        }
+      }
+    });
+
+    const started = await manager.startRun({
+      task: '观察表单',
+      mode: 'form',
+      runKind: 'observe_only'
+    });
+    await waitForSnapshot(manager, started.runId, 'observed');
+    rpcMessages.length = 0;
+
+    const result = await manager.executeTool({
+      runId: started.runId,
+      tool: TOOL_NAMES.FORM_FILL_MANY,
+      args: {
+        fields: [{ fieldRefId: 'frame_7:ref_300', value: 'user@example.com' }]
+      }
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'DOMAIN_NOT_ENABLED',
+      changedPage: false
+    });
+    expect(rpcMessages).toEqual([]);
   });
 
   it('repairs a repeated form verify after the previous verification already succeeded', async () => {

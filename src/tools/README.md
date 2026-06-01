@@ -13,6 +13,10 @@
 | `bh_agent_ask_user` | Agent Ask User | `agent/` | `internal` | `safe` | `question` | Agent 缺少必要用户输入时暂停 run，并把问题交还给用户。 |
 | `bh_action_check_readiness` | Check Action Readiness | `action/` | `debug`, `act` | `low` | `kind`, `refId`, `source`, `valuePreview?` | 只读检查拟执行动作的目标、风险、approval 预判和重新观察需求，不修改页面。 |
 | `bh_action_click` | Click Action | `action/` | `act` | `medium` | `refId`, `source?`, `valuePreview?` | 对已就绪且非高风险的 stable ref 执行真实点击；高风险目标阻断，不修改页面。 |
+| `bh_adapter_detect_site` | Detect Domain Adapter | `adapter/` | `ask`, `debug`, `form`, `act` | `safe` | `url` | 检测 URL 是否命中站点 adapter，返回 guidance、workflow、locator 摘要或通用工具 fallback。 |
+| `bh_adapter_list_workflows` | List Adapter Workflows | `adapter/` | `ask`, `debug`, `form`, `act` | `safe` | `url`, `workflowId?` | 列出站点 adapter workflow 模板；指定 workflow 不存在时记录失败并回退通用工具。 |
+| `bh_adapter_apply_locator` | Apply Adapter Locator | `adapter/` | `ask`, `debug`, `form`, `act` | `safe` | `url`, `locatorId`, `candidates[]` | 将 adapter locator hint 应用到已观察候选元素；失败时记录 report 并回退通用工具。 |
+| `bh_adapter_report_failure` | Report Adapter Failure | `adapter/` | `ask`, `debug`, `form`, `act` | `safe` | `url`, `adapterId`, `errorCode`, `message`, `workflowId?`, `locatorId?` | 记录 adapter workflow 或 locator 失败，不阻断通用工具。 |
 | `bh_page_observe` | Page Observe | `page/` | `ask`, `debug`, `form` | `safe` | 无 | 读取当前页面 bounded observation，并生成裁剪后的 structured context summary。 |
 | `bh_page_read_visible_text` | Read Visible Text | `page/` | `ask`, `debug`, `form` | `safe` | `cursor?`, `maxChars?` | 分页读取当前页面可见文本。 |
 | `bh_page_read_article` | Read Article | `page/` | `ask`, `debug`, `form` | `safe` | `cursor?`, `maxChars?`, `includeHeadings?`, `includeLinks?` | 读取页面正文/文章内容。 |
