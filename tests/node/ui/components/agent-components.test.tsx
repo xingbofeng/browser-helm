@@ -278,11 +278,11 @@ describe('agent side panel components', () => {
     expect(container.textContent).not.toContain('ref_submit');
 
     await act(async () => {
-      button('高级开发者选项').click();
+      button('高级开发者选项', container).click();
       await Promise.resolve();
     });
     await act(async () => {
-      button('元素与表单').click();
+      button('元素与表单', container).click();
       await Promise.resolve();
     });
 
@@ -331,11 +331,11 @@ describe('agent side panel components', () => {
       await Promise.resolve();
     });
     await act(async () => {
-      button('高级开发者选项').click();
+      button('高级开发者选项', container).click();
       await Promise.resolve();
     });
     await act(async () => {
-      button('视觉检查').click();
+      button('视觉检查', container).click();
       await Promise.resolve();
     });
 
@@ -386,11 +386,11 @@ describe('agent side panel components', () => {
       await Promise.resolve();
     });
     await act(async () => {
-      button('高级开发者选项').click();
+      button('高级开发者选项', container).click();
       await Promise.resolve();
     });
     await act(async () => {
-      button('视觉检查').click();
+      button('视觉检查', container).click();
       await Promise.resolve();
     });
 
@@ -442,7 +442,7 @@ describe('agent side panel components', () => {
       changeInput('Base URL', 'https://api.next.example/v1');
       changeInput('Model', 'gpt-test');
       changeInput('API Key', 'sk-new-secret');
-      button('测试连接').click();
+      button('测试连接', container).click();
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -458,7 +458,7 @@ describe('agent side panel components', () => {
     expect(document.body.textContent).not.toContain('sk-new-secret');
 
     await act(async () => {
-      button('保存配置').click();
+      button('保存配置', container).click();
       await Promise.resolve();
     });
 
@@ -507,7 +507,7 @@ describe('agent side panel components', () => {
     expect(document.body.textContent).toContain('本地配置');
 
     await act(async () => {
-      button('保存配置').click();
+      button('保存配置', container).click();
       await Promise.resolve();
     });
 
@@ -520,8 +520,8 @@ describe('agent side panel components', () => {
   });
 });
 
-function button(name: string): HTMLButtonElement {
-  const element = [...document.querySelectorAll('button')].find(
+function button(name: string, scope: ParentNode = document): HTMLButtonElement {
+  const element = [...scope.querySelectorAll('button')].find(
     (candidate) =>
       candidate.textContent?.includes(name) ||
       candidate.getAttribute('aria-label') === name

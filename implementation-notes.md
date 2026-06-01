@@ -218,3 +218,23 @@ v1.4 Vision/Screenshot、v1.5 Advanced Browser Tools、Floating Panel 稳定性�
 
 **待确认**：
 - [ ] 是否后续把 search-like stale 成功收敛推广到更多有明确字段 identity 的动态站点输入框。
+
+## GitHub CI 单测隔离修复 - 2026-06-01
+
+**目标**：修复 GitHub Actions `CI / Typecheck, Lint & Unit Tests` 在 `tests/node/ui/components/agent-components.test.tsx` 中偶发点错 Debug drawer 按钮，导致 Vision tab 断言失败。
+
+**设计决策**：将该测试文件的 `button()` helper 改为支持传入当前 `container`，涉及 Debug drawer 和 model config 的点击都限定在当前 render 容器内，避免全量 CI/happy-dom 环境中被其它测试残留 DOM 干扰。
+
+**偏差说明**：未改产品组件行为；这是测试隔离修复。
+
+**权衡分析**：
+- 方案一：调整等待时间或增加更多 `act()` flush。优点是改动少；缺点是不能解决全局 DOM 查询可能点到错误按钮的问题。
+- 方案二：把交互查询限定到当前测试容器。优点是更贴近测试隔离边界；缺点是需要改多个 helper 调用点。
+- 选择方案二，因为 CI 日志显示按钮查找/点击范围不够稳定。
+
+**验证结果**：
+- `npx vitest run tests/node/ui/components/agent-components.test.tsx --reporter=verbose` 通过：1 file / 11 tests。
+- `npm test` 通过：183 files passed / 1 skipped，1183 tests passed / 1 skipped。
+
+**待确认**：
+- [ ] 推送后确认 GitHub Actions 新 run 通过。
