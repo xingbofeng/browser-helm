@@ -278,7 +278,7 @@ describe('agent side panel components', () => {
     expect(container.textContent).not.toContain('ref_submit');
 
     await act(async () => {
-      button('高级开发者选项', container).click();
+      openDebugDrawer(container);
       await Promise.resolve();
     });
     await act(async () => {
@@ -331,7 +331,7 @@ describe('agent side panel components', () => {
       await Promise.resolve();
     });
     await act(async () => {
-      button('高级开发者选项', container).click();
+      openDebugDrawer(container);
       await Promise.resolve();
     });
     await act(async () => {
@@ -386,7 +386,7 @@ describe('agent side panel components', () => {
       await Promise.resolve();
     });
     await act(async () => {
-      button('高级开发者选项', container).click();
+      openDebugDrawer(container);
       await Promise.resolve();
     });
     await act(async () => {
@@ -530,6 +530,16 @@ function button(name: string, scope: ParentNode = document): HTMLButtonElement {
     throw new Error(`Button not found: ${name}`);
   }
   return element;
+}
+
+function openDebugDrawer(scope: ParentNode): void {
+  if ([...scope.querySelectorAll('button')].some((candidate) =>
+    candidate.getAttribute('aria-label') === '视觉检查' ||
+    candidate.textContent?.includes('元素与表单')
+  )) {
+    return;
+  }
+  button('高级开发者选项', scope).click();
 }
 
 function changeInput(label: string, value: string): void {

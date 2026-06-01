@@ -223,14 +223,14 @@ v1.4 Vision/Screenshot、v1.5 Advanced Browser Tools、Floating Panel 稳定性�
 
 **目标**：修复 GitHub Actions `CI / Typecheck, Lint & Unit Tests` 在 `tests/node/ui/components/agent-components.test.tsx` 中偶发点错 Debug drawer 按钮，导致 Vision tab 断言失败。
 
-**设计决策**：将该测试文件的 `button()` helper 改为支持传入当前 `container`，涉及 Debug drawer 和 model config 的点击都限定在当前 render 容器内，避免全量 CI/happy-dom 环境中被其它测试残留 DOM 干扰。
+**设计决策**：将该测试文件的 `button()` helper 改为支持传入当前 `container`，涉及 Debug drawer 和 model config 的点击都限定在当前 render 容器内；同时新增 `openDebugDrawer()`，若 Debug tabs 已因 `localStorage` 持久化处于展开状态，则不再重复点击标题导致反向关闭。
 
 **偏差说明**：未改产品组件行为；这是测试隔离修复。
 
 **权衡分析**：
 - 方案一：调整等待时间或增加更多 `act()` flush。优点是改动少；缺点是不能解决全局 DOM 查询可能点到错误按钮的问题。
-- 方案二：把交互查询限定到当前测试容器。优点是更贴近测试隔离边界；缺点是需要改多个 helper 调用点。
-- 选择方案二，因为 CI 日志显示按钮查找/点击范围不够稳定。
+- 方案二：把交互查询限定到当前测试容器，并让 Debug drawer 打开操作对已展开状态幂等。优点是更贴近测试隔离边界，且兼容 `localStorage` 保留 open 状态；缺点是需要改多个 helper 调用点。
+- 选择方案二，因为 CI 日志显示按钮查找/点击范围不够稳定，二次 CI 也证明 open 状态持久化会让标题点击变成关闭操作。
 
 **验证结果**：
 - `npx vitest run tests/node/ui/components/agent-components.test.tsx --reporter=verbose` 通过：1 file / 11 tests。
