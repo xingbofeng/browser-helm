@@ -3,6 +3,7 @@ import type { DecideApprovalInput, RuntimeEvent, RunSnapshot } from '../../../..
 import type { RunMode } from '../../../../../shared/schemas/tool.schema';
 import type { ApprovalManager } from '../../../../../runtime/approval/approval-manager';
 import { APPROVAL_EVENT_NAMES } from '../../../../../shared/constants/event-names';
+import { ERROR_CODES } from '../../../../../shared/constants/error-codes';
 import { snapshotToolResult } from '../../run-snapshot-assembler';
 import type { ToolApprovalFlowRegistry } from './tool-approval-flow-registry';
 
@@ -22,6 +23,18 @@ export class ApprovalService {
   async decideApproval(input: DecideApprovalInput): Promise<ToolResult> {
     const record = this.deps.getRecord(input.runId);
     const decidedAt = Date.now();
+    const request = this.deps.approvalManager.get(input.requestId);
+    if (!request || request.runId !== input.runId) {
+      const message = `Approval request not found for run: ${input.requestId}`;
+      return {
+        ok: false,
+        code: ERROR_CODES.APPROVAL_REQUEST_NOT_FOUND,
+        summary: message,
+        changedPage: false,
+        requiresObserve: false,
+        error: { message }
+      };
+    }
     const decision = this.deps.approvalManager.decide({
       requestId: input.requestId,
       decision: input.decision,

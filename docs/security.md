@@ -59,6 +59,15 @@ Screenshot data handling:
 - `bh_pointer_click` is a last-resort visual fallback. Sensitive coordinate actions such as payment, submit, delete, upload, or password-related clicks return approval required before any click is sent.
 - `bh_file_upload_with_approval` records an explicit approval boundary for upload handoff, but does not read local file paths or set file inputs automatically. The user must still choose the file in the browser-controlled picker.
 
+## Advanced Storage Inspection And Mutation
+
+`bh_storage_list` and `bh_storage_get` inspect page `localStorage` / `sessionStorage` only when an advanced storage task is explicit and the current domain has consent. They are read-only and return:
+- storage area, key, value length
+- short redacted previews for ordinary values
+- masked placeholders for token/session/password-like keys
+
+`bh_storage_set_with_approval`, `bh_storage_delete_with_approval`, and `bh_storage_clear_with_approval` are high-risk mutation tools. The initial tool call only creates an approval request; the page storage is not changed until the user approves. Trace and snapshot detail record operation metadata such as area, key, value length, and affected count, but never the raw value being written.
+
 ## Permissions
 
 | Permission | Why |

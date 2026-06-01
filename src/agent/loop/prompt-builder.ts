@@ -12,6 +12,7 @@ import { compactTaskState, createInitialTaskState } from './runtime-task-state';
 import { buildStablePolicyPrefix } from '../prompts/safety-policy-prompt';
 import type { Locale } from '../../i18n/types';
 import { buildMemoryPromptContext } from '../memory/memory-summary-builder';
+import type { BrowserHelmDomainPolicy } from '../../shared/domain-policy';
 import { defaultMemoryRepo } from '../../storage/memory-repo';
 import { defaultScratchpadRepo } from '../../storage/scratchpad-repo';
 import { defaultWorkflowRepo } from '../../storage/workflow-repo';
@@ -41,6 +42,7 @@ export type BuildMessagesInput = {
   snapshot: RunSnapshot;
   toolsContracts: ToolPromptContract[];
   locale: Locale;
+  domainPolicy?: BrowserHelmDomainPolicy | undefined;
 };
 
 // ── Internal tool contracts ──
@@ -112,6 +114,7 @@ export function buildMessages(input: BuildMessagesInput): ModelMessage[] {
     domain: readObservationDomain(snapshot),
     task: redactedTask,
     runId: snapshot.runId,
+    domainPolicy: input.domainPolicy,
     memoryRepo: defaultMemoryRepo,
     workflowRepo: defaultWorkflowRepo,
     scratchpadRepo: defaultScratchpadRepo

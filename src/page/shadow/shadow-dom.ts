@@ -14,6 +14,9 @@ const INTERACTIVE_SELECTOR = [
 
 export function listShadowRoots(document: Document): ShadowRootSummary[] {
   return Array.from(document.querySelectorAll('*')).flatMap((host) => {
+    if (isBrowserHelmInjectedHost(host)) {
+      return [];
+    }
     const root = host.shadowRoot;
     if (!root) {
       return [];
@@ -33,10 +36,11 @@ export function queryShadowRoot(
   document: Document,
   input: { hostSelector: string; selector: string }
 ): ShadowQueryResult {
-  const host = document.querySelector(input.hostSelector);
+  const host = resolveShadowHost(document, input.hostSelector);
   if (!host?.shadowRoot) {
     throw new Error(`Open shadow root not found for host: ${input.hostSelector}`);
   }
+  const hostSelector = input.hostSelector === '*' ? selectorForHost(host) : input.hostSelector;
   const elements = Array.from(host.shadowRoot.querySelectorAll(input.selector)).slice(0, 50).map((element) => {
     const name = element.getAttribute('aria-label') ??
       element.getAttribute('alt') ??
@@ -49,10 +53,23 @@ export function queryShadowRoot(
     };
   });
   return shadowQueryResultSchema.parse({
-    hostSelector: input.hostSelector,
+    hostSelector,
     selector: input.selector,
     elements
   });
+}
+
+function resolveShadowHost(document: Document, hostSelector: string): Element | null {
+  if (hostSelector === '*') {
+    return Array.from(document.querySelectorAll('*')).find((host) =>
+      !isBrowserHelmInjectedHost(host) && host.shadowRoot
+    ) ?? null;
+  }
+  return document.querySelector(hostSelector);
+}
+
+function isBrowserHelmInjectedHost(host: Element): boolean {
+  return host.id === 'browserhelm-floating-entry-host';
 }
 
 function selectorForHost(host: Element): string {

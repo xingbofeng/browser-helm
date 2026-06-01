@@ -34,7 +34,7 @@ export function bhTabList(): ToolSpec<z.infer<typeof emptyArgsSchema>, ToolResul
     execute: async () => {
       try {
         const tabs = await defaultTabManager.listTabs();
-        return ok(`Listed ${tabs.length} browser tabs.`, { tabs });
+        return ok(summarizeTabs(`Listed ${tabs.length} browser tabs.`, { tabs }), { tabs });
       } catch (error) {
         return failure(error);
       }
@@ -63,7 +63,7 @@ export function bhTabGetActive(): ToolSpec<z.infer<typeof emptyArgsSchema>, Tool
     execute: async () => {
       try {
         const tab = await defaultTabManager.getActiveTab();
-        return ok(tab ? `Active tab is ${tab.tabId}.` : 'No active tab found.', { tab });
+        return ok(tab ? `Active tab: ${formatTabSummary(tab)}` : 'No active tab found.', { tab });
       } catch (error) {
         return failure(error);
       }
@@ -105,6 +105,7 @@ export function bhTabFocus(): ToolSpec<z.infer<typeof focusArgsSchema>, ToolResu
 }
 
 function ok(summary: string, data: { tabs?: BrowserTabSummary[]; tab?: BrowserTabSummary | undefined }): ToolResult {
+  const contextSummary = summarizeTabs(summary, data);
   return {
     ok: true,
     code: ERROR_CODES.OK,
@@ -114,9 +115,40 @@ function ok(summary: string, data: { tabs?: BrowserTabSummary[]; tab?: BrowserTa
     requiresObserve: false,
     context: {
       visibility: 'summary',
-      summary
+      summary: contextSummary
     }
   };
+}
+
+function summarizeTabs(
+  fallback: string,
+  data: { tabs?: BrowserTabSummary[]; tab?: BrowserTabSummary | undefined }
+): string {
+  if (data.tabs) {
+    const preview = data.tabs
+      .slice(0, 20)
+      .map(formatTabSummary)
+      .join('; ');
+    return preview ? `Tabs: ${preview}` : fallback;
+  }
+  if (data.tab) {
+    return `Active tab: ${formatTabSummary(data.tab)}`;
+  }
+  return fallback;
+}
+
+function formatTabSummary(tab: BrowserTabSummary): string {
+  const parts = [
+    `tabId=${tab.tabId}`,
+    `title=${tab.title || 'Untitled'}`
+  ];
+  if (tab.url) {
+    parts.push(`url=${tab.url}`);
+  }
+  if (tab.active) {
+    parts.push('active=true');
+  }
+  return parts.join(' ');
 }
 
 function failure(error: unknown): ToolResult {

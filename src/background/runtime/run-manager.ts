@@ -60,7 +60,7 @@ import { t } from '../../i18n/t';
 import { createProviderClient } from './provider-client-factory';
 import { VisionClient } from '../../agent/model/vision-client';
 import {
-  evaluateBrowserHelmDomainPolicy,
+  evaluateBrowserHelmDomainOperationPolicy,
   type BrowserHelmDomainPolicy
 } from '../../shared/domain-policy';
 
@@ -70,12 +70,16 @@ export class RunManager {
   private readonly lifecycle: RunLifecycleService;
   private readonly tools: ToolExecutionService;
   private readonly approvals: ApprovalService;
+  private readonly hasDomainPolicyApi: boolean;
+  private domainPolicyCache: BrowserHelmDomainPolicy | undefined;
+  private domainPolicyCacheLoaded = false;
 
   constructor(private readonly deps: RunManagerDeps = {}) {
     this.store = new RunStore({
       sessionPersistence: deps.runSessionPersistence ?? createDefaultRunSessionPersistence()
     });
     this.settingsStore = deps.settingsStore ?? new ChromeSettingsStore();
+    this.hasDomainPolicyApi = typeof this.settingsStore.getDomainPolicy === 'function';
 
     const approvalManager = new ApprovalManager();
     const withRunMessages = (
@@ -123,7 +127,7 @@ export class RunManager {
       deletePendingAction: (requestId) => this.store.deletePendingApprovalAction(requestId),
       createContentRpcClient: (tabId) => this.createContentRpcClient(tabId),
       createToolRouter: (tabId) => this.createToolRouter(tabId),
-      executeTool: async (input) => await this.tools.execute(input),
+      executeTool: async (input) => await this.executeToolWithAdapterSettings(input),
       appendTrace: (record, event) => this.store.appendTrace(record, event),
       setSnapshot: (runId, snapshot) => this.store.setSnapshot(runId, snapshot),
       getSnapshot: (runId) => this.store.getSnapshot(runId),
@@ -140,7 +144,8 @@ export class RunManager {
     });
   }
 
-  startRun(input: StartRunInput): Promise<{ runId: string }> {
+  async startRun(input: StartRunInput): Promise<{ runId: string }> {
+    await this.refreshDomainPolicyCache();
     return this.lifecycle.startRun(input);
   }
 
@@ -155,7 +160,7 @@ export class RunManager {
       ...snapshot,
       ...(record?.tabId ? { targetTabId: record.tabId } : {}),
       ...(record?.taskState ? { taskState: record.taskState } : {})
-    }, record);
+    }, record, this.canExposeMemoryReuse(snapshot.observation?.currentDomain));
   }
 
   cancelRun(runId: string): Promise<{ runId: string; status: 'cancelled' }> {
@@ -172,11 +177,33 @@ export class RunManager {
 
   private async executeToolWithAdapterSettings(input: ExecuteToolInput): Promise<ToolResult> {
     await this.settingsStore.getDomainAdapterSettings?.();
+    await this.refreshDomainPolicyCache();
     const domainGateResult = await this.domainConsentGateResult(input);
     if (domainGateResult) {
       return domainGateResult;
     }
     return await this.tools.execute(input);
+  }
+
+  private async refreshDomainPolicyCache(): Promise<void> {
+    if (!this.hasDomainPolicyApi) {
+      return;
+    }
+    this.domainPolicyCache = await this.settingsStore.getDomainPolicy?.();
+    this.domainPolicyCacheLoaded = true;
+  }
+
+  private canExposeMemoryReuse(domain: string | undefined): boolean {
+    if (!domain) {
+      return false;
+    }
+    if (!this.hasDomainPolicyApi) {
+      return true;
+    }
+    if (!this.domainPolicyCacheLoaded) {
+      return false;
+    }
+    return evaluateDomainConsent(domain, this.domainPolicyCache).allowed;
   }
 
   private async domainConsentGateResult(input: ExecuteToolInput): Promise<ToolResult | undefined> {
@@ -394,9 +421,13 @@ export class RunManager {
   }
 }
 
-function enrichSnapshotWithMemoryReuse(snapshot: RunSnapshot, record: RunRecord | undefined): RunSnapshot {
+function enrichSnapshotWithMemoryReuse(
+  snapshot: RunSnapshot,
+  record: RunRecord | undefined,
+  canExposeMemoryReuse: boolean
+): RunSnapshot {
   const domain = snapshot.observation?.currentDomain;
-  if (!domain) {
+  if (!domain || !canExposeMemoryReuse) {
     return snapshot;
   }
   const workflowPreviews = record
@@ -479,12 +510,7 @@ function evaluateDomainConsent(
   if (domain && isLoopbackOrLocalhost(domain)) {
     return { allowed: true, hostname: domain, restricted: false };
   }
-  return evaluateBrowserHelmDomainPolicy(domain, {
-    enabledDomains: policy?.enabledDomains ?? [],
-    blockedDomains: policy?.blockedDomains,
-    allowRestrictedDomains: policy?.allowRestrictedDomains,
-    defaultEnabled: false
-  });
+  return evaluateBrowserHelmDomainOperationPolicy(domain, policy, 'advanced_action');
 }
 
 function isLoopbackOrLocalhost(domain: string): boolean {

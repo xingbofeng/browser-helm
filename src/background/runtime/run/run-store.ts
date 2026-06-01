@@ -2,7 +2,6 @@ import type { RunSnapshot, RuntimeEvent } from '../../../runtime/runtime-message
 import { runtimeEventSchema } from '../../../runtime/runtime-messages';
 import type { ExecuteToolInput } from '../../../runtime/runtime-messages';
 import type { RunRecord, TraceRecord } from './runtime-service-types';
-import { defaultMemoryRepo } from '../../../storage/memory-repo';
 import {
   RUN_SESSION_PENDING_TTL_MS,
   type RunSessionPersistence
@@ -45,17 +44,16 @@ export class RunStore {
   }
 
   setSnapshot(runId: string, snapshot: RunSnapshot): void {
-    const enriched = withDomainMemorySnapshot(snapshot);
-    this.snapshots.set(runId, enriched);
+    this.snapshots.set(runId, snapshot);
     this.options.sessionPersistence?.persistSnapshotSummary({
       runId,
       generationId: this.generationIdFor(runId),
-      status: enriched.status,
-      mode: enriched.mode,
-      ...(enriched.observation?.currentDomain ? { domain: enriched.observation.currentDomain } : {}),
-      ...(enriched.pendingApproval?.id ? { pendingApprovalId: enriched.pendingApproval.id } : {}),
-      ...(enriched.toolResult?.tool ? { tool: enriched.toolResult.tool } : {}),
-      ...(enriched.toolResult?.summary ? { toolSummary: enriched.toolResult.summary } : {}),
+      status: snapshot.status,
+      mode: snapshot.mode,
+      ...(snapshot.observation?.currentDomain ? { domain: snapshot.observation.currentDomain } : {}),
+      ...(snapshot.pendingApproval?.id ? { pendingApprovalId: snapshot.pendingApproval.id } : {}),
+      ...(snapshot.toolResult?.tool ? { tool: snapshot.toolResult.tool } : {}),
+      ...(snapshot.toolResult?.summary ? { toolSummary: snapshot.toolResult.summary } : {}),
       updatedAt: Date.now()
     });
   }
@@ -205,18 +203,4 @@ export class RunStore {
 
 function createGenerationId(runId: string): string {
   return `${runId}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function withDomainMemorySnapshot(snapshot: RunSnapshot): RunSnapshot {
-  const domain = snapshot.observation?.currentDomain;
-  if (!domain) {
-    return snapshot.memory ? { ...snapshot, memory: undefined } : snapshot;
-  }
-  return {
-    ...snapshot,
-    memory: {
-      domain,
-      entries: defaultMemoryRepo.list(domain)
-    }
-  };
 }

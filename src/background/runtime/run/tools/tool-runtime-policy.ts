@@ -12,15 +12,7 @@ export type PolicyCheckResult = {
 export class ToolRuntimePolicy {
   private readonly engine = new PolicyEngine();
 
-  evaluate(risk: string, runMode?: RunMode): PolicyCheckResult {
-    if (runMode === 'full' && risk === 'high') {
-      return {
-        allow: true,
-        requiresApproval: false,
-        reason: 'Full mode allows high-risk tools without approval interception',
-        risk
-      };
-    }
+  evaluate(risk: string, _runMode?: RunMode): PolicyCheckResult {
     const policy = this.engine.evaluate({ risk: risk as ToolRisk, wouldRequireApproval: false });
     return {
       allow: policy.allow,

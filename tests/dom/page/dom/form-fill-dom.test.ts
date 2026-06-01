@@ -179,6 +179,22 @@ describe('setCheckboxState', () => {
     setCheckboxState(el, false);
     expect(el.checked).toBe(false);
   });
+
+  it('updates React-style checkbox value tracker before change dispatch', () => {
+    setupPage('<input type="checkbox" checked>');
+    const el = document.querySelector('input')! as HTMLInputElement & {
+      _valueTracker?: { setValue: (value: string) => void };
+    };
+    const trackedValues: string[] = [];
+    el._valueTracker = {
+      setValue: (value) => trackedValues.push(value)
+    };
+
+    setCheckboxState(el, false);
+
+    expect(el.checked).toBe(false);
+    expect(trackedValues).toContain('true');
+  });
 });
 
 describe('setRadioChecked', () => {
@@ -230,6 +246,46 @@ describe('fillSingleField', () => {
     const r = fillSingleField(document, refMap, { fieldRefId: 'ref_nonexistent', value: 'x' });
     expect(r.status).toBe('failed');
     expect(r.error).toContain('\u5931\u6548');
+  });
+
+  it('can recover a stale ref on single-field pages when runtime allows the fallback', () => {
+    setupPage('<input name="search_query" type="text">');
+    const r = fillSingleField(document, refMap, {
+      fieldRefId: 'ref_stale',
+      value: 'keyboard accessibility tutorial',
+      allowSingleFieldFallback: true
+    });
+    expect(r.status).toBe('filled');
+    expect((document.querySelector('input') as HTMLInputElement).value).toBe('keyboard accessibility tutorial');
+  });
+
+  it('can recover a stale ref by choosing the only visible search-like text field', () => {
+    setupPage('<input name="search_query" type="text"><input name="newsletter" type="email">');
+    const r = fillSingleField(document, refMap, {
+      fieldRefId: 'ref_stale',
+      value: 'keyboard accessibility tutorial',
+      allowSingleFieldFallback: true
+    });
+    expect(r.status).toBe('filled');
+    expect((document.querySelector('input[name="search_query"]') as HTMLInputElement).value).toBe('keyboard accessibility tutorial');
+    expect((document.querySelector('input[name="newsletter"]') as HTMLInputElement).value).toBe('');
+  });
+
+  it('can recover a stale ref by preferring the highest-confidence search field', () => {
+    setupPage(`
+      <input name="site_search" type="text">
+      <input id="search" name="search_query" type="text" aria-label="Search">
+      <input name="filter_query" type="text">
+    `);
+    const r = fillSingleField(document, refMap, {
+      fieldRefId: 'ref_stale',
+      value: 'keyboard accessibility tutorial',
+      allowSingleFieldFallback: true
+    });
+    expect(r.status).toBe('filled');
+    expect((document.querySelector('input[name="search_query"]') as HTMLInputElement).value).toBe('keyboard accessibility tutorial');
+    expect((document.querySelector('input[name="site_search"]') as HTMLInputElement).value).toBe('');
+    expect((document.querySelector('input[name="filter_query"]') as HTMLInputElement).value).toBe('');
   });
 
   it('fills select', () => {

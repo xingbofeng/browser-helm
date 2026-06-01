@@ -59,6 +59,7 @@ export class SidePanelPage {
     runKind?: 'observe_only' | 'diagnose' | 'answer' | 'form_assist';
     pollAttempts?: number;
     pollIntervalMs?: number;
+    continueOnEmpty?: boolean;
   }): Promise<RunSnapshot> {
     const page = await this.open(input.tabId);
     return await page.evaluate(async ({ runtimeMessages, pollAttempts, pollIntervalMs, ...runInput }) => {
@@ -98,7 +99,8 @@ export class SidePanelPage {
         }
         snapshot = nextSnapshot;
         const stillRunning = ['created', 'observing', 'thinking', 'executing_tool'].includes(snapshot.data.status) ||
-          (snapshot.data.status === 'observed' && runInput.runKind !== 'observe_only');
+          (snapshot.data.status === 'observed' && runInput.runKind !== 'observe_only') ||
+          (snapshot.data.status === 'empty' && runInput.runKind !== 'observe_only' && runInput.continueOnEmpty === true);
         if (!stillRunning) {
           break;
         }

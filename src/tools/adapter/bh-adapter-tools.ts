@@ -5,6 +5,7 @@ import type { AdapterDetection, AdapterLocator, DetectedDomainAdapter } from '..
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
+import { approvalRequiredResult } from '../core/tool-result-factory';
 import type { ToolSpec } from '../core/tool-spec';
 import {
   adapterFailureReportInputSchema,
@@ -73,13 +74,31 @@ export function bhAdapterListWorkflows(): ToolSpec<z.infer<typeof urlArgsSchema>
       if (!detection.enabled) {
         return fallbackNotFound(detection);
       }
-      if (workflowId && !detection.adapter.workflows.some((workflow) => workflow.id === workflowId)) {
+      const selectedWorkflow = workflowId
+        ? detection.adapter.workflows.find((workflow) => workflow.id === workflowId)
+        : undefined;
+      if (workflowId && !selectedWorkflow) {
         return recordWorkflowFailure(
           url,
           detection.adapter,
           workflowId,
           `Workflow ${workflowId} is not registered for ${detection.adapter.label}.`
         );
+      }
+      if (selectedWorkflow?.requiresApproval) {
+        return {
+          ...approvalRequiredResult({
+            reason: `Confirm adapter workflow: ${selectedWorkflow.title}`,
+            risk: selectedWorkflow.risk === 'high' ? 'high' : 'medium',
+            actionPreview: selectedWorkflow.steps.join('\n')
+          }),
+          data: {
+            adapterId: detection.adapter.id,
+            workflow: selectedWorkflow,
+            fallback: 'generic_browser_tools'
+          },
+          nextHints: ['Adapter workflow approval is required before using its high-risk steps.']
+        };
       }
       return {
         ...ok(`Listed ${detection.adapter.workflows.length} ${detection.adapter.label} workflows.`, {

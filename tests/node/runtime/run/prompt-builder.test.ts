@@ -365,6 +365,58 @@ describe('runtime prompt builder', () => {
     expect(prompt).toContain('DOMAIN_RESTRICTED');
     expect(prompt).not.toContain('Sensitive banking memory');
   });
+
+  it('does not inject memory or workflow hits for domains outside the explicit domain policy', () => {
+    const domain = `policy-blocked-${Date.now()}.example.com`;
+    defaultMemoryRepo.save({
+      domain,
+      task: '查看账单',
+      summary: 'Policy gated billing memory'
+    });
+    defaultWorkflowRepo.save({
+      domain,
+      intent: '打开账单',
+      taskDescription: '进入 Billing',
+      steps: [{
+        id: 'step_1',
+        tool: TOOL_NAMES.PAGE_OBSERVE,
+        summary: '观察页面',
+        risk: 'safe',
+        requiresApproval: false
+      }]
+    });
+
+    const messages = buildMessages({
+      record: {
+        ...recordWithTrace([]),
+        task: '查看账单'
+      },
+      snapshot: {
+        ...snapshotWithLastToolResult(TOOL_NAMES.PAGE_OBSERVE),
+        observation: {
+          url: `https://${domain}/billing`,
+          title: 'Billing',
+          currentDomain: domain,
+          origin: `https://${domain}`,
+          visibleTextSummary: 'Billing',
+          pageStateSummary: 'Ready',
+          interactiveCount: 1,
+          warnings: []
+        }
+      },
+      toolsContracts: [toolContract(TOOL_NAMES.PAGE_OBSERVE)],
+      locale: 'zh',
+      domainPolicy: {
+        enabledDomains: ['allowed.example.com'],
+        defaultEnabled: false
+      }
+    });
+
+    const prompt = messages.at(-1)?.content ?? '';
+    expect(prompt).toContain('DOMAIN_NOT_ENABLED');
+    expect(prompt).not.toContain('Policy gated billing memory');
+    expect(prompt).not.toContain('打开账单');
+  });
 });
 
 function recordWithTrace(trace: RuntimeEvent[]): RunRecord {

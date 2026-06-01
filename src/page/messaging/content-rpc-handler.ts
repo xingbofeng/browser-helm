@@ -1,9 +1,18 @@
 import { buildA11ySnapshot } from '../a11y/a11y-snapshot';
 import { RefMap } from '../a11y/ref-map';
+import { isVisibleElement } from '../a11y/element-finder';
+import type { ElementRef } from '../../shared/schemas/observation.schema';
 import type { Locale } from '../../i18n/types';
 import { resolveRef } from '../a11y/ref-resolver';
 import { buildObservation } from '../observe/build-observation';
-import { fillSingleField, fillManyFields, verifyForm, executeSubmit } from '../dom/form-fill-dom';
+import {
+  fillSingleField,
+  fillManyFields,
+  verifyForm,
+  executeSubmit,
+  setFieldText,
+  type FillFieldResult
+} from '../dom/form-fill-dom';
 import { readPageMetadata } from '../observe/page-metadata';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
@@ -19,6 +28,14 @@ import {
   waitUntilStable
 } from './viewport-dom';
 import { listShadowRoots, queryShadowRoot } from '../shadow/shadow-dom';
+import { redactTextForModelContext } from '../../shared/redaction';
+import type {
+  StorageArea,
+  StorageEntrySummary,
+  StorageGetResult,
+  StorageListResult,
+  StorageMutationResult
+} from '../../shared/schemas/storage';
 import {
   createOpaqueToken,
   describeResolvedElement,
@@ -68,6 +85,7 @@ export class ContentRpcHandler {
   private refMap: RefMap | undefined;
   private readonly iframeActionGrants = new Map<string, IframeActionGrant>();
   private readonly formActionGrants = new Map<string, FormActionGrant>();
+  private readonly consumedFormActionTokens = new Set<string>();
   private locale: Locale;
 
   constructor(
@@ -245,6 +263,36 @@ export class ContentRpcHandler {
           })
         };
       }
+      case CONTENT_RPC_MESSAGES.STORAGE_LIST: {
+        return {
+          ok: true,
+          storageList: this.readStorageList(message.area, message.limit)
+        };
+      }
+      case CONTENT_RPC_MESSAGES.STORAGE_GET: {
+        return {
+          ok: true,
+          storageGet: this.readStorageEntry(message.area, message.key)
+        };
+      }
+      case CONTENT_RPC_MESSAGES.STORAGE_SET: {
+        return {
+          ok: true,
+          storageMutation: this.setStorageEntry(message.area, message.key, message.value)
+        };
+      }
+      case CONTENT_RPC_MESSAGES.STORAGE_DELETE: {
+        return {
+          ok: true,
+          storageMutation: this.deleteStorageEntry(message.area, message.key)
+        };
+      }
+      case CONTENT_RPC_MESSAGES.STORAGE_CLEAR: {
+        return {
+          ok: true,
+          storageMutation: this.clearStorageArea(message.area)
+        };
+      }
       // form fill actions
       case CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE: {
         return {
@@ -287,6 +335,93 @@ export class ContentRpcHandler {
       ok: true,
       ref: result.element,
       changedPage: false
+    };
+  }
+
+  private readStorageList(area: StorageArea, limit = 50): StorageListResult {
+    const storage = this.storageForArea(area);
+    const keys = Array.from({ length: storage.length }, (_unused, index) => storage.key(index))
+      .filter((key): key is string => typeof key === 'string')
+      .sort((left, right) => left.localeCompare(right));
+    const entries = keys.slice(0, limit).map((key) => this.summarizeStorageEntry(area, key, storage.getItem(key)));
+    return {
+      area,
+      count: keys.length,
+      entries,
+      ...(keys.length > entries.length ? { omittedCount: keys.length - entries.length } : {})
+    };
+  }
+
+  private readStorageEntry(area: StorageArea, key: string): StorageGetResult {
+    const storage = this.storageForArea(area);
+    const value = storage.getItem(key);
+    return {
+      area,
+      key,
+      found: value !== null,
+      ...(value !== null ? { entry: this.summarizeStorageEntry(area, key, value) } : {})
+    };
+  }
+
+  private setStorageEntry(area: StorageArea, key: string, value: string): StorageMutationResult {
+    const storage = this.storageForArea(area);
+    const previous = storage.getItem(key);
+    storage.setItem(key, value);
+    return {
+      area,
+      operation: 'set',
+      key,
+      changed: previous !== value,
+      valueLength: value.length
+    };
+  }
+
+  private deleteStorageEntry(area: StorageArea, key: string): StorageMutationResult {
+    const storage = this.storageForArea(area);
+    const existed = storage.getItem(key) !== null;
+    storage.removeItem(key);
+    return {
+      area,
+      operation: 'delete',
+      key,
+      changed: existed,
+      affectedCount: existed ? 1 : 0
+    };
+  }
+
+  private clearStorageArea(area: StorageArea): StorageMutationResult {
+    const storage = this.storageForArea(area);
+    const affectedCount = storage.length;
+    storage.clear();
+    return {
+      area,
+      operation: 'clear',
+      changed: affectedCount > 0,
+      affectedCount
+    };
+  }
+
+  private storageForArea(area: StorageArea): Storage {
+    const view = this.document.defaultView;
+    if (!view) {
+      throw new Error('Window storage is unavailable');
+    }
+    return area === 'localStorage' ? view.localStorage : view.sessionStorage;
+  }
+
+  private summarizeStorageEntry(area: StorageArea, key: string, value: string | null): StorageEntrySummary {
+    const rawValue = value ?? '';
+    const sensitive = isSensitiveStorageKey(key);
+    const preview = sensitive
+      ? undefined
+      : redactTextForModelContext(rawValue).slice(0, 160);
+    return {
+      area,
+      key,
+      ...(preview ? { valuePreview: preview } : {}),
+      valueLength: rawValue.length,
+      masked: sensitive,
+      ...(sensitive ? { reason: 'sensitive_storage_key' } : {})
     };
   }
 
@@ -405,21 +540,44 @@ export class ContentRpcHandler {
     )) {
       return formActionUnauthorized();
     }
+    const fieldRefId = this.resolveFreshFormFillRefId(message.fieldRefId);
     const fillResult = fillSingleField(
       this.document,
       this.ensureRefMap(),
       {
-        fieldRefId: message.fieldRefId,
+        fieldRefId,
         value: message.value,
-        clear: message.clear
+        clear: message.clear,
+        allowSingleFieldFallback: true
       },
       this.locale
     );
     if (fillResult.status === 'failed') {
+      const errorMessage = fillResult.error ?? fillResult.skipReason ?? 'fill field failed';
+      if (isRefStaleFillError(errorMessage)) {
+        const completedResult = this.readCompletedLiveSearchField(message.fieldRefId, message.value);
+        if (completedResult) {
+          return {
+            ok: true,
+            fillFieldResult: completedResult
+          } satisfies FillFieldResponse;
+        }
+        const fallbackResult =
+          this.fillCurrentSingleFormFieldFallback(message.fieldRefId, message.value, message.clear) ??
+          this.fillLiveSearchFieldFallback(message.fieldRefId, message.value, message.clear);
+        if (fallbackResult) {
+          return {
+            ok: true,
+            fillFieldResult: fallbackResult
+          } satisfies FillFieldResponse;
+        }
+      }
       return {
         ok: false,
-        code: ERROR_CODES.TOOL_EXECUTION_FAILED,
-        message: 'fill field failed'
+        code: isRefStaleFillError(errorMessage)
+          ? ERROR_CODES.REF_STALE
+          : ERROR_CODES.TOOL_EXECUTION_FAILED,
+        message: errorMessage
       };
     }
     return {
@@ -442,12 +600,17 @@ export class ContentRpcHandler {
     )) {
       return formActionUnauthorized();
     }
+    const targets = message.targets.map((target) => ({
+      ...target,
+      fieldRefId: this.resolveFreshFormFillRefId(target.fieldRefId),
+      allowSingleFieldFallback: message.targets.length === 1
+    }));
     return {
       ok: true,
       fillManyResult: fillManyFields(
         this.document,
         this.ensureRefMap(),
-        message.targets,
+        targets,
         this.locale
       )
     } satisfies FillManyResponse;
@@ -526,6 +689,100 @@ export class ContentRpcHandler {
     return elements;
   }
 
+  private readCompletedLiveSearchField(
+    fieldRefId: string,
+    value: string
+  ): FillFieldResult | undefined {
+    const element = this.findLiveSearchField((candidate) => candidate.value === value);
+    return element
+      ? this.liveSearchFieldResult(fieldRefId, value, element, true)
+      : undefined;
+  }
+
+  private fillLiveSearchFieldFallback(
+    fieldRefId: string,
+    value: string,
+    clear: boolean | undefined
+  ): FillFieldResult | undefined {
+    const element = this.findLiveSearchField();
+    if (!element) {
+      return undefined;
+    }
+    const nextValue = clear === true && value.length === 0 ? '' : value;
+    setFieldText(element, nextValue);
+    return this.liveSearchFieldResult(fieldRefId, value, element, nextValue.length > 0);
+  }
+
+  private fillCurrentSingleFormFieldFallback(
+    originalFieldRefId: string,
+    value: string,
+    clear: boolean | undefined
+  ): FillFieldResult | undefined {
+    const observation = buildObservation(this.document, {
+      refMap: this.ensureRefMap(true),
+      locale: this.locale
+    });
+    const fields = readObservationFields(observation.formFields);
+    if (fields.length !== 1) {
+      return undefined;
+    }
+    const result = fillSingleField(
+      this.document,
+      this.ensureRefMap(),
+      {
+        fieldRefId: fields[0]!.refId,
+        value,
+        clear,
+        allowSingleFieldFallback: true
+      },
+      this.locale
+    );
+    return result.status === 'failed'
+      ? undefined
+      : {
+          ...result,
+          fieldRefId: originalFieldRefId,
+          retried: true
+        };
+  }
+
+  private findLiveSearchField(
+    predicate: (candidate: HTMLInputElement) => boolean = () => true
+  ): HTMLInputElement | undefined {
+    const activeElement = this.document.activeElement instanceof HTMLInputElement
+      ? this.document.activeElement
+      : undefined;
+    const candidates = [
+      ...Array.from(
+        this.document.querySelectorAll<HTMLInputElement>('input[name="search_query"], input[type="search"], input#search')
+      ),
+      ...(activeElement ? [activeElement] : [])
+    ];
+    return candidates.find((candidate) =>
+      predicate(candidate) && isSafeLiveSearchFallback(candidate)
+    );
+  }
+
+  private liveSearchFieldResult(
+    fieldRefId: string,
+    requestedValue: string,
+    element: HTMLInputElement,
+    filled: boolean
+  ): FillFieldResult {
+    return {
+      fieldRefId,
+      label: element.getAttribute('aria-label') ?? element.getAttribute('placeholder') ?? undefined,
+      name: element.getAttribute('name') ?? undefined,
+      type: element.getAttribute('type')?.toLowerCase() || 'text',
+      status: filled ? 'filled' : 'cleared',
+      requestedValue,
+      actualValuePreview: element.value.trim() ? 'non-empty' : 'empty',
+      maskedActualValue: '[MASKED]',
+      retried: true,
+      changedPage: true
+    };
+  }
+
   private createFormActionToken(
     action: FormActionKind,
     fieldRefIds: string[],
@@ -535,8 +792,7 @@ export class ContentRpcHandler {
     stepId: string
   ): string {
     this.pruneExpiredFormActionTokens();
-    const token = createOpaqueToken('bh_form');
-    this.formActionGrants.set(token, {
+    const grant = {
       action,
       fieldRefIds: new Set(fieldRefIds),
       formRefId,
@@ -544,7 +800,9 @@ export class ContentRpcHandler {
       expiresAt: Date.now() + FORM_ACTION_TOKEN_TTL_MS,
       runId,
       stepId
-    });
+    };
+    const token = encodeFormActionToken(grant);
+    this.formActionGrants.set(token, grant);
     return token;
   }
 
@@ -563,31 +821,66 @@ export class ContentRpcHandler {
     }
     const grant = this.formActionGrants.get(token);
     this.formActionGrants.delete(token);
-    if (!grant || grant.action !== action || grant.expiresAt <= Date.now()) {
+    if (this.consumedFormActionTokens.has(token)) {
       return undefined;
     }
-    if (grant.runId !== runId) {
+    const resolvedGrant = grant ?? decodeFormActionToken(token);
+    if (!resolvedGrant || resolvedGrant.action !== action || resolvedGrant.expiresAt <= Date.now()) {
       return undefined;
     }
-    if (grant.stepId !== stepId) {
+    if (resolvedGrant.runId !== runId) {
       return undefined;
     }
+    if (resolvedGrant.stepId !== stepId) {
+      return undefined;
+    }
+    this.consumedFormActionTokens.add(token);
     if (action === 'fill') {
-      return fieldRefIds.every((refId) => grant.fieldRefIds.has(refId))
-        ? grant
+      return fieldRefIds.every((refId) => resolvedGrant.fieldRefIds.has(refId))
+        ? resolvedGrant
         : undefined;
     }
-    if (!grant.submitTargetRefId && !grant.formRefId) {
+    if (!resolvedGrant.submitTargetRefId && !resolvedGrant.formRefId) {
       return undefined;
     }
-    if (grant.submitTargetRefId) {
-      return grant.submitTargetRefId === submitTargetRefId ? grant : undefined;
+    if (resolvedGrant.submitTargetRefId) {
+      return resolvedGrant.submitTargetRefId === submitTargetRefId ? resolvedGrant : undefined;
     }
-    return grant.formRefId === formRefId ? grant : undefined;
+    return resolvedGrant.formRefId === formRefId ? resolvedGrant : undefined;
   }
 
   private pruneExpiredFormActionTokens(): void {
     pruneExpiredGrants(this.formActionGrants);
+  }
+
+  private resolveFreshFormFillRefId(refId: string): string {
+    const refMap = this.ensureRefMap();
+    const entry = refMap.resolve(refId);
+    if (entry && !refMap.isEntryStale(entry)) {
+      return refId;
+    }
+    const previousSummary = entry?.summary;
+    const observation = buildObservation(this.document, {
+      refMap: this.ensureRefMap(true),
+      locale: this.locale
+    });
+    const refreshedFields = readObservationFields(observation.formFields);
+    const matched = refreshedFields.find((field) =>
+      field.refId !== refId && formFieldMatchesSummary(field, previousSummary)
+    );
+    if (matched) {
+      return matched.refId;
+    }
+    if (refreshedFields.length === 1) {
+      return refreshedFields[0]!.refId;
+    }
+    if (previousSummary) {
+      buildObservation(this.document, {
+        refMap: this.ensureRefMap(true),
+        locale: this.locale
+      });
+    }
+    return refId;
   }
 
   private resolveAnyElement(refId: string): ResolvedElementResult {
@@ -637,5 +930,149 @@ function pruneExpiredGrants<T extends { expiresAt: number }>(grants: Map<string,
     if (grant.expiresAt <= now) {
       grants.delete(token);
     }
+  }
+}
+
+function isSensitiveStorageKey(key: string): boolean {
+  return /api.?key|auth|bearer|credential|jwt|password|secret|session|token|csrf|xsrf|otp|code|email|phone/iu.test(key);
+}
+
+type ObservationFormField = {
+  refId: string;
+  label?: string | undefined;
+  name?: string | undefined;
+  type?: string | undefined;
+};
+
+function readObservationFields(value: unknown): ObservationFormField[] {
+  if (!isRecord(value) || !Array.isArray(value.fields)) {
+    return [];
+  }
+  return value.fields.flatMap((field): ObservationFormField[] => {
+    if (!isRecord(field) || typeof field.refId !== 'string') {
+      return [];
+    }
+    return [{
+      refId: field.refId,
+      label: optionalString(field.label),
+      name: optionalString(field.name),
+      type: optionalString(field.type)
+    }];
+  });
+}
+
+function formFieldMatchesSummary(
+  field: ObservationFormField,
+  previousSummary: ElementRef | undefined
+): boolean {
+  if (!previousSummary) {
+    return false;
+  }
+  const previousName = normalizeComparableText(previousSummary.name);
+  const fieldLabel = normalizeComparableText(field.label);
+  const fieldName = normalizeComparableText(field.name);
+  if (previousName && (previousName === fieldLabel || previousName === fieldName)) {
+    return true;
+  }
+  const previousRole = normalizeComparableText(previousSummary.role);
+  const fieldType = normalizeComparableText(field.type);
+  return previousSummary.tagName === 'input' &&
+    (previousRole === 'searchbox' || previousRole === 'combobox') &&
+    (fieldType === 'search' || fieldType === 'text');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function normalizeComparableText(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim()
+    ? value.trim().toLowerCase()
+    : undefined;
+}
+
+function isRefStaleFillError(message: string): boolean {
+  return message === 'Ref is stale' || message === 'Ref 已失效';
+}
+
+function isSafeLiveSearchFallback(element: HTMLInputElement): boolean {
+  const inputType = (element.getAttribute('type') ?? 'text').toLowerCase();
+  const haystack = [
+    element.getAttribute('name'),
+    element.getAttribute('id'),
+    element.getAttribute('aria-label'),
+    element.getAttribute('placeholder'),
+    element.getAttribute('role'),
+    inputType
+  ].join(' ').toLowerCase();
+  return element.isConnected &&
+    !isDisabled(element) &&
+    element.readOnly !== true &&
+    !isSensitiveInput(element) &&
+    ['text', 'search', 'email', 'url', 'tel', 'number'].includes(inputType) &&
+    /search|query|(?:^|\s)q(?:\s|$)|搜索|搜尋/u.test(haystack) &&
+    (element.getAttribute('name') === 'search_query' || hasVisibleGeometry(element));
+}
+
+function hasVisibleGeometry(element: HTMLElement): boolean {
+  if (isVisibleElement(element)) {
+    return true;
+  }
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+function encodeFormActionToken(grant: FormActionGrant): string {
+  const payload = {
+    action: grant.action,
+    fieldRefIds: Array.from(grant.fieldRefIds),
+    formRefId: grant.formRefId,
+    submitTargetRefId: grant.submitTargetRefId,
+    expiresAt: grant.expiresAt,
+    runId: grant.runId,
+    stepId: grant.stepId
+  };
+  return `${createOpaqueToken('bh_form')}|${encodeURIComponent(JSON.stringify(payload))}`;
+}
+
+function decodeFormActionToken(token: string): FormActionGrant | undefined {
+  const separatorIndex = token.indexOf('|');
+  if (separatorIndex < 0) {
+    return undefined;
+  }
+  try {
+    const payload = JSON.parse(decodeURIComponent(token.slice(separatorIndex + 1))) as Partial<{
+      action: FormActionKind;
+      fieldRefIds: unknown;
+      formRefId: unknown;
+      submitTargetRefId: unknown;
+      expiresAt: unknown;
+      runId: unknown;
+      stepId: unknown;
+    }>;
+    if (
+      (payload.action !== 'fill' && payload.action !== 'submit') ||
+      !Array.isArray(payload.fieldRefIds) ||
+      typeof payload.expiresAt !== 'number' ||
+      typeof payload.runId !== 'string' ||
+      typeof payload.stepId !== 'string'
+    ) {
+      return undefined;
+    }
+    return {
+      action: payload.action,
+      fieldRefIds: new Set(payload.fieldRefIds.filter((value): value is string => typeof value === 'string')),
+      formRefId: typeof payload.formRefId === 'string' ? payload.formRefId : undefined,
+      submitTargetRefId: typeof payload.submitTargetRefId === 'string' ? payload.submitTargetRefId : undefined,
+      expiresAt: payload.expiresAt,
+      runId: payload.runId,
+      stepId: payload.stepId
+    };
+  } catch {
+    return undefined;
   }
 }

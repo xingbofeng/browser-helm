@@ -16,6 +16,7 @@ export const stackOverflowScenario: RealModelScenario = {
     '如果页面不是 Cloudflare 或 Just a moment 拦截，第一步必须调用 bh_form_read_fields 查找搜索框，不能只依赖初始页面观察。',
     '如果搜索框可用，请填写「playwright extension debugging」；如果页面被 Cloudflare 或 Just a moment 拦截，请使用页面可见文本读取工具读取当前状态并用中文总结阻塞信息。',
     '如果字段已有内容，允许清空后覆盖；这不是提交或高风险操作。',
+    '当搜索框可用时，填写必须通过 bh_form_fill_field 或 bh_form_fill_many 完成；没有调用填写工具就不能说已经填写。',
     '不要提交表单、不要按 Enter、不要点击搜索按钮。'
   ].join('\n'),
   async assert({ page, snapshot, beforeUrl }, helpers) {

@@ -13,6 +13,12 @@ import {
   shadowQueryResultSchema,
   shadowRootSummarySchema
 } from '../../shared/schemas/shadow';
+import {
+  storageAreaSchema,
+  storageGetResultSchema,
+  storageListResultSchema,
+  storageMutationResultSchema
+} from '../../shared/schemas/storage';
 import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 
 export const contentRpcRequestSchema = z.discriminatedUnion('type', [
@@ -107,6 +113,31 @@ export const contentRpcRequestSchema = z.discriminatedUnion('type', [
     type: z.literal(CONTENT_RPC_MESSAGES.SHADOW_QUERY),
     hostSelector: z.string().min(1),
     selector: z.string().min(1)
+  }),
+  z.object({
+    type: z.literal(CONTENT_RPC_MESSAGES.STORAGE_LIST),
+    area: storageAreaSchema,
+    limit: z.number().int().positive().max(200).optional()
+  }),
+  z.object({
+    type: z.literal(CONTENT_RPC_MESSAGES.STORAGE_GET),
+    area: storageAreaSchema,
+    key: z.string().min(1)
+  }),
+  z.object({
+    type: z.literal(CONTENT_RPC_MESSAGES.STORAGE_SET),
+    area: storageAreaSchema,
+    key: z.string().min(1),
+    value: z.string()
+  }),
+  z.object({
+    type: z.literal(CONTENT_RPC_MESSAGES.STORAGE_DELETE),
+    area: storageAreaSchema,
+    key: z.string().min(1)
+  }),
+  z.object({
+    type: z.literal(CONTENT_RPC_MESSAGES.STORAGE_CLEAR),
+    area: storageAreaSchema
   }),
   // 表单填写动作
   z.object({
@@ -228,6 +259,18 @@ export const contentRpcSuccessSchema = z.union([
   z.object({
     ok: z.literal(true),
     shadowQuery: shadowQueryResultSchema
+  }),
+  z.object({
+    ok: z.literal(true),
+    storageList: storageListResultSchema
+  }),
+  z.object({
+    ok: z.literal(true),
+    storageGet: storageGetResultSchema
+  }),
+  z.object({
+    ok: z.literal(true),
+    storageMutation: storageMutationResultSchema
   }),
   z.object({
     ok: z.literal(true),

@@ -11,6 +11,7 @@ import {
 } from '../../../src/shared/constants/event-names';
 import { TOOL_NAMES } from '../../../src/shared/constants/tool-names';
 import type { AgentMessage } from '../../../src/shared/schemas/agent-message.schema';
+import { defaultMemoryRepo } from '../../../src/storage/memory-repo';
 import { defaultWorkflowRepo } from '../../../src/storage/workflow-repo';
 
 describe('RunManager', () => {
@@ -137,7 +138,8 @@ describe('RunManager', () => {
         currentDomain: domain,
         origin: `https://${domain}`,
         visibleTextSummary: 'Billing Invoices'
-      }))
+      })),
+      settingsStore: providerSettings()
     });
 
     const started = await manager.startRun({
@@ -1597,6 +1599,109 @@ describe('RunManager', () => {
     )).toBe(true);
   });
 
+  it('finishes a non-submit task when repeated form fill repair repeats the fill again', async () => {
+    const fillManyCalls: unknown[] = [];
+    const decisions = [
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: { fields: [{ fieldRefId: 'ref_q', value: '最近的 agent 文章' }] },
+        reason: '填写搜索词'
+      },
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: { fields: [{ fieldRefId: 'ref_q', value: '最近的 agent 文章' }] },
+        reason: '重复填写'
+      },
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: { fields: [{ fieldRefId: 'ref_q', value: '最近的 agent 文章' }] },
+        reason: '仍然重复填写'
+      }
+    ];
+    const providerClient: ModelClient = {
+      async complete() {
+        return {
+          text: decisionText(decisions.shift() ?? {
+            type: 'finish',
+            message: 'done'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          fillManyCalls.push(message.targets);
+          return {
+            ok: true,
+            fillManyResult: {
+              ok: true,
+              fields: message.targets.map((target) => ({
+                fieldRefId: target.fieldRefId,
+                type: 'search',
+                status: 'filled',
+                actualValuePreview: 'non-empty',
+                maskedActualValue: '[MASKED]'
+              })),
+              filledCount: message.targets.length,
+              skippedCount: 0,
+              failedCount: 0,
+              changedPage: true,
+              requiresObserve: false,
+              summary: `填写成功 ${message.targets.length}/${message.targets.length} 个字段`
+            }
+          };
+        }
+        return observationResponse({
+          title: 'Search',
+          currentDomain: 'example.com',
+          visibleTextSummary: 'Search',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_q',
+                label: '搜索',
+                name: 'q',
+                type: 'search',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              }
+            ],
+            submit: { disabled: false, warnings: [] },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '只填写搜索框为“最近的 agent 文章”，不提交',
+      mode: 'act'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'finished');
+
+    expect(fillManyCalls).toHaveLength(1);
+    expect(snapshot.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `${started.runId}:agent-final`,
+          content: '请求的字段已经填写完成，未提交表单。'
+        })
+      ])
+    );
+  });
+
   it('repairs a repeated form fill even when a read fields call happened in between', async () => {
     const fillManyCalls: unknown[] = [];
     const completeCalls: string[] = [];
@@ -2005,6 +2110,219 @@ describe('RunManager', () => {
       changedPage: false
     });
     expect(rpcMessages).toEqual([]);
+  });
+
+  it('keeps approved workflow replay steps behind the domain consent gate', async () => {
+    const domain = `workflow-policy-${Date.now()}.example.com`;
+    let domainPolicy: { enabledDomains: string[]; defaultEnabled: false } | undefined = {
+      enabledDomains: [domain],
+      defaultEnabled: false
+    };
+    const workflow = defaultWorkflowRepo.save({
+      domain,
+      intent: '点击账单按钮',
+      taskDescription: '点击账单页面上的按钮',
+      steps: [{
+        id: 'step_1',
+        tool: TOOL_NAMES.ACTION_CLICK,
+        summary: '点击账单按钮',
+        args: { refId: 'ref_bill' },
+        risk: 'medium',
+        requiresApproval: false
+      }]
+    });
+    const rpcMessages: string[] = [];
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        rpcMessages.push(message.type);
+        return observationResponse({
+          url: `https://${domain}/billing`,
+          currentDomain: domain,
+          origin: `https://${domain}`,
+          refSummary: [{
+            refId: 'ref_bill',
+            role: 'button',
+            name: 'Billing',
+            tagName: 'button',
+            visible: true,
+            disabled: false
+          }]
+        });
+      }),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'demo-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: false
+          };
+        },
+        async setProviderSettings() {},
+        async getDomainPolicy() {
+          return domainPolicy;
+        }
+      }
+    });
+
+    const started = await manager.startRun({
+      task: '点击账单按钮',
+      mode: 'act',
+      runKind: 'observe_only'
+    });
+    await waitForSnapshot(manager, started.runId, 'observed');
+    rpcMessages.length = 0;
+
+    const replayRequest = await manager.executeTool({
+      runId: started.runId,
+      tool: TOOL_NAMES.FLOW_RUN_WITH_APPROVAL,
+      args: { id: workflow.id }
+    });
+    const pending = manager.getSnapshot(started.runId).pendingApproval;
+
+    expect(replayRequest).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.APPROVAL_REQUIRED,
+      requiresApproval: true
+    });
+    domainPolicy = undefined;
+
+    const approved = await manager.decideApproval({
+      runId: started.runId,
+      requestId: pending?.id ?? '',
+      decision: 'approved'
+    });
+
+    expect(approved).toMatchObject({
+      ok: false,
+      code: 'DOMAIN_NOT_ENABLED',
+      changedPage: false
+    });
+    expect(rpcMessages).toEqual([]);
+    expect(manager.getSnapshot(started.runId)).toMatchObject({
+      status: 'waiting_for_user',
+      toolResult: {
+        tool: TOOL_NAMES.ACTION_CLICK,
+        ok: false,
+        code: 'DOMAIN_NOT_ENABLED'
+      }
+    });
+    defaultWorkflowRepo.delete(workflow.id);
+  });
+
+  it('blocks workflow replay approval requests without domain consent', async () => {
+    const domain = `workflow-request-policy-${Date.now()}.example.com`;
+    const workflow = defaultWorkflowRepo.save({
+      domain,
+      intent: '观察账单按钮',
+      taskDescription: '观察账单页面',
+      steps: [{
+        id: 'step_1',
+        tool: TOOL_NAMES.PAGE_OBSERVE,
+        summary: '观察页面',
+        args: {},
+        risk: 'safe',
+        requiresApproval: false
+      }]
+    });
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse({
+        url: `https://${domain}/billing`,
+        currentDomain: domain,
+        origin: `https://${domain}`
+      })),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'demo-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: false
+          };
+        },
+        async setProviderSettings() {},
+        async getDomainPolicy() {
+          return undefined;
+        }
+      }
+    });
+
+    const started = await manager.startRun({
+      task: '观察账单按钮',
+      mode: 'ask',
+      runKind: 'observe_only'
+    });
+    await waitForSnapshot(manager, started.runId, 'observed');
+
+    const result = await manager.executeTool({
+      runId: started.runId,
+      tool: TOOL_NAMES.FLOW_RUN_WITH_APPROVAL,
+      args: { id: workflow.id }
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'DOMAIN_NOT_ENABLED',
+      changedPage: false
+    });
+    expect(manager.getSnapshot(started.runId).pendingApproval).toBeUndefined();
+    defaultWorkflowRepo.delete(workflow.id);
+  });
+
+  it('does not expose memory entries or replay previews in snapshots without domain consent', async () => {
+    const domain = `snapshot-policy-${Date.now()}.example.com`;
+    defaultMemoryRepo.save({
+      domain,
+      task: '打开账单',
+      summary: 'Billing memory should stay hidden'
+    });
+    const workflow = defaultWorkflowRepo.save({
+      domain,
+      intent: '打开账单',
+      taskDescription: '进入 Billing',
+      steps: [{
+        id: 'step_1',
+        tool: TOOL_NAMES.PAGE_OBSERVE,
+        summary: '观察页面',
+        args: {},
+        risk: 'safe',
+        requiresApproval: false
+      }]
+    });
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse({
+        url: `https://${domain}/billing`,
+        currentDomain: domain,
+        origin: `https://${domain}`
+      })),
+      settingsStore: {
+        async getProviderSettings() {
+          return {
+            baseUrl: 'https://api.example.com/v1',
+            model: 'demo-model',
+            apiKey: 'sk-test-secret',
+            streamingEnabled: false
+          };
+        },
+        async setProviderSettings() {},
+        async getDomainPolicy() {
+          return undefined;
+        }
+      }
+    });
+
+    const started = await manager.startRun({
+      task: '打开账单',
+      mode: 'ask',
+      runKind: 'observe_only'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'observed');
+
+    expect(snapshot.memory).toBeUndefined();
+    defaultWorkflowRepo.delete(workflow.id);
   });
 
   it('repairs a repeated form verify after the previous verification already succeeded', async () => {

@@ -16,6 +16,7 @@ export const googleScenario: RealModelScenario = {
     '第一步必须调用 bh_form_read_fields 读取页面里的可写字段，不能只依赖初始页面观察。',
     '然后根据字段 label、name、role 或可写状态判断哪个字段是搜索框。',
     '把搜索框填写为「美国 无障碍」。如果字段已有内容，允许清空后覆盖；这不是提交或高风险操作，不需要再向用户确认。',
+    '填写必须通过 bh_form_fill_field 或 bh_form_fill_many 完成；没有调用填写工具就不能说已经填写。',
     '填写后用一句中文说明你识别搜索框的依据，并明确说明没有提交搜索。',
     '禁止提交表单、禁止按 Enter、禁止点击搜索按钮。'
   ].join('\n'),

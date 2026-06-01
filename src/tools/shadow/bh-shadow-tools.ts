@@ -5,6 +5,7 @@ import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
+import type { ShadowElementSummary, ShadowQueryResult, ShadowRootSummary } from '../../shared/schemas/shadow';
 import type { ToolSpec } from '../core/tool-spec';
 
 const emptyArgsSchema = z.object({}).strict();
@@ -42,8 +43,7 @@ export function bhShadowList(
       if (!('shadowRoots' in response)) {
         return failure('Shadow root list response is unavailable');
       }
-      const count = response.shadowRoots.length;
-      return ok(`Found ${count} open shadow roots.`, { shadowRoots: response.shadowRoots });
+      return ok(summarizeShadowRoots(response.shadowRoots), { shadowRoots: response.shadowRoots });
     }
   };
 }
@@ -81,12 +81,51 @@ export function bhShadowQuery(
       if (!('shadowQuery' in response)) {
         return failure('Shadow query response is unavailable');
       }
-      return ok(
-        `Found ${response.shadowQuery.elements.length} shadow DOM elements in ${args.hostSelector}.`,
-        { shadowQuery: response.shadowQuery }
-      );
+      return ok(summarizeShadowQuery(response.shadowQuery), { shadowQuery: response.shadowQuery });
     }
   };
+}
+
+function summarizeShadowRoots(roots: ShadowRootSummary[]): string {
+  const preview = roots.slice(0, 10).map((root) => {
+    const parts = [
+      `host=${root.hostSelector}`,
+      `tag=${root.hostTagName}`,
+      `interactive=${root.interactiveCount}`
+    ];
+    if (root.textPreview) {
+      parts.push(`text=${truncate(root.textPreview, 120)}`);
+    }
+    return parts.join(' ');
+  }).join('; ');
+  return preview
+    ? `Found ${roots.length} open shadow roots: ${preview}`
+    : 'Found 0 open shadow roots.';
+}
+
+function summarizeShadowQuery(result: ShadowQueryResult): string {
+  const preview = result.elements.slice(0, 20).map(formatShadowElement).join('; ');
+  return preview
+    ? `Found ${result.elements.length} shadow DOM elements in ${result.hostSelector}: ${preview}`
+    : `Found 0 shadow DOM elements in ${result.hostSelector}.`;
+}
+
+function formatShadowElement(element: ShadowElementSummary): string {
+  const parts = [
+    `tag=${element.tagName}`,
+    `name=${element.name || 'unnamed'}`
+  ];
+  if (element.role) {
+    parts.push(`role=${element.role}`);
+  }
+  if (element.text) {
+    parts.push(`text=${truncate(element.text, 120)}`);
+  }
+  return parts.join(' ');
+}
+
+function truncate(value: string, maxLength: number): string {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
 }
 
 function ok(summary: string, data: unknown): ToolResult {

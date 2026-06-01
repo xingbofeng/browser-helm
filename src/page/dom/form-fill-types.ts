@@ -9,6 +9,7 @@ export interface FillFieldTarget {
   fieldRefId: string;
   value: string;
   clear?: boolean | undefined;
+  allowSingleFieldFallback?: boolean | undefined;
 }
 
 export interface FillFieldResult {

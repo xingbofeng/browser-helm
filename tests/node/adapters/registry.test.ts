@@ -73,6 +73,24 @@ describe('domain adapter registry', () => {
     }
   });
 
+  it.each(Object.entries(adapterUrls))('keeps %s adapter skeleton executable through metadata only', (adapterId, url) => {
+    const detection = defaultDomainAdapterRegistry.detect(url);
+    expect(detection.enabled, adapterId).toBe(true);
+    if (!detection.enabled) {
+      throw new Error(`Expected ${adapterId} adapter detection`);
+    }
+
+    for (const workflow of detection.adapter.workflows) {
+      expect(workflow.id).toContain(adapterId);
+      expect(workflow.steps.length).toBeGreaterThan(0);
+      expect(workflow.steps.every((step) => typeof step === 'string' && step.trim().length > 0)).toBe(true);
+    }
+    for (const locator of detection.adapter.locators) {
+      expect(locator.id).toContain(adapterId);
+      expect(locator.selectors.length + (locator.fallbackText?.length ?? 0)).toBeGreaterThan(0);
+    }
+  });
+
   it('falls back to generic tools when the matched adapter is disabled by the user', () => {
     defaultDomainAdapterPreferences.setEnabled('github', false);
 

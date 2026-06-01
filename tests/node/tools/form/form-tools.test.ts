@@ -89,6 +89,8 @@ describe('form read-only tools', () => {
     expect(list.data).toMatchObject({ count: 1 });
     expect(inspect.data).toMatchObject({ fields: [emailField, passwordField] });
     expect(fields.data).toMatchObject({ count: 2, fields: [emailField, passwordField] });
+    expect(fields.summary).toContain('ref_email 邮箱 type=email');
+    expect(fields.summary).toContain('ref_password 密码 type=password');
   });
 
   it('finds missing required fields and validation errors in form mode', async () => {

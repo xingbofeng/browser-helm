@@ -5,10 +5,13 @@ import { listShadowRoots, queryShadowRoot } from '../../../../src/page/shadow/sh
 
 describe('shadow DOM reader', () => {
   it('lists open shadow roots with host and text summaries', () => {
-    document.body.innerHTML = '<x-search id="search-widget"></x-search><x-closed id="closed-widget"></x-closed>';
+    document.body.innerHTML = '<x-search id="search-widget"></x-search><div id="browserhelm-floating-entry-host"></div><x-closed id="closed-widget"></x-closed>';
     const openHost = document.querySelector('#search-widget') as HTMLElement;
     const openRoot = openHost.attachShadow({ mode: 'open' });
     openRoot.innerHTML = '<label>Search <input aria-label="Search docs"></label><button>Go</button>';
+    const injectedHost = document.querySelector('#browserhelm-floating-entry-host') as HTMLElement;
+    const injectedRoot = injectedHost.attachShadow({ mode: 'open' });
+    injectedRoot.innerHTML = '<button>BrowserHelm</button>';
     const closedHost = document.querySelector('#closed-widget') as HTMLElement;
     closedHost.attachShadow({ mode: 'closed' });
 
@@ -21,6 +24,23 @@ describe('shadow DOM reader', () => {
       interactiveCount: 2,
       textPreview: 'Search Go'
     })]);
+  });
+
+  it('uses the first page-owned open shadow root when the model supplies wildcard host selector', () => {
+    document.body.innerHTML = '<x-search id="search-widget"></x-search>';
+    const host = document.querySelector('#search-widget') as HTMLElement;
+    const root = host.attachShadow({ mode: 'open' });
+    root.innerHTML = '<button aria-label="Run search">Go</button>';
+
+    const result = queryShadowRoot(document, {
+      hostSelector: '*',
+      selector: 'button'
+    });
+
+    expect(result).toMatchObject({
+      hostSelector: '#search-widget',
+      elements: [{ tagName: 'button', name: 'Run search', role: 'button' }]
+    });
   });
 
   it('queries elements inside a selected shadow root', () => {

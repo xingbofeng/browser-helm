@@ -16,6 +16,7 @@ export const githubScenario: RealModelScenario = {
     '第一步必须调用 bh_form_read_fields 确认查询输入框，不能只依赖初始页面观察。',
     '如果页面已有搜索参数，允许覆盖为新的查询；这是低风险字段填写，不需要再次确认。',
     '把搜索框填写为「browser helm extension」。',
+    '填写必须通过 bh_form_fill_field 或 bh_form_fill_many 完成；没有调用填写工具就不能说已经填写。',
     '填写后用一句中文说明你没有提交搜索。',
     '不要提交表单、不要按 Enter、不要点击搜索按钮。'
   ].join('\n'),

@@ -10,7 +10,7 @@ import {
 } from './content-rpc-strategies';
 import {
   BROWSER_HELM_DOMAIN_POLICY_STORAGE_KEY,
-  evaluateBrowserHelmDomainPolicy,
+  evaluateBrowserHelmDomainOperationPolicy,
   isBrowserHelmDomainPolicy,
   type BrowserHelmDomainPolicy
 } from '../../shared/domain-policy';
@@ -120,7 +120,7 @@ export class ChromeContentRpcClient implements ContentRpcClient {
     try {
       const tab = await chrome.tabs.get(this.tabId);
       const policy = await this.readDomainPolicy();
-      return evaluateBrowserHelmDomainPolicy(tab.url, policy).allowed;
+      return evaluateBrowserHelmDomainOperationPolicy(tab.url, policy, 'observe').allowed;
     } catch {
       return true;
     }

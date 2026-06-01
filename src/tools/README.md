@@ -14,7 +14,7 @@
 | `bh_action_check_readiness` | Check Action Readiness | `action/` | `debug`, `act` | `low` | `kind`, `refId`, `source`, `valuePreview?` | 只读检查拟执行动作的目标、风险、approval 预判和重新观察需求，不修改页面。 |
 | `bh_action_click` | Click Action | `action/` | `act` | `medium` | `refId`, `source?`, `valuePreview?` | 对已就绪且非高风险的 stable ref 执行真实点击；高风险目标阻断，不修改页面。 |
 | `bh_adapter_detect_site` | Detect Domain Adapter | `adapter/` | `ask`, `debug`, `form`, `act` | `safe` | `url` | 检测 URL 是否命中站点 adapter，返回 guidance、workflow、locator 摘要或通用工具 fallback。 |
-| `bh_adapter_list_workflows` | List Adapter Workflows | `adapter/` | `ask`, `debug`, `form`, `act` | `safe` | `url`, `workflowId?` | 列出站点 adapter workflow 模板；指定 workflow 不存在时记录失败并回退通用工具。 |
+| `bh_adapter_list_workflows` | List Adapter Workflows | `adapter/` | `ask`, `debug`, `form`, `act` | `safe` | `url`, `workflowId?` | 列出站点 adapter workflow 模板；指定 workflow 不存在时记录失败并回退通用工具，命中高风险 workflow 时返回 approval boundary。 |
 | `bh_adapter_apply_locator` | Apply Adapter Locator | `adapter/` | `ask`, `debug`, `form`, `act` | `safe` | `url`, `locatorId`, `candidates[]` | 将 adapter locator hint 应用到已观察候选元素；失败时记录 report 并回退通用工具。 |
 | `bh_adapter_report_failure` | Report Adapter Failure | `adapter/` | `ask`, `debug`, `form`, `act` | `safe` | `url`, `adapterId`, `errorCode`, `message`, `workflowId?`, `locatorId?` | 记录 adapter workflow 或 locator 失败，不阻断通用工具。 |
 | `bh_page_observe` | Page Observe | `page/` | `ask`, `debug`, `form` | `safe` | 无 | 读取当前页面 bounded observation，并生成裁剪后的 structured context summary。 |
@@ -61,6 +61,11 @@
 | `bh_tab_focus` | Focus Browser Tab | `tab/` | `advanced` | `low` | `tabId` | 切换到指定 tab，并要求重新 observe 新目标。 |
 | `bh_shadow_list` | List Shadow Roots | `shadow/` | `advanced` | `safe` | 无 | 列出页面 open shadow roots 的 host、文本预览和交互数量。 |
 | `bh_shadow_query` | Query Shadow Root | `shadow/` | `advanced` | `safe` | `hostSelector`, `selector` | 在指定 open shadow root 内只读查询元素摘要。 |
+| `bh_storage_list` | List Web Storage | `storage/` | `advanced` | `medium` | `area`, `limit?` | 列出 localStorage/sessionStorage 的 key、长度和脱敏预览；需要 domain consent。 |
+| `bh_storage_get` | Get Web Storage Entry | `storage/` | `advanced` | `medium` | `area`, `key` | 读取单个 localStorage/sessionStorage 条目的存在性、长度和脱敏预览；不返回敏感原值。 |
+| `bh_storage_set_with_approval` | Set Web Storage With Approval | `storage/` | `advanced` | `high` | `area`, `key`, `value` | 审批后写入单个 localStorage/sessionStorage 条目；工具调用和 trace 不暴露原始 value。 |
+| `bh_storage_delete_with_approval` | Delete Web Storage With Approval | `storage/` | `advanced` | `high` | `area`, `key` | 审批后删除单个 localStorage/sessionStorage 条目，并要求重新 observe。 |
+| `bh_storage_clear_with_approval` | Clear Web Storage With Approval | `storage/` | `advanced` | `high` | `area` | 审批后清空 localStorage/sessionStorage 区域，并返回受影响条目数。 |
 | `bh_download_list` | List Downloads | `file/` | `advanced` | `safe` | `limit?`, `state?` | 列出最近下载记录，URL 去除 query/hash，本地路径只保留文件名。 |
 | `bh_file_read_download` | Read Downloaded File | `file/` | `advanced` | `high` | `downloadId` | 本地下载文件读取安全外壳；需要审批，当前返回结构化不可读边界和 fallback。 |
 | `bh_file_upload_with_approval` | Upload File With Approval | `file/` | `advanced` | `high` | `targetRefId`, `fileName?`, `reason?` | 本地文件上传审批安全外壳；不读取本地路径、不设置 file input，只创建审批和手动选择提示。 |
@@ -112,6 +117,7 @@
 | `pointer/` | 坐标点击 fallback 工具，必须由视觉检查和风险判断驱动。 |
 | `tab/` | 多 tab 上下文读取与焦点切换工具，服务 advanced browser workflow。 |
 | `shadow/` | open shadow root 发现与只读元素查询工具。 |
+| `storage/` | localStorage/sessionStorage 只读检查工具，服务 advanced browser state workflow。 |
 | `memory/` | domain memory 查询、写入、删除和命中解释工具。 |
 | `pad/` | 当前 run scratchpad 的读写、清理和压缩工具。 |
 | `workflow/` | workflow memory 查询、预览、审批阻断和评分工具。 |

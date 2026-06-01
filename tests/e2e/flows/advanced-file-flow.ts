@@ -57,6 +57,21 @@ export class AdvancedFileFlow {
     expect(JSON.stringify(readBoundary.data)).toContain('report.txt');
     expect(JSON.stringify(readBoundary.data)).not.toContain('token=secret');
 
+    const readPending = await sidePanel.snapshot(snapshot.runId);
+    expect(readPending.pendingApproval?.tool).toBe(TOOL_NAMES.FILE_READ_DOWNLOAD);
+    expect(JSON.stringify(readPending.pendingApproval)).not.toContain('token=secret');
+
+    const readApproved = await executeToolResult(sidePanel.decideApproval({
+      runId: snapshot.runId,
+      requestId: requireApprovalId(readPending.pendingApproval?.id),
+      decision: 'approved',
+      reason: 'e2e approve downloaded file read boundary'
+    }));
+    expect(readApproved.ok).toBe(true);
+    expect(readApproved.code).toBe(ERROR_CODES.OK);
+    expect(JSON.stringify(readApproved)).not.toContain('token=secret');
+    expect(JSON.stringify(readApproved)).not.toContain('/Users/counter');
+
     const uploadRequest = await executeToolResult(sidePanel.executeTool({
       runId: snapshot.runId,
       tool: TOOL_NAMES.FILE_UPLOAD_WITH_APPROVAL,
@@ -93,6 +108,13 @@ async function executeToolResult(
     throw new Error('Unexpected runtime tool result');
   }
   return result as RuntimeToolExecutionResult;
+}
+
+function requireApprovalId(value: string | undefined): string {
+  if (!value) {
+    throw new Error('Expected a pending approval id');
+  }
+  return value;
 }
 
 function readArrayField(value: unknown, key: string): Record<string, unknown>[] {

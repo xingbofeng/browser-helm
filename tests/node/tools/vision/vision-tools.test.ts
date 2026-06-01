@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { bhVisionCaptureElement, bhVisionCaptureViewport, bhVisionDescribeViewport } from '../../../../src/tools/vision/bh-vision-tools';
+import {
+  bhVisionCaptureElement,
+  bhVisionCaptureViewport,
+  bhVisionDescribeViewport,
+  bhVisionDetectOverlay,
+  bhVisionDetectLayoutIssues
+} from '../../../../src/tools/vision/bh-vision-tools';
 import { TOOL_NAMES } from '../../../../src/shared/constants/tool-names';
 import type { ContentRpcClient } from '../../../../src/page/messaging/content-rpc-client';
 
@@ -119,16 +125,108 @@ describe('vision tools', () => {
       { runId: 'run_1', stepId: 'step_1', runMode: 'debug', tabId: 42 }
     );
 
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('VISION_UNAVAILABLE');
+    expect(result.summary).toContain('Do not retry');
+    expect(result.nextHints).toEqual(expect.arrayContaining([
+      'Do not retry vision in this run.',
+      'Finish with a fallback diagnosis.'
+    ]));
+    expect(result.data).toMatchObject({
+      observation: {
+        fallback: 'dom_a11y'
+      }
+    });
+    expect(result.requiresObserve).toBe(false);
+  });
+
+  it('treats model-supplied windowId zero as the current window for overlay detection', async () => {
+    const captureVisibleTab = vi.fn(async () => 'data:image/png;base64,viewport');
+    vi.stubGlobal('chrome', {
+      tabs: {
+        captureVisibleTab
+      }
+    });
+
+    const result = await bhVisionDetectOverlay(rpc()).execute(
+      { windowId: 0, prompt: '检查遮挡层' },
+      {
+        runId: 'run_1',
+        stepId: 'step_1',
+        runMode: 'debug',
+        tabId: 42,
+        visionClient: {
+          async describeViewport() {
+            return {
+              ok: true,
+              observation: {
+                summary: '浮层遮挡了主要按钮',
+                visibleText: [],
+                blockers: ['modal overlay'],
+                layoutIssues: [],
+                fallback: 'none',
+                confidence: 0.8
+              }
+            };
+          }
+        }
+      }
+    );
+
+    expect(captureVisibleTab).toHaveBeenCalledWith({ format: 'png' });
     expect(result).toMatchObject({
-      ok: false,
-      code: 'VISION_UNAVAILABLE',
+      ok: true,
       data: {
         observation: {
-          fallback: 'dom_a11y'
+          blockers: ['modal overlay']
         }
-      },
-      requiresObserve: false
+      }
     });
+  });
+
+  it('uses focused layout prompt for layout issue detection', async () => {
+    vi.stubGlobal('chrome', {
+      tabs: {
+        captureVisibleTab: vi.fn(async () => 'data:image/png;base64,viewport')
+      }
+    });
+    let prompt = '';
+
+    const result = await bhVisionDetectLayoutIssues(rpc()).execute(
+      { windowId: 1 },
+      {
+        runId: 'run_1',
+        stepId: 'step_1',
+        runMode: 'debug',
+        tabId: 42,
+        visionClient: {
+          async describeViewport(input) {
+            prompt = input.prompt;
+            return {
+              ok: true,
+              observation: {
+                summary: 'CTA is clipped below the fold',
+                visibleText: [],
+                blockers: [],
+                layoutIssues: ['CTA clipped below the fold'],
+                fallback: 'none',
+                confidence: 0.8
+              }
+            };
+          }
+        }
+      }
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        observation: {
+          layoutIssues: ['CTA clipped below the fold']
+        }
+      }
+    });
+    expect(prompt).toContain('layout issues');
   });
 
   it('registers stable v1.4 tool names', () => {

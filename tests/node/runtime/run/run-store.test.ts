@@ -4,7 +4,6 @@ import { InMemoryRunSessionPersistence } from '../../../../src/background/runtim
 import type { RunRecord } from '../../../../src/background/runtime/run/runtime-service-types';
 import type { RunSnapshot, RuntimeEvent } from '../../../../src/runtime/runtime-messages';
 import { TRACE_EVENT_NAMES } from '../../../../src/shared/constants/event-names';
-import { defaultMemoryRepo } from '../../../../src/storage/memory-repo';
 
 describe('RunStore', () => {
   it('creates incrementing run IDs', () => {
@@ -55,13 +54,7 @@ describe('RunStore', () => {
     expect(store.getSnapshot('run_1')).toBe(snapshot);
   });
 
-  it('attaches current domain memory to snapshots without executing a memory tool', () => {
-    defaultMemoryRepo.clearAll();
-    const entry = defaultMemoryRepo.save({
-      domain: 'app.example.com',
-      task: '打开账单',
-      summary: '入口在 Billing'
-    });
+  it('stores raw snapshots without policy-dependent memory enrichment', () => {
     const store = new RunStore();
 
     store.setSnapshot('run_1', {
@@ -87,11 +80,7 @@ describe('RunStore', () => {
     });
 
     expect(store.getSnapshot('run_1').toolResult?.tool).toBe('bh_page_observe');
-    expect(store.getSnapshot('run_1').memory).toEqual({
-      domain: 'app.example.com',
-      entries: [entry]
-    });
-    defaultMemoryRepo.clearAll();
+    expect(store.getSnapshot('run_1').memory).toBeUndefined();
   });
 
   it('appends trace events to record and notifies listeners', () => {

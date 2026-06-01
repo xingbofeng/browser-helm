@@ -42,6 +42,14 @@ describe('tab tools', () => {
       }
     });
     expect(JSON.stringify(result.data)).not.toContain('auth=secret');
+    expect(result.summary).toContain('tabId=21');
+    expect(result.summary).toContain('title=Inbox');
+    expect(result.summary).toContain('https://mail.example.com/inbox');
+    expect(result.summary).not.toContain('auth=secret');
+    expect(result.context?.summary).toContain('tabId=21');
+    expect(result.context?.summary).toContain('title=Inbox');
+    expect(result.context?.summary).toContain('https://mail.example.com/inbox');
+    expect(result.context?.summary).not.toContain('auth=secret');
   });
 
   it('returns the active tab without changing browser state', async () => {
@@ -71,6 +79,8 @@ describe('tab tools', () => {
       requiresObserve: false
     });
     expect(JSON.stringify(result.data)).toContain('"tabId":22');
+    expect(result.summary).toContain('Active tab: tabId=22 title=Active');
+    expect(result.context?.summary).toContain('Active tab: tabId=22 title=Active');
   });
 
   it('focuses a tab and requires re-observe for the new target', async () => {

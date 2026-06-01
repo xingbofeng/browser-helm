@@ -7,12 +7,16 @@ const SENSITIVE_TEXT_TOOLS = new Set<string>([
   TOOL_NAMES.FORM_FILL_MANY,
   TOOL_NAMES.FORM_SUBMIT_WITH_APPROVAL,
   TOOL_NAMES.CLIPBOARD_WRITE_WITH_APPROVAL,
+  TOOL_NAMES.STORAGE_SET_WITH_APPROVAL,
   INTERNAL_TOOL_NAMES.IFRAME_TYPE,
 ]);
 
 export function redactToolArgs(tool: string, args: unknown): unknown {
   if (!isRecord(args)) {
     return args;
+  }
+  if (tool === TOOL_NAMES.FILE_UPLOAD_WITH_APPROVAL) {
+    return redactFileUploadArgs(args);
   }
   if (!SENSITIVE_TEXT_TOOLS.has(tool)) {
     return cloneRecord(args);
@@ -34,6 +38,14 @@ export function redactToolArgs(tool: string, args: unknown): unknown {
       preview: '[MASKED]',
       reason: 'redacted'
     };
+  }
+  return redacted;
+}
+
+function redactFileUploadArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const redacted = cloneRecord(args);
+  if (typeof redacted.fileName === 'string') {
+    redacted.fileName = redacted.fileName.split(/[\\/]/u).filter(Boolean).at(-1) ?? redacted.fileName;
   }
   return redacted;
 }

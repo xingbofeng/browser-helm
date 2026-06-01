@@ -11,13 +11,19 @@ export const youtubeScenario: RealModelScenario = {
   mode: 'form',
   runKind: 'form_assist',
   dumpName: 'youtube-search-fill',
+  beforeRun: async (page) => {
+    const searchBox = page.locator('input[name="search_query"]').first();
+    await searchBox.waitFor({ state: 'visible', timeout: 30_000 });
+    await searchBox.click();
+    await page.waitForTimeout(1_500);
+  },
   task: [
-    '把这次任务当成一次搜索入口验证，而不是简单输入。',
-    '第一步必须调用 bh_form_read_fields 读取 YouTube 当前页面字段，不能只依赖初始页面观察。',
-    '确认哪个字段是可写搜索框；如果页面显示同意、登录或不可用状态，请只根据可用字段继续，不要点击任何按钮。',
-    '如果搜索框可写，把它填写为「keyboard accessibility tutorial」。如果字段已有内容，允许清空后覆盖。',
-    '填写后用一句中文说明没有提交搜索。',
-    '不要提交表单、不要按 Enter、不要点击搜索按钮。'
+    '目标：验证 YouTube 搜索入口，只填写，不提交。',
+    '精确搜索词：keyboard accessibility tutorial',
+    '步骤 1：必须调用 bh_form_read_fields 读取当前字段。',
+    '步骤 2：选择可写搜索框，立刻调用 bh_form_fill_field 或 bh_form_fill_many 写入上面的精确搜索词；如已有内容可 clear 后覆盖。',
+    '不要调用 a11y resolve，不要提交表单、按 Enter 或点击搜索按钮。',
+    '完成后用一句中文说明已填写且没有提交。'
   ].join('\n'),
   async assert({ page, snapshot, beforeUrl }, helpers) {
     expect(page.url()).toBe(beforeUrl);

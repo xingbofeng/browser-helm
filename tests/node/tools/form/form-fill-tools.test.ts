@@ -18,6 +18,23 @@ function noRpc(): ContentRpcClient {
 }
 const ctx = { runId: 'test', stepId: 'step-1' };
 
+function observeResponse(): ContentRpcResponse {
+  return {
+    ok: true,
+    observation: {
+      url: 'https://example.test',
+      title: 'Example',
+      currentDomain: 'example.test',
+      origin: 'https://example.test',
+      visibleText: '',
+      visibleTextSummary: '',
+      pageStateSummary: 'empty',
+      refSummary: [],
+      warnings: []
+    }
+  } satisfies ContentRpcResponse;
+}
+
 describe('bhFormInferFillPlan', () => {
   const tool = bhFormInferFillPlan(noRpc());
 
@@ -155,6 +172,182 @@ describe('bhFormFillField', () => {
     const r = await bhFormFillField(rpc).execute({ fieldRefId: 'r1', value: 'x' }, ctx);
     expect(r.ok).toBe(false);
   });
+
+  it('reauthorizes once when a dynamic page consumes a stale fill token', async () => {
+    let fillAttempts = 0;
+    const rpc: ContentRpcClient = { request: async (message) => {
+      if (message.type === CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE) {
+        return { ok: true, actionToken: `form-fill-token-${fillAttempts}` } satisfies ContentRpcResponse;
+      }
+      if (message.type === CONTENT_RPC_MESSAGES.PAGE_OBSERVE) {
+        return observeResponse();
+      }
+      fillAttempts += 1;
+      if (fillAttempts === 1) {
+        return {
+          ok: false,
+          code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED,
+          message: 'stale form action token'
+        } satisfies ContentRpcResponse;
+      }
+      return {
+        ok: true,
+        fillFieldResult: {
+          fieldRefId: 'r1',
+          type: 'text',
+          status: 'filled',
+          actualValuePreview: 'non-empty',
+          maskedActualValue: '[MASKED]'
+        }
+      } satisfies ContentRpcResponse;
+    } };
+    const r = await bhFormFillField(rpc).execute({ fieldRefId: 'r1', value: 'hello' }, ctx);
+    expect(r.ok).toBe(true);
+    expect(fillAttempts).toBeGreaterThanOrEqual(2);
+  });
+
+  it('refreshes refs and retries transient fill execution failures', async () => {
+    let fillAttempts = 0;
+    let stabilityWaits = 0;
+    let refreshes = 0;
+    const rpc: ContentRpcClient = { request: async (message) => {
+      if (message.type === CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE) {
+        return { ok: true, actionToken: `form-fill-token-${fillAttempts}` } satisfies ContentRpcResponse;
+      }
+      if (message.type === CONTENT_RPC_MESSAGES.PAGE_WAIT_UNTIL_STABLE) {
+        stabilityWaits += 1;
+        return { ok: true, stable: true, readyState: 'complete', waitedMs: 300, layoutStableFrames: 2, networkIdle: 'unavailable' } satisfies ContentRpcResponse;
+      }
+      if (message.type === CONTENT_RPC_MESSAGES.PAGE_OBSERVE) {
+        refreshes += 1;
+        return observeResponse();
+      }
+      fillAttempts += 1;
+      if (fillAttempts === 1) {
+        return {
+          ok: false,
+          code: ERROR_CODES.TOOL_EXECUTION_FAILED,
+          message: 'transient field replacement'
+        } satisfies ContentRpcResponse;
+      }
+      return {
+        ok: true,
+        fillFieldResult: {
+          fieldRefId: 'r1',
+          type: 'text',
+          status: 'filled',
+          actualValuePreview: 'non-empty',
+          maskedActualValue: '[MASKED]'
+        }
+      } satisfies ContentRpcResponse;
+    } };
+    const r = await bhFormFillField(rpc).execute({ fieldRefId: 'r1', value: 'hello' }, ctx);
+    expect(r.ok).toBe(true);
+    expect(fillAttempts).toBeGreaterThanOrEqual(2);
+    expect(stabilityWaits).toBeGreaterThanOrEqual(1);
+    expect(refreshes).toBeGreaterThanOrEqual(1);
+  });
+
+  it('waits for stability and retries when a single field ref turns stale', async () => {
+    let fillAttempts = 0;
+    let stabilityWaits = 0;
+    const rpc: ContentRpcClient = { request: async (message) => {
+      if (message.type === CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE) {
+        return { ok: true, actionToken: `form-fill-token-${fillAttempts}` } satisfies ContentRpcResponse;
+      }
+      if (message.type === CONTENT_RPC_MESSAGES.PAGE_WAIT_UNTIL_STABLE) {
+        stabilityWaits += 1;
+        return { ok: true, stable: true, readyState: 'complete', waitedMs: 300, layoutStableFrames: 2, networkIdle: 'unavailable' } satisfies ContentRpcResponse;
+      }
+      if (message.type === CONTENT_RPC_MESSAGES.PAGE_OBSERVE) {
+        return observeResponse();
+      }
+      fillAttempts += 1;
+      if (fillAttempts === 1) {
+        return {
+          ok: false,
+          code: ERROR_CODES.REF_STALE,
+          message: 'Ref is stale'
+        } satisfies ContentRpcResponse;
+      }
+      return {
+        ok: true,
+        fillFieldResult: {
+          fieldRefId: 'r1',
+          type: 'text',
+          status: 'filled',
+          actualValuePreview: 'non-empty',
+          maskedActualValue: '[MASKED]'
+        }
+      } satisfies ContentRpcResponse;
+    } };
+
+    const r = await bhFormFillField(rpc).execute({ fieldRefId: 'r1', value: 'hello' }, ctx);
+
+    expect(r.ok).toBe(true);
+    expect(fillAttempts).toBe(2);
+    expect(stabilityWaits).toBe(1);
+  });
+
+  it('treats final stale search fill as successful when observation shows the field is filled', async () => {
+    let fillAttempts = 0;
+    let refreshes = 0;
+    const rpc: ContentRpcClient = { request: async (message) => {
+      if (message.type === CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE) {
+        return { ok: true, actionToken: `form-fill-token-${fillAttempts}` } satisfies ContentRpcResponse;
+      }
+      if (message.type === CONTENT_RPC_MESSAGES.PAGE_WAIT_UNTIL_STABLE) {
+        return { ok: true, stable: true, readyState: 'complete', waitedMs: 300, layoutStableFrames: 2, networkIdle: 'unavailable' } satisfies ContentRpcResponse;
+      }
+      if (message.type === CONTENT_RPC_MESSAGES.PAGE_OBSERVE) {
+        refreshes += 1;
+        return {
+          ok: true,
+          observation: {
+            url: 'https://example.test',
+            title: 'Example',
+            currentDomain: 'example.test',
+            origin: 'https://example.test',
+            visibleText: '',
+            visibleTextSummary: '',
+            pageStateSummary: 'empty',
+            refSummary: [],
+            warnings: [],
+            formFields: {
+              status: 'partial',
+              fields: [{
+                refId: 'r1',
+                label: 'Search',
+                name: 'search_query',
+                type: 'text',
+                valuePreview: 'non-empty',
+                writable: {
+                  actualValue: 'non-empty'
+                }
+              }]
+            }
+          }
+        } satisfies ContentRpcResponse;
+      }
+      fillAttempts += 1;
+      return {
+        ok: false,
+        code: ERROR_CODES.REF_STALE,
+        message: 'Ref is stale'
+      } satisfies ContentRpcResponse;
+    } };
+
+    const r = await bhFormFillField(rpc).execute({ fieldRefId: 'r1', value: 'keyboard accessibility tutorial' }, ctx);
+
+    expect(r.ok).toBe(true);
+    expect(fillFieldResultSchema.parse(r.data)).toMatchObject({
+      fieldRefId: 'r1',
+      status: 'filled',
+      actualValuePreview: 'non-empty'
+    });
+    expect(fillAttempts).toBe(5);
+    expect(refreshes).toBeGreaterThanOrEqual(5);
+  });
 });
 
 describe('bhFormFillMany', () => {
@@ -173,6 +366,114 @@ describe('bhFormFillMany', () => {
     const data = fillManyResultSchema.parse(r.data);
     expect(data.filledCount).toBe(1);
     expect(data.skippedCount).toBe(1);
+  });
+
+  it('accepts model-supplied null formRefId as omitted', async () => {
+    const rpc: ContentRpcClient = { request: async (message) => {
+      if (message.type === CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE) {
+        return { ok: true, actionToken: 'form-many-token' } satisfies ContentRpcResponse;
+      }
+      expect(message).toMatchObject({
+        targets: [{ fieldRefId: 'r1', value: 'a' }],
+        actionToken: 'form-many-token'
+      });
+      return { ok: true, fillManyResult: {
+        ok: true,
+        fields: [{ fieldRefId: 'r1', type: 'text', status: 'filled' }],
+        filledCount: 1,
+        skippedCount: 0,
+        failedCount: 0,
+        changedPage: true,
+        requiresObserve: false,
+        summary: 'filled'
+      } } satisfies ContentRpcResponse;
+    } };
+    const r = await bhFormFillMany(rpc).execute({
+      formRefId: null as never,
+      fields: [{ fieldRefId: 'r1', value: 'a' }]
+    }, ctx);
+    expect(r.ok).toBe(true);
+  });
+
+  it('reauthorizes once when a batch fill token is stale', async () => {
+    let fillAttempts = 0;
+    const rpc: ContentRpcClient = { request: async (message) => {
+      if (message.type === CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE) {
+        return { ok: true, actionToken: `form-many-token-${fillAttempts}` } satisfies ContentRpcResponse;
+      }
+      if (message.type === CONTENT_RPC_MESSAGES.PAGE_OBSERVE) {
+        return observeResponse();
+      }
+      fillAttempts += 1;
+      if (fillAttempts === 1) {
+        return {
+          ok: false,
+          code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED,
+          message: 'stale form action token'
+        } satisfies ContentRpcResponse;
+      }
+      return {
+        ok: true,
+        fillManyResult: {
+          ok: true,
+          fields: [{ fieldRefId: 'r1', type: 'text', status: 'filled' }],
+          filledCount: 1,
+          skippedCount: 0,
+          failedCount: 0,
+          changedPage: true,
+          requiresObserve: false,
+          summary: 'filled'
+        }
+      } satisfies ContentRpcResponse;
+    } };
+    const r = await bhFormFillMany(rpc).execute({ fields: [{ fieldRefId: 'r1', value: 'a' }] }, ctx);
+    expect(r.ok).toBe(true);
+    expect(fillAttempts).toBeGreaterThanOrEqual(2);
+  });
+
+  it('refreshes refs and retries transient batch fill execution failures', async () => {
+    let fillAttempts = 0;
+    let stabilityWaits = 0;
+    let refreshes = 0;
+    const rpc: ContentRpcClient = { request: async (message) => {
+      if (message.type === CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE) {
+        return { ok: true, actionToken: `form-many-token-${fillAttempts}` } satisfies ContentRpcResponse;
+      }
+      if (message.type === CONTENT_RPC_MESSAGES.PAGE_WAIT_UNTIL_STABLE) {
+        stabilityWaits += 1;
+        return { ok: true, stable: true, readyState: 'complete', waitedMs: 300, layoutStableFrames: 2, networkIdle: 'unavailable' } satisfies ContentRpcResponse;
+      }
+      if (message.type === CONTENT_RPC_MESSAGES.PAGE_OBSERVE) {
+        refreshes += 1;
+        return observeResponse();
+      }
+      fillAttempts += 1;
+      if (fillAttempts === 1) {
+        return {
+          ok: false,
+          code: ERROR_CODES.TOOL_EXECUTION_FAILED,
+          message: 'transient batch replacement'
+        } satisfies ContentRpcResponse;
+      }
+      return {
+        ok: true,
+        fillManyResult: {
+          ok: true,
+          fields: [{ fieldRefId: 'r1', type: 'text', status: 'filled' }],
+          filledCount: 1,
+          skippedCount: 0,
+          failedCount: 0,
+          changedPage: true,
+          requiresObserve: false,
+          summary: 'filled'
+        }
+      } satisfies ContentRpcResponse;
+    } };
+    const r = await bhFormFillMany(rpc).execute({ fields: [{ fieldRefId: 'r1', value: 'a' }] }, ctx);
+    expect(r.ok).toBe(true);
+    expect(fillAttempts).toBeGreaterThanOrEqual(2);
+    expect(stabilityWaits).toBeGreaterThanOrEqual(1);
+    expect(refreshes).toBeGreaterThanOrEqual(1);
   });
 });
 

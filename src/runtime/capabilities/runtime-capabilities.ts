@@ -10,6 +10,7 @@ export function resolveRuntimeCapabilities(
     hasDebuggerPermission: input.hasDebuggerPermission ?? false,
     hasClipboardPermission: input.hasClipboardPermission ?? false,
     hasDownloadsPermission: input.hasDownloadsPermission ?? false,
+    hasStorageInspection: input.hasStorageInspection ?? input.hasActiveTab ?? false,
     hostPermissions: input.hostPermissions ?? [],
     shallowDebugAvailable: input.shallowDebugAvailable ?? false,
     cdp: input.cdp ?? 'reserved'

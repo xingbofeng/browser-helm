@@ -15,6 +15,7 @@ export const usaGovScenario: RealModelScenario = {
     '请完成一次政府网站搜索入口验证，重点是字段读取和不提交。',
     '第一步必须调用 bh_form_read_fields 确认 USA.gov 页面上的站内搜索框，不能只依赖初始页面观察。',
     '然后把该搜索框填写为「passport renewal appointment」。如果字段已有内容，允许清空后覆盖。',
+    '填写必须通过 bh_form_fill_field 或 bh_form_fill_many 完成；没有调用填写工具就不能说已经填写。',
     '填写后用一句中文说明没有提交搜索。',
     '不要提交表单、不要按 Enter、不要点击搜索按钮。'
   ].join('\n'),

@@ -26,6 +26,7 @@ export type ModelDecisionKind =
   | 'existing_value_overwrite'
   | 'repeated_action_readiness'
   | 'tool_not_found'
+  | 'required_tool_missing'
   | 'repeated_form_fill'
   | 'repeated_form_verify'
   | 'repeated_form_inspect'
@@ -47,6 +48,9 @@ export function validateModelDecision(
   snapshot: RunSnapshot,
   record: RunRecord
 ): ModelDecisionError | undefined {
+  if (decision.type === 'finish') {
+    return requiredToolFinishError(record);
+  }
   if (decision.type !== 'tool_call') {
     return undefined;
   }
@@ -140,6 +144,37 @@ export function validateRepairDecision(
 }
 
 // ── Error checks ──
+
+function requiredToolFinishError(record: RunRecord): ModelDecisionError | undefined {
+  const requiredToolGroups = explicitRequiredToolGroups(record.task);
+  if (requiredToolGroups.length === 0) {
+    return undefined;
+  }
+  const completedTools = requirementSatisfyingTraceTools(record);
+  const missingGroups = requiredToolGroups.filter((group) =>
+    group.every((tool) => !completedTools.has(tool))
+  );
+  if (missingGroups.length === 0) {
+    return undefined;
+  }
+  const requiredTools = uniqueToolNames(requiredToolGroups.flat());
+  const missingTools = uniqueToolNames(missingGroups.flat());
+  return {
+    code: ERROR_CODES.TOOL_ARGS_INVALID,
+    message: [
+      `The user explicitly required these tools before finishing: ${requiredTools.join(', ')}.`,
+      `Missing successful tool results: ${missingTools.join(', ')}.`,
+      'Call the missing required tool(s) before returning finish.'
+    ].join(' '),
+    kind: 'required_tool_missing',
+    detail: {
+      requiredTools,
+      missingTools,
+      requiredToolGroups,
+      missingGroups
+    }
+  };
+}
 
 function existingValueDecisionError(
   decision: AgentDecision,
@@ -600,6 +635,25 @@ export function buildRepairMessages(
       }
     ];
   }
+  if (error.kind === 'required_tool_missing') {
+    const missingTools = isRecord(error.detail) && Array.isArray(error.detail.missingTools)
+      ? error.detail.missingTools.filter((value): value is string => typeof value === 'string')
+      : [];
+    return [
+      ...messages,
+      {
+        role: 'user' as const,
+        content: [
+          '═══ REPAIR (1 of 1) ═══',
+          `Error: ${error.message}`,
+          `Missing required tools: ${missingTools.join(', ') || '(unknown)'}`,
+          'You must call the missing required tool(s) before finish. Do not answer from page summaries when the user explicitly required a tool call.',
+          'System policy, tool list, approval rules, and output schema are unchanged.',
+          'Return one JSON AgentDecision only — no markdown, no explanation.'
+        ].join('\n')
+      }
+    ];
+  }
   // parse_failure, tool_not_found, and other errors
   return [
     ...messages,
@@ -674,6 +728,57 @@ function toolResultData(result: NonNullable<RunSnapshot['toolResult']>): Record<
 
 function eventPayload(event: RunRecord['trace'][number]): Record<string, unknown> {
   return isRecord(event.payload) ? event.payload : {};
+}
+
+function explicitRequiredToolGroups(task: string): string[][] {
+  return task
+    .split(/\r?\n/u)
+    .filter(isRequiredToolLine)
+    .flatMap(requiredToolGroupsFromLine);
+}
+
+function isRequiredToolLine(line: string): boolean {
+  if (!/\bbh_[a-z0-9_]+\b/u.test(line)) {
+    return false;
+  }
+  if (/^\s*(如果|若|当|假如|if\b|when\b)/iu.test(line)) {
+    return false;
+  }
+  if (/(禁止|不要|不得|不能|不应|do not|must not|never)\s*(?:为了\S*)?\s*调用/iu.test(line) ||
+    /\b(do not|must not|never)\b/iu.test(line)) {
+    return false;
+  }
+  return /(必须.*调用|第[一二三四五六七八九十\d]+步.*调用|最后必须.*调用|must\s+call|required\s+to\s+call|call\s+bh_[a-z0-9_]+)/iu.test(line);
+}
+
+function uniqueToolNames(tools: string[]): string[] {
+  return [...new Set(tools)];
+}
+
+function requiredToolGroupsFromLine(line: string): string[][] {
+  const tools = uniqueToolNames(line.match(/\bbh_[a-z0-9_]+\b/gu) ?? []);
+  if (tools.length === 0) {
+    return [];
+  }
+  if (tools.length > 1 && /(\s或\s|\bor\b|\/)/iu.test(line)) {
+    return [tools];
+  }
+  return tools.map((tool) => [tool]);
+}
+
+function requirementSatisfyingTraceTools(record: RunRecord): Set<string> {
+  const tools = new Set<string>();
+  for (const event of record.trace) {
+    if (event.type !== TRACE_EVENT_NAMES.TOOL_RESULT) {
+      continue;
+    }
+    const payload = eventPayload(event);
+    const tool = stringField(payload, 'tool');
+    if (tool && (payload.ok === true || payload.code === ERROR_CODES.VISION_UNAVAILABLE)) {
+      tools.add(tool);
+    }
+  }
+  return tools;
 }
 
 function stringField(record: Record<string, unknown>, key: string): string | undefined {

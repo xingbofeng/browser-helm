@@ -28,7 +28,9 @@ export class RealModelScenarioRunner {
     scenario: RealModelScenario,
     settings: ProviderSettings
   ): Promise<RealModelScenarioResult> {
-    const page = await this.openRealPage(scenario.url);
+    const scenarioContext = { fixtureOrigin: this.flowContext.origin };
+    const url = resolveScenarioText(scenario.url, scenarioContext);
+    const page = await this.openRealPage(url);
     await scenario.beforeRun?.(page, this.helpers);
     const tabId = await this.flowContext.shell().activeTabId();
     await this.configureRealModel(tabId, settings, [
@@ -39,11 +41,12 @@ export class RealModelScenarioRunner {
     const beforeUrl = page.url();
     const snapshot = await this.flowContext.sidePanel().runOnTab({
       tabId,
-      task: scenario.task,
+      task: resolveScenarioText(scenario.task, scenarioContext),
       mode: scenario.mode,
       runKind: scenario.runKind,
       pollAttempts: scenario.pollAttempts ?? 720,
-      pollIntervalMs: 250
+      pollIntervalMs: 250,
+      continueOnEmpty: true
     });
 
     dumpRuntimeSnapshot(scenario.dumpName, snapshot);
@@ -140,12 +143,23 @@ function createScenarioHelpers() {
       ).toBe(true);
     },
 
+    expectNoTool(snapshot: RunSnapshot, tool: string): void {
+      expect(traceHasTool(snapshot, tool)).toBe(false);
+    },
+
     finalMessageContent,
     sameOriginAndPath,
     waitForAppleRegistrationForm,
     waitForBodyText,
     readAppleWidgetValues
   };
+}
+
+function resolveScenarioText(
+  text: RealModelScenario['task'],
+  context: { fixtureOrigin: string }
+): string {
+  return typeof text === 'function' ? text(context) : text;
 }
 
 function expectRealModelTrace(snapshot: RunSnapshot, settings: ProviderSettings): void {

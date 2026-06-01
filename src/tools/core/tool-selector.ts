@@ -194,6 +194,12 @@ function evaluateAdvancedToolGate(
   if (toolName.startsWith('bh_tab_')) {
     return taskNeedsAdvancedFamily(task, /tab|tabs|window|windows|标签|窗口|新页面|新标签/u);
   }
+  if (toolName.startsWith('bh_storage_')) {
+    if (capabilities.hasStorageInspection !== true) {
+      return 'Storage inspection capability is unavailable';
+    }
+    return taskNeedsAdvancedFamily(task, /storage|localstorage|sessionstorage|cookie|cookies|browser state|浏览器存储|本地存储|会话存储|状态|缓存/u);
+  }
   if (toolName.startsWith('bh_shadow_')) {
     return taskNeedsAdvancedFamily(task, /shadow|web component|shadow dom|影子|组件/u);
   }
@@ -218,6 +224,8 @@ export function toolRequiresExplicitDomainConsent(tool: ToolPromptContract): boo
     tool.name === TOOL_NAMES.TAB_FOCUS ||
     tool.name === TOOL_NAMES.FILE_UPLOAD_WITH_APPROVAL ||
     tool.name === TOOL_NAMES.CLIPBOARD_WRITE_WITH_APPROVAL ||
+    tool.name === TOOL_NAMES.FLOW_RUN_WITH_APPROVAL ||
+    tool.name.startsWith('bh_storage_') ||
     (tool.risk === 'high' && !tool.readOnly) ||
     tool.name.startsWith('bh_debug_') ||
     tool.name.startsWith('bh_cdp_');

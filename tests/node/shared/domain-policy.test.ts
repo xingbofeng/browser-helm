@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   evaluateBrowserHelmDomainPolicy,
+  evaluateBrowserHelmDomainOperationPolicy,
   isRestrictedBrowserHelmDomain
 } from '../../../src/shared/domain-policy';
 
@@ -27,6 +28,30 @@ describe('BrowserHelm domain policy', () => {
       allowed: false,
       restricted: true,
       reason: 'DOMAIN_RESTRICTED'
+    });
+  });
+
+  it('distinguishes read-only observe from mutating and diagnostic operations', () => {
+    expect(evaluateBrowserHelmDomainOperationPolicy('https://docs.example.com', undefined, 'observe')).toMatchObject({
+      allowed: true,
+      hostname: 'docs.example.com'
+    });
+    expect(evaluateBrowserHelmDomainOperationPolicy('https://docs.example.com', undefined, 'form_fill')).toMatchObject({
+      allowed: false,
+      hostname: 'docs.example.com',
+      reason: 'DOMAIN_NOT_ENABLED'
+    });
+    expect(evaluateBrowserHelmDomainOperationPolicy('https://docs.example.com', undefined, 'debug_hook')).toMatchObject({
+      allowed: false,
+      reason: 'DOMAIN_NOT_ENABLED'
+    });
+    expect(evaluateBrowserHelmDomainOperationPolicy('https://docs.example.com', undefined, 'storage_read')).toMatchObject({
+      allowed: false,
+      reason: 'DOMAIN_NOT_ENABLED'
+    });
+    expect(evaluateBrowserHelmDomainOperationPolicy('http://127.0.0.1:3000', undefined, 'storage_read')).toMatchObject({
+      allowed: true,
+      hostname: '127.0.0.1'
     });
   });
 

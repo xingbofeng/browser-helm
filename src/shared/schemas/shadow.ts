@@ -23,4 +23,5 @@ export const shadowQueryResultSchema = z.object({
 });
 
 export type ShadowRootSummary = z.infer<typeof shadowRootSummarySchema>;
+export type ShadowElementSummary = z.infer<typeof shadowElementSummarySchema>;
 export type ShadowQueryResult = z.infer<typeof shadowQueryResultSchema>;

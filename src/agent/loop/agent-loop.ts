@@ -198,7 +198,8 @@ export class AgentLoop {
         record: input.record,
         snapshot: current,
         toolsContracts,
-        locale
+        locale,
+        domainPolicy
       });
 
       this.deps.appendTrace(input.record, {
@@ -251,6 +252,16 @@ export class AgentLoop {
                 const handled = await this.handleDecision(input, {
                   type: 'finish',
                   message: existingValueFinishMessage(locale)
+                });
+                return handled.snapshot;
+              }
+              if (
+                decisionError.kind === 'repeated_form_fill' &&
+                !taskRequestsSubmit(input.record.task)
+              ) {
+                const handled = await this.handleDecision(input, {
+                  type: 'finish',
+                  message: repeatedFormFillFinishMessage(locale)
                 });
                 return handled.snapshot;
               }
@@ -918,6 +929,23 @@ function isTerminalStatus(status: RunSnapshot['status']): boolean {
 
 function redactModelOutputText(text: string): string {
   return maskSecret(redactTextForModelContext(text));
+}
+
+function taskRequestsSubmit(task: string): boolean {
+  const compact = task.replace(/\s+/gu, '').toLowerCase();
+  if (
+    /(?:不|不要|禁止|未|别)提交/u.test(compact) ||
+    /(?:donot|don't|no)submit/u.test(compact)
+  ) {
+    return false;
+  }
+  return /submit|send|press enter|click search|提交|发送|按\s*enter|点击搜索|点击提交/iu.test(task);
+}
+
+function repeatedFormFillFinishMessage(locale: Locale): string {
+  return locale === 'en'
+    ? 'The requested field has already been filled. I did not submit the form.'
+    : '请求的字段已经填写完成，未提交表单。';
 }
 
 function plainTextFinishMessage(text: string): string | undefined {

@@ -19,10 +19,10 @@ describe('ToolRuntimePolicy', () => {
     expect(result.reason).toBeDefined();
   });
 
-  it('allows high risk tools without approval in full mode', () => {
+  it('keeps high risk tools approval-gated in full mode', () => {
     const result = policy.evaluate('high', 'full');
-    expect(result.allow).toBe(true);
-    expect(result.requiresApproval).toBe(false);
+    expect(result.allow).toBe(false);
+    expect(result.requiresApproval).toBe(true);
     expect(result.risk).toBe('high');
   });
 

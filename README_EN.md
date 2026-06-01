@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/status-v1.5.0-blue?style=flat-square" alt="Status" />
+  <img src="https://img.shields.io/badge/status-v1.6.0-blue?style=flat-square" alt="Status" />
   <img src="https://img.shields.io/badge/runtime-Chrome_Extension-2ea44f?style=flat-square" alt="Runtime" />
   <img src="https://img.shields.io/badge/arch-local--first-black?style=flat-square" alt="Architecture" />
   <img src="https://img.shields.io/badge/agent-a11y--first-6f42c1?style=flat-square" alt="Agent" />
@@ -87,7 +87,7 @@ Custom Agent Kernel drives the complete loop:
 - Advanced developer panel provides complete trace replay and diagnostic reports
 - Streaming model output visible in real time
 - Debug mode supports `bh_debug_collect_page_health` to capture Console Errors / Network Failures (requires Debug run mode)
-- Note: Page Health Hook injects by default to listen for error events; it does not collect cookies, password fields, or user input. Future versions will make this Debug-mode opt-in.
+- Page Health Hook is Debug-mode opt-in; it does not collect cookies, password fields, user input, localStorage, or sessionStorage.
 
 ### 🔌 Model Freedom
 
@@ -101,7 +101,7 @@ Agent core loop, memory, trace, and settings all run locally via chrome.storage.
 
 ## 🛠️ Built-in Tools
 
-BrowserHelm ships with **70+ `bh_`-prefixed tools** covering page observation, form diagnosis, element reading, read-only iframe access, accessibility snapshots, DevTools/CDP, vision inspection, local memory, and workflow replay. Tools are organized by domain:
+BrowserHelm ships with **92 `bh_`-prefixed tools** covering page observation, form diagnosis, element reading, read-only iframe access, accessibility snapshots, DevTools/CDP, vision inspection, advanced browser state inspection, local memory/workflow, and site adapters. Tools are organized by domain:
 
 | Module | Tools | Description |
 |---|---|---|
@@ -113,8 +113,9 @@ BrowserHelm ships with **70+ `bh_`-prefixed tools** covering page observation, f
 | 🖼️ iframe | `bh_iframe_read` | iframe content reading (mutating actions not exposed in v1.1.2) |
 | 🔧 Debug | `bh_debug_collect_page_health` `bh_cdp_attach` `bh_cdp_get_network_events` `bh_cdp_get_console_events` | Page health diagnostics and CDP deep inspect |
 | 👁️ Vision | `bh_vision_capture_viewport` `bh_vision_describe_viewport` `bh_vision_detect_overlay` `bh_pointer_click` | Screenshot/vision enhancement, DOM fallback, and last-resort coordinate click |
-| 🗂️ Advanced browser | `bh_tab_list` `bh_tab_get_active` `bh_tab_focus` `bh_shadow_list` `bh_shadow_query` `bh_download_list` `bh_doc_read_url` | Multi-tab context, Shadow DOM, download metadata, and document/PDF reading |
+| 🗂️ Advanced browser | `bh_tab_list` `bh_tab_get_active` `bh_tab_focus` `bh_shadow_list` `bh_shadow_query` `bh_storage_list` `bh_storage_set_with_approval` `bh_download_list` `bh_doc_read_url` | Multi-tab context, Shadow DOM, approval-gated Web Storage mutation, download metadata, and document/PDF reading |
 | 🧩 Memory/Workflow | `bh_memory_lookup` `bh_pad_append` `bh_flow_preview` `bh_flow_run_with_approval` | Local domain memory, scratchpad, and workflow replay |
+| 🧭 Site Adapter | `bh_adapter_detect_site` `bh_adapter_list_workflows` `bh_adapter_apply_locator` `bh_adapter_report_failure` | Site guidance, workflow/locator hints, failure reports, and generic tool fallback |
 
 See [src/tools/README.md](src/tools/README.md) for details.
 
@@ -129,7 +130,7 @@ See [src/tools/README.md](src/tools/README.md) for details.
 ### Installation
 
 ```bash
-git clone https://github.com/your-org/browser-helm.git
+git clone https://github.com/xingbofeng/browser-helm.git
 cd browser-helm
 npm install
 npm run build

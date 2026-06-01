@@ -87,6 +87,32 @@ describe('adapter tools', () => {
     expect(result.nextHints).toContain('Adapter workflows never bypass global approval policy.');
   });
 
+  it('returns an approval boundary when selecting a high-risk adapter workflow', async () => {
+    const result = await bhAdapterListWorkflows().execute({
+      url: 'https://dashboard.stripe.com/customers',
+      workflowId: 'stripe-open-customer'
+    }, ctx());
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'APPROVAL_REQUIRED',
+      requiresApproval: true,
+      approval: {
+        risk: 'high',
+        reason: 'Confirm adapter workflow: Open customer workflow'
+      },
+      data: {
+        adapterId: 'stripe',
+        workflow: {
+          id: 'stripe-open-customer',
+          requiresApproval: true,
+          risk: 'high'
+        }
+      }
+    });
+    expect(result.nextHints).toContain('Adapter workflow approval is required before using its high-risk steps.');
+  });
+
 
   it('records locator failure and falls back to generic tools when candidates do not match', async () => {
     const result = await bhAdapterApplyLocator().execute({

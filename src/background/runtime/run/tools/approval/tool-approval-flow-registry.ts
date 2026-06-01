@@ -3,6 +3,7 @@ import { DefaultApprovalFlow } from './flows/default-approval-flow';
 import { FormSubmitApprovalFlow } from './flows/form-submit-approval-flow';
 import { WorkflowReplayApprovalFlow } from './flows/workflow-replay-approval-flow';
 import { ClipboardApprovalFlow } from './flows/clipboard-approval-flow';
+import { StorageApprovalFlow } from './flows/storage-approval-flow';
 import { TOOL_NAMES } from '../../../../../shared/constants/tool-names';
 import type { ContentRpcClient } from '../../../../../page/messaging/content-rpc-client';
 import type { RuntimeEvent, ExecuteToolInput } from '../../../../../runtime/runtime-messages';
@@ -36,6 +37,9 @@ export class ToolApprovalFlowRegistry {
     this.flows.set(TOOL_NAMES.FLOW_RUN_WITH_APPROVAL, new WorkflowReplayApprovalFlow(deps));
     this.flows.set(TOOL_NAMES.CLIPBOARD_READ_WITH_APPROVAL, new ClipboardApprovalFlow(deps));
     this.flows.set(TOOL_NAMES.CLIPBOARD_WRITE_WITH_APPROVAL, new ClipboardApprovalFlow(deps));
+    this.flows.set(TOOL_NAMES.STORAGE_SET_WITH_APPROVAL, new StorageApprovalFlow(deps));
+    this.flows.set(TOOL_NAMES.STORAGE_DELETE_WITH_APPROVAL, new StorageApprovalFlow(deps));
+    this.flows.set(TOOL_NAMES.STORAGE_CLEAR_WITH_APPROVAL, new StorageApprovalFlow(deps));
   }
 
   getFlow(tool: string): ToolApprovalFlow {

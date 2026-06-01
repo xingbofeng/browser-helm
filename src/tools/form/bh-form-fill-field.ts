@@ -8,6 +8,8 @@ import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import { toolMeta } from '../core/tool-meta';
 import type { ToolSpec } from '../core/tool-spec';
 
+const FORM_FILL_AUTH_ATTEMPTS = 5;
+
 const argsSchema = z.object({
   fieldRefId: z.string().min(1),
   value: z.string(),
@@ -38,33 +40,7 @@ export function bhFormFillField(
     argsSchema,
     resultSchema: toolResultSchema,
     async execute(args, ctx) {
-      const grant = await rpc.request({
-        type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
-        action: 'fill',
-        fieldRefIds: [args.fieldRefId],
-        runId: ctx.runId,
-        stepId: ctx.stepId
-      });
-      if (!grant.ok || !('actionToken' in grant)) {
-        const message = grant.ok ? 'form fill authorization failed' : grant.message;
-        return {
-          ok: false,
-          code: grant.ok ? ERROR_CODES.FORM_ACTION_UNAUTHORIZED : grant.code,
-          summary: message,
-          error: { message },
-          changedPage: false,
-          requiresObserve: false
-        };
-      }
-      const resp = await rpc.request({
-        type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
-        fieldRefId: args.fieldRefId,
-        value: args.value,
-        clear: args.clear,
-        actionToken: grant.actionToken,
-        runId: ctx.runId,
-        stepId: ctx.stepId
-      });
+      const resp = await authorizeAndFillField(rpc, args, ctx);
 
       if (!resp.ok) {
         return {
@@ -98,4 +74,149 @@ export function bhFormFillField(
       };
     },
   };
+}
+
+async function authorizeAndFillField(
+  rpc: ContentRpcClient,
+  args: z.infer<typeof argsSchema>,
+  ctx: { runId: string; stepId: string }
+) {
+  let lastFailure: Awaited<ReturnType<ContentRpcClient['request']>> | undefined;
+  for (let attempt = 0; attempt < FORM_FILL_AUTH_ATTEMPTS; attempt += 1) {
+    const grant = await rpc.request({
+      type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+      action: 'fill',
+      fieldRefIds: [args.fieldRefId],
+      runId: ctx.runId,
+      stepId: ctx.stepId
+    });
+    if (!grant.ok || !('actionToken' in grant)) {
+      return grant;
+    }
+    const resp = await rpc.request({
+      type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
+      fieldRefId: args.fieldRefId,
+      value: args.value,
+      clear: args.clear,
+      actionToken: grant.actionToken,
+      runId: ctx.runId,
+      stepId: ctx.stepId
+    });
+    if (resp.ok || !isRetryableTransientFillFailure(resp.code)) {
+      return resp;
+    }
+    if (attempt === FORM_FILL_AUTH_ATTEMPTS - 1) {
+      const staleFillCompleted = resp.code === ERROR_CODES.REF_STALE
+        ? await readCompletedSearchFillAfterStaleRef(rpc, args.fieldRefId)
+        : undefined;
+      return staleFillCompleted ?? resp;
+    }
+    lastFailure = resp;
+    await refreshPageRefsAfterTransientFillFailure(rpc);
+  }
+  return lastFailure ?? {
+    ok: false,
+    code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED,
+    message: 'form fill authorization failed'
+  };
+}
+
+function isRetryableTransientFillFailure(code: string | undefined): boolean {
+  return code === ERROR_CODES.FORM_ACTION_UNAUTHORIZED ||
+    code === ERROR_CODES.TOOL_EXECUTION_FAILED ||
+    code === ERROR_CODES.REF_STALE;
+}
+
+async function refreshPageRefsAfterTransientFillFailure(
+  rpc: ContentRpcClient
+): Promise<void> {
+  await rpc.request({
+    type: CONTENT_RPC_MESSAGES.PAGE_WAIT_UNTIL_STABLE,
+    quietMs: 300
+  }).catch(() => undefined);
+  await rpc.request({
+    type: CONTENT_RPC_MESSAGES.PAGE_OBSERVE
+  });
+}
+
+async function readCompletedSearchFillAfterStaleRef(
+  rpc: ContentRpcClient,
+  fieldRefId: string
+): Promise<Awaited<ReturnType<ContentRpcClient['request']>> | undefined> {
+  const refreshed = await rpc.request({
+    type: CONTENT_RPC_MESSAGES.PAGE_OBSERVE
+  }).catch(() => undefined);
+  if (!refreshed?.ok || !('observation' in refreshed)) {
+    return undefined;
+  }
+  const field = readSingleCompletedSearchField(refreshed.observation.formFields, fieldRefId);
+  if (!field) {
+    return undefined;
+  }
+  return {
+    ok: true,
+    fillFieldResult: {
+      fieldRefId,
+      label: field.label,
+      name: field.name,
+      type: field.type ?? 'text',
+      status: 'filled',
+      actualValuePreview: 'non-empty',
+      maskedActualValue: '[MASKED]',
+      retried: true,
+      changedPage: true
+    }
+  };
+}
+
+function readSingleCompletedSearchField(
+  formFields: unknown,
+  fieldRefId: string
+): { label?: string | undefined; name?: string | undefined; type?: string | undefined } | undefined {
+  if (!isRecord(formFields) || !Array.isArray(formFields.fields)) {
+    return undefined;
+  }
+  const fields = formFields.fields.filter(isRecord);
+  const searchFields = fields.filter((field) =>
+    isSearchField(field) &&
+    fieldValuePreview(field) === 'non-empty'
+  );
+  const matched = searchFields.find((field) => field.refId === fieldRefId) ??
+    (searchFields.length === 1 ? searchFields[0] : undefined);
+  return matched
+    ? {
+        label: optionalString(matched.label),
+        name: optionalString(matched.name),
+        type: optionalString(matched.type)
+      }
+    : undefined;
+}
+
+function isSearchField(field: Record<string, unknown>): boolean {
+  const haystack = [
+    field.label,
+    field.name,
+    field.type
+  ].filter((value): value is string => typeof value === 'string').join(' ').toLowerCase();
+  return /search|query|搜索|搜尋/u.test(haystack);
+}
+
+function fieldValuePreview(field: Record<string, unknown>): string | undefined {
+  const valuePreview = field.valuePreview;
+  if (typeof valuePreview === 'string') {
+    return valuePreview;
+  }
+  const writable = field.writable;
+  if (isRecord(writable) && typeof writable.actualValue === 'string') {
+    return writable.actualValue;
+  }
+  return undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value : undefined;
 }

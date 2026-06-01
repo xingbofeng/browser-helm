@@ -48,7 +48,13 @@ export function setFieldText(
   element: HTMLInputElement | HTMLTextAreaElement,
   text: string
 ): void {
-  element.value = text;
+  const prototype = Object.getPrototypeOf(element) as HTMLInputElement | HTMLTextAreaElement;
+  const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+  if (descriptor?.set) {
+    descriptor.set.call(element, text);
+  } else {
+    element.value = text;
+  }
   dispatchInputEvents(element);
 }
 
@@ -116,9 +122,29 @@ export function setCheckboxState(
     }
   }
   if (element.checked !== desiredState) {
+    setNativeChecked(element, desiredState);
+  }
+  syncReactCheckboxTracker(element, desiredState);
+  dispatchInputEvents(element);
+}
+
+function setNativeChecked(element: HTMLInputElement, desiredState: boolean): void {
+  const descriptor = Object.getOwnPropertyDescriptor(
+    element.ownerDocument.defaultView?.HTMLInputElement.prototype ?? HTMLInputElement.prototype,
+    'checked'
+  );
+  descriptor?.set?.call(element, desiredState);
+  if (descriptor?.set === undefined) {
     element.checked = desiredState;
   }
-  dispatchInputEvents(element);
+  syncReactCheckboxTracker(element, desiredState);
+}
+
+function syncReactCheckboxTracker(element: HTMLInputElement, desiredState: boolean): void {
+  const tracker = (element as unknown as {
+    _valueTracker?: { setValue: (value: string) => void };
+  })._valueTracker;
+  tracker?.setValue(desiredState ? 'false' : 'true');
 }
 
 function findRadioWithValue(
@@ -148,7 +174,12 @@ export function fillSingleField(
   locale: Locale = 'zh'
 ): FillFieldResult {
   const entry = refMap.resolve(target.fieldRefId);
-  if (!entry) {
+  const resolvedElement = entry && !refMap.isEntryStale(entry)
+    ? entry.element
+    : target.allowSingleFieldFallback === true
+      ? resolveOnlyVisibleFillField(document)
+      : undefined;
+  if (!resolvedElement) {
     return {
       fieldRefId: target.fieldRefId,
       type: 'unknown',
@@ -157,7 +188,7 @@ export function fillSingleField(
     };
   }
 
-  const el = entry.element;
+  const el = resolvedElement;
   if (!(el instanceof HTMLElement)) {
     return {
       fieldRefId: target.fieldRefId,
@@ -263,6 +294,79 @@ function fillContentEditable(
   const isClearOnly = target.clear === true && target.value.length === 0;
   setContentEditableText(el, isClearOnly ? '' : target.value);
   return mkField(target, isClearOnly ? 'cleared' : 'filled', el, type, label, el.textContent ?? '');
+}
+
+function resolveOnlyVisibleFillField(document: Document): HTMLElement | undefined {
+  const standardSearchField = Array.from(
+    document.querySelectorAll<HTMLElement>('input[name="search_query"], input[type="search"]')
+  ).find(isSafeFallbackFillCandidate);
+  if (standardSearchField) {
+    return standardSearchField;
+  }
+  const candidates = Array.from(
+    document.querySelectorAll<HTMLElement>('input:not([type="hidden"]), select, textarea, [contenteditable="true"]')
+  ).filter((element) =>
+    (isVisibleElement(element) || hasVisibleControlLabel(element)) &&
+    isSafeFallbackFillCandidate(element)
+  );
+  const searchCandidates = candidates.filter(isSearchLikeField);
+  if (searchCandidates.length === 1) {
+    return searchCandidates[0];
+  }
+  if (searchCandidates.length > 1) {
+    const [best, second] = searchCandidates
+      .map((element) => ({ element, score: searchFallbackScore(element) }))
+      .sort((left, right) => right.score - left.score);
+    if (best && best.score > 0 && best.score > (second?.score ?? 0)) {
+      return best.element;
+    }
+  }
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+
+function isSafeFallbackFillCandidate(element: HTMLElement): boolean {
+  const validation = readFieldValidation(element);
+  if (validation.disabled || element.getAttribute('readonly') !== null || isSensitiveField(element)) {
+    return false;
+  }
+  if (element instanceof HTMLInputElement) {
+    const inputType = (element.getAttribute('type') ?? 'text').toLowerCase();
+    return ['text', 'search', 'email', 'url', 'tel', 'number'].includes(inputType);
+  }
+  return element instanceof HTMLTextAreaElement ||
+    element instanceof HTMLSelectElement ||
+    element.isContentEditable;
+}
+
+function isSearchLikeField(element: HTMLElement): boolean {
+  if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement)) {
+    return false;
+  }
+  const haystack = [
+    element.getAttribute('type'),
+    element.getAttribute('name'),
+    element.getAttribute('id'),
+    element.getAttribute('aria-label'),
+    element.getAttribute('placeholder')
+  ].join(' ').toLowerCase();
+  return /search|query|(?:^|\s)q(?:\s|$)|搜索|搜尋/u.test(haystack);
+}
+
+function searchFallbackScore(element: HTMLElement): number {
+  const fields = {
+    type: element instanceof HTMLInputElement ? element.getAttribute('type')?.toLowerCase() ?? '' : '',
+    name: element.getAttribute('name')?.toLowerCase() ?? '',
+    id: element.getAttribute('id')?.toLowerCase() ?? '',
+    ariaLabel: element.getAttribute('aria-label')?.toLowerCase() ?? '',
+    placeholder: element.getAttribute('placeholder')?.toLowerCase() ?? ''
+  };
+  let score = 0;
+  if (fields.name === 'search_query') score += 8;
+  if (fields.id === 'search') score += 6;
+  if (fields.type === 'search') score += 4;
+  if (fields.ariaLabel === 'search' || fields.placeholder === 'search') score += 3;
+  if (/search|query/u.test(`${fields.name} ${fields.id}`)) score += 2;
+  return score;
 }
 
 function hasVisibleControlLabel(element: HTMLElement): boolean {

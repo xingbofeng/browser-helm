@@ -2,7 +2,7 @@ import { ContentRpcHandler } from '../page/messaging/content-rpc-handler';
 import { SIDE_PANEL_MESSAGES } from '../shared/constants/event-names';
 import {
   BROWSER_HELM_DOMAIN_POLICY_STORAGE_KEY,
-  evaluateBrowserHelmDomainPolicy,
+  evaluateBrowserHelmDomainOperationPolicy,
   type BrowserHelmDomainPolicy
 } from '../shared/domain-policy';
 import { readLocale } from '../i18n/locale';
@@ -41,7 +41,7 @@ function installWithDomainPolicy(
   globalScope: Record<string, unknown>,
   policy: BrowserHelmDomainPolicy | undefined
 ): void {
-  const decision = evaluateBrowserHelmDomainPolicy(readCurrentHref(), policy);
+  const decision = evaluateBrowserHelmDomainOperationPolicy(readCurrentHref(), policy, 'observe');
   if (!decision.allowed) {
     return;
   }

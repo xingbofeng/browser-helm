@@ -7,6 +7,105 @@ import { CONTENT_RPC_MESSAGES } from '../../../../src/shared/constants/event-nam
 import { ERROR_CODES } from '../../../../src/shared/constants/error-codes';
 
 describe('content-rpc-handler iframe actions', () => {
+  it('summarizes Web Storage without exposing sensitive values', () => {
+    const storage = createTestStorage();
+    Object.defineProperty(window, 'localStorage', { value: storage, configurable: true });
+    storage.setItem('theme', 'dark');
+    storage.setItem('authToken', 'secret-token-value');
+    const handler = new ContentRpcHandler(document);
+
+    const listResponse = handler.handle({
+      type: CONTENT_RPC_MESSAGES.STORAGE_LIST,
+      area: 'localStorage',
+      limit: 10
+    });
+    if (!listResponse.ok || !('storageList' in listResponse)) {
+      throw new Error('expected storage list');
+    }
+    expect(listResponse.storageList.area).toBe('localStorage');
+    expect(listResponse.storageList.count).toBe(2);
+    expect(listResponse.storageList.entries).toEqual(expect.arrayContaining([
+      {
+        area: 'localStorage',
+        key: 'theme',
+        valuePreview: 'dark',
+        valueLength: 4,
+        masked: false
+      },
+      {
+        area: 'localStorage',
+        key: 'authToken',
+        valueLength: 18,
+        masked: true,
+        reason: 'sensitive_storage_key'
+      }
+    ]));
+
+    const getResponse = handler.handle({
+      type: CONTENT_RPC_MESSAGES.STORAGE_GET,
+      area: 'localStorage',
+      key: 'authToken'
+    });
+    expect(JSON.stringify(getResponse)).not.toContain('secret-token-value');
+  });
+
+  it('mutates Web Storage only through explicit storage mutation RPCs', () => {
+    const storage = createTestStorage();
+    Object.defineProperty(window, 'sessionStorage', { value: storage, configurable: true });
+    storage.setItem('wizardStep', 'shipping');
+    const handler = new ContentRpcHandler(document);
+
+    const setResponse = handler.handle({
+      type: CONTENT_RPC_MESSAGES.STORAGE_SET,
+      area: 'sessionStorage',
+      key: 'wizardStep',
+      value: 'billing'
+    });
+    expect(setResponse).toMatchObject({
+      ok: true,
+      storageMutation: {
+        area: 'sessionStorage',
+        operation: 'set',
+        key: 'wizardStep',
+        changed: true
+      }
+    });
+    expect(storage.getItem('wizardStep')).toBe('billing');
+
+    const deleteResponse = handler.handle({
+      type: CONTENT_RPC_MESSAGES.STORAGE_DELETE,
+      area: 'sessionStorage',
+      key: 'wizardStep'
+    });
+    expect(deleteResponse).toMatchObject({
+      ok: true,
+      storageMutation: {
+        area: 'sessionStorage',
+        operation: 'delete',
+        key: 'wizardStep',
+        changed: true
+      }
+    });
+    expect(storage.getItem('wizardStep')).toBeNull();
+
+    storage.setItem('draft', 'one');
+    storage.setItem('theme', 'dark');
+    const clearResponse = handler.handle({
+      type: CONTENT_RPC_MESSAGES.STORAGE_CLEAR,
+      area: 'sessionStorage'
+    });
+    expect(clearResponse).toMatchObject({
+      ok: true,
+      storageMutation: {
+        area: 'sessionStorage',
+        operation: 'clear',
+        changed: true,
+        affectedCount: 2
+      }
+    });
+    expect(storage.length).toBe(0);
+  });
+
   it('waits for a quiet DOM window before reporting page stability', async () => {
     document.body.innerHTML = '<div id="root"></div>';
     const handler = new ContentRpcHandler(document);
@@ -119,6 +218,161 @@ describe('content-rpc-handler iframe actions', () => {
       ok: false,
       code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED
     });
+  });
+
+  it('keeps form action grants valid if a dynamic page recreates the content handler before fill', () => {
+    document.body.innerHTML = '<input id="name" name="name" type="text" />';
+    const authorizingHandler = new ContentRpcHandler(document);
+    const snapshot = authorizingHandler.handle({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
+    if (!snapshot.ok || !('snapshot' in snapshot)) {
+      throw new Error('expected snapshot');
+    }
+    const fieldRefId = snapshot.snapshot.elements.find(
+      (element) => element.tagName === 'input'
+    )?.refId ?? '';
+    const grant = authorizingHandler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+      action: 'fill',
+      fieldRefIds: [fieldRefId],
+      runId: 'run_1',
+      stepId: 'run_1:fill'
+    });
+    if (!grant.ok || !('actionToken' in grant)) {
+      throw new Error('expected form action token');
+    }
+
+    const recreatedHandler = new ContentRpcHandler(document);
+    expect(recreatedHandler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
+      fieldRefId,
+      value: 'Alice',
+      actionToken: grant.actionToken,
+      runId: 'run_1',
+      stepId: 'run_1:fill'
+    })).toMatchObject({
+      ok: true
+    });
+    expect((document.getElementById('name') as HTMLInputElement).value).toBe('Alice');
+    expect(recreatedHandler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
+      fieldRefId,
+      value: 'Bob',
+      actionToken: grant.actionToken,
+      runId: 'run_1',
+      stepId: 'run_1:fill'
+    })).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED
+    });
+  });
+
+  it('returns REF_STALE when an authorized form fill target is removed before mutation', () => {
+    document.body.innerHTML = '<input id="name" name="name" type="text" />';
+    const handler = new ContentRpcHandler(document, 'en');
+    const snapshot = handler.handle({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
+    if (!snapshot.ok || !('snapshot' in snapshot)) {
+      throw new Error('expected snapshot');
+    }
+    const fieldRefId = snapshot.snapshot.elements.find(
+      (element) => element.tagName === 'input'
+    )?.refId ?? '';
+    const grant = handler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+      action: 'fill',
+      fieldRefIds: [fieldRefId],
+      runId: 'run_1',
+      stepId: 'run_1:fill'
+    });
+    if (!grant.ok || !('actionToken' in grant)) {
+      throw new Error('expected form action token');
+    }
+
+    document.getElementById('name')?.remove();
+
+    expect(handler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
+      fieldRefId,
+      value: 'Alice',
+      actionToken: grant.actionToken,
+      runId: 'run_1',
+      stepId: 'run_1:fill'
+    })).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.REF_STALE
+    });
+  });
+
+  it('rebinds a stale form field ref to the refreshed field with the same accessible name', () => {
+    document.body.innerHTML = '<label for="search">Search</label><input id="search" name="search_query" type="text" />';
+    const handler = new ContentRpcHandler(document);
+    const snapshot = handler.handle({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
+    if (!snapshot.ok || !('snapshot' in snapshot)) {
+      throw new Error('expected snapshot');
+    }
+    const fieldRefId = snapshot.snapshot.elements.find(
+      (element) => element.tagName === 'input'
+    )?.refId ?? '';
+    const grant = handler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+      action: 'fill',
+      fieldRefIds: [fieldRefId],
+      runId: 'run_1',
+      stepId: 'run_1:fill'
+    });
+    if (!grant.ok || !('actionToken' in grant)) {
+      throw new Error('expected form action token');
+    }
+
+    const oldInput = document.getElementById('search')!;
+    oldInput.replaceWith(oldInput.cloneNode());
+
+    expect(handler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
+      fieldRefId,
+      value: 'keyboard accessibility tutorial',
+      actionToken: grant.actionToken,
+      runId: 'run_1',
+      stepId: 'run_1:fill'
+    })).toMatchObject({
+      ok: true
+    });
+    expect((document.getElementById('search') as HTMLInputElement).value).toBe('keyboard accessibility tutorial');
+  });
+
+  it('rebinds a stale form field ref to the only refreshed field when the label changed', () => {
+    document.body.innerHTML = '<button type="button">Menu</button><label><input id="old-consent" name="old" type="checkbox" />Subscribe</label>';
+    const handler = new ContentRpcHandler(document);
+    const snapshot = handler.handle({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
+    if (!snapshot.ok || !('snapshot' in snapshot)) {
+      throw new Error('expected snapshot');
+    }
+    const fieldRefId = snapshot.snapshot.elements.find(
+      (element) => element.tagName === 'input'
+    )?.refId ?? '';
+    const grant = handler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+      action: 'fill',
+      fieldRefIds: [fieldRefId],
+      runId: 'run_1',
+      stepId: 'run_1:fill'
+    });
+    if (!grant.ok || !('actionToken' in grant)) {
+      throw new Error('expected form action token');
+    }
+
+    document.body.innerHTML = '<label><input id="new-consent" name="new" type="checkbox" />Agree</label>';
+
+    expect(handler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
+      fieldRefId,
+      value: 'true',
+      actionToken: grant.actionToken,
+      runId: 'run_1',
+      stepId: 'run_1:fill'
+    })).toMatchObject({
+      ok: true
+    });
+    expect((document.getElementById('new-consent') as HTMLInputElement).checked).toBe(true);
   });
 
   it('rejects submit tokens that are not bound to a submit target or form', () => {
@@ -540,3 +794,21 @@ describe('content-rpc-handler iframe actions', () => {
     expect((document.getElementById('password') as HTMLInputElement).value).toBe('');
   });
 });
+
+function createTestStorage(): Storage {
+  const data = new Map<string, string>();
+  return {
+    get length() {
+      return data.size;
+    },
+    clear: () => data.clear(),
+    getItem: (key: string) => data.get(key) ?? null,
+    key: (index: number) => Array.from(data.keys())[index] ?? null,
+    removeItem: (key: string) => {
+      data.delete(key);
+    },
+    setItem: (key: string, value: string) => {
+      data.set(key, value);
+    }
+  };
+}

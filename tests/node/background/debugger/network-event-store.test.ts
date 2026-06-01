@@ -83,7 +83,7 @@ describe('CDP network event store', () => {
 });
 
 describe('CDP redaction helpers', () => {
-  it('masks sensitive headers, URL query values, and long text', () => {
+  it('masks sensitive headers, URL query values, body pairs, and long text', () => {
     expect(redactCdpHeaders({
       Cookie: 'sid=secret',
       'X-Api-Key': 'sk-secret',
@@ -95,6 +95,9 @@ describe('CDP redaction helpers', () => {
     });
     expect(redactCdpUrl('https://api.example.com/path?token=secret#frag'))
       .toBe('https://api.example.com/path?token=%5BREDACTED%5D');
+    expect(redactCdpText('password=hunter2&name=Alice')).toBe('password=[MASKED]&name=Alice');
+    expect(redactCdpText('{"token":"sk-1234567890abcdef","ok":true}'))
+      .toContain('"token":"[MASKED]"');
     expect(redactCdpText('x'.repeat(12), 5)).toBe('xxxxx...[truncated]');
   });
 });

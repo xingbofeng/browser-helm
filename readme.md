@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/status-v1.5.0-blue?style=flat-square" alt="Status" />
+  <img src="https://img.shields.io/badge/status-v1.6.0-blue?style=flat-square" alt="Status" />
   <img src="https://img.shields.io/badge/runtime-Chrome_Extension-2ea44f?style=flat-square" alt="Runtime" />
   <img src="https://img.shields.io/badge/架构-本地优先-black?style=flat-square" alt="Architecture" />
   <img src="https://img.shields.io/badge/Agent-a11y--first-6f42c1?style=flat-square" alt="Agent" />
@@ -101,7 +101,7 @@ Agent 核心循环、trace 和配置基于 chrome.storage.local 在浏览器本�
 
 ## 🛠️ 内置工具
 
-BrowserHelm 内置 **70+ 个 `bh_` 前缀工具**，覆盖页面观察、表单诊断、元素读取、iframe 只读读取、无障碍快照、DevTools/CDP、视觉检查和本地记忆/工作流等场景。工具按领域分模块管理：
+BrowserHelm 内置 **92 个 `bh_` 前缀工具**，覆盖页面观察、表单诊断、元素读取、iframe 只读读取、无障碍快照、DevTools/CDP、视觉检查、advanced browser state 检查、本地记忆/工作流和站点 adapter 等场景。工具按领域分模块管理：
 
 | 模块 | 工具 | 说明 |
 |---|---|---|
@@ -113,8 +113,9 @@ BrowserHelm 内置 **70+ 个 `bh_` 前缀工具**，覆盖页面观察、表单�
 | 🖼️ iframe | `bh_iframe_read` | iframe 内容读取 |
 | 🔧 调试 | `bh_debug_collect_page_health` `bh_cdp_attach` `bh_cdp_get_network_events` `bh_cdp_get_console_events` | 页面健康诊断与 CDP deep inspect |
 | 👁️ 视觉 | `bh_vision_capture_viewport` `bh_vision_describe_viewport` `bh_vision_detect_overlay` `bh_pointer_click` | screenshot/vision 增强、DOM fallback 与坐标点击最后手段 |
-| 🗂️ 高级浏览器 | `bh_tab_list` `bh_tab_get_active` `bh_tab_focus` `bh_shadow_list` `bh_shadow_query` `bh_download_list` `bh_doc_read_url` | 多标签上下文、Shadow DOM、下载元数据与文档/PDF 读取 |
+| 🗂️ 高级浏览器 | `bh_tab_list` `bh_tab_get_active` `bh_tab_focus` `bh_shadow_list` `bh_shadow_query` `bh_storage_list` `bh_storage_set_with_approval` `bh_download_list` `bh_doc_read_url` | 多标签上下文、Shadow DOM、Web Storage 审批写操作、下载元数据与文档/PDF 读取 |
 | 🧩 记忆/工作流 | `bh_memory_lookup` `bh_pad_append` `bh_flow_preview` `bh_flow_run_with_approval` | 本地 domain memory、scratchpad 和 workflow replay |
+| 🧭 站点 Adapter | `bh_adapter_detect_site` `bh_adapter_list_workflows` `bh_adapter_apply_locator` `bh_adapter_report_failure` | 站点 guidance、workflow/locator hint、失败记录和通用工具 fallback |
 
 详见 [src/tools/README.md](src/tools/README.md)。
 

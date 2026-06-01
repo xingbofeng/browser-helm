@@ -11,7 +11,7 @@ import type { ToolSpec } from '../core/tool-spec';
 import { normalizeVisionObservation } from './vision-result-normalizer';
 
 const captureArgsSchema = z.object({
-  windowId: z.number().int().positive().optional()
+  windowId: z.number().int().nonnegative().optional()
 }).strict();
 
 const elementArgsSchema = captureArgsSchema.extend({
@@ -38,7 +38,7 @@ export function bhVisionCaptureViewport(_rpc: ContentRpcClient): ToolSpec<z.infe
     argsSchema: captureArgsSchema,
     execute: async (args, ctx) => {
       const tabId = requireTabId(ctx);
-      const screenshot = await defaultScreenshotManager.captureViewport({ tabId, windowId: args.windowId });
+      const screenshot = await defaultScreenshotManager.captureViewport({ tabId, windowId: normalizeWindowId(args.windowId) });
       return ok(`Captured viewport screenshot ${screenshot.id}.`, { screenshot: screenshotCaptureSchema.parse(screenshot) });
     }
   });
@@ -59,7 +59,7 @@ export function bhVisionCaptureFullPage(_rpc: ContentRpcClient): ToolSpec<z.infe
     argsSchema: captureArgsSchema,
     execute: async (args, ctx) => {
       const tabId = requireTabId(ctx);
-      const screenshot = await defaultScreenshotManager.captureFullPage({ tabId, windowId: args.windowId });
+      const screenshot = await defaultScreenshotManager.captureFullPage({ tabId, windowId: normalizeWindowId(args.windowId) });
       return ok(`Captured full-page screenshot ${screenshot.id}.`, { screenshot: screenshotCaptureSchema.parse(screenshot) });
     }
   });
@@ -82,7 +82,7 @@ export function bhVisionCaptureElement(_rpc: ContentRpcClient): ToolSpec<z.infer
       const tabId = requireTabId(ctx);
       const screenshot = await defaultScreenshotManager.captureElement({
         tabId,
-        windowId: args.windowId,
+        windowId: normalizeWindowId(args.windowId),
         selector: args.selector
       });
       return ok(`Captured element screenshot ${screenshot.id}.`, { screenshot: screenshotCaptureSchema.parse(screenshot) });
@@ -105,7 +105,7 @@ export function bhVisionDescribeViewport(_rpc: ContentRpcClient): ToolSpec<z.inf
     argsSchema: describeArgsSchema,
     execute: async (args, ctx) => {
       const tabId = requireTabId(ctx);
-      const screenshot = await defaultScreenshotManager.captureViewport({ tabId, windowId: args.windowId });
+      const screenshot = await defaultScreenshotManager.captureViewport({ tabId, windowId: normalizeWindowId(args.windowId) });
       if (!ctx.visionClient) {
         const observation = normalizeVisionObservation({
           imageRef: screenshot.id,
@@ -216,6 +216,10 @@ function requireTabId(ctx: ToolContext): number {
   return ctx.tabId;
 }
 
+function normalizeWindowId(windowId: number | undefined): number | undefined {
+  return windowId === 0 ? undefined : windowId;
+}
+
 function ok(summary: string, data: unknown): ToolResult {
   return {
     ok: true,
@@ -232,17 +236,23 @@ function ok(summary: string, data: unknown): ToolResult {
 }
 
 function failed(code: string, summary: string, data: unknown): ToolResult {
+  const fallbackSummary = code === ERROR_CODES.VISION_UNAVAILABLE
+    ? `${summary} Do not retry the vision tool in this run; use DOM/a11y or visible-text fallback evidence and finish.`
+    : summary;
   return {
     ok: false,
     code,
-    summary,
+    summary: fallbackSummary,
     data,
-    error: { message: summary, detail: data },
+    error: { message: fallbackSummary, detail: data },
+    nextHints: code === ERROR_CODES.VISION_UNAVAILABLE
+      ? ['Do not retry vision in this run.', 'Use bh_page_read_visible_text or page observation as fallback evidence.', 'Finish with a fallback diagnosis.']
+      : undefined,
     changedPage: false,
     requiresObserve: false,
     context: {
       visibility: 'summary',
-      summary
+      summary: fallbackSummary
     }
   };
 }

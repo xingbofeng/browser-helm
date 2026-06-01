@@ -17,4 +17,16 @@ describe('tool args redaction', () => {
       }
     });
   });
+
+  it('keeps only the file basename for upload approval previews', () => {
+    const redacted = redactToolArgs(TOOL_NAMES.FILE_UPLOAD_WITH_APPROVAL, {
+      targetRefId: 'ref_upload',
+      fileName: '/Users/counter/secret/avatar.png'
+    });
+
+    expect(redacted).toEqual({
+      targetRefId: 'ref_upload',
+      fileName: 'avatar.png'
+    });
+  });
 });

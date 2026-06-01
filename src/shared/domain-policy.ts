@@ -32,6 +32,14 @@ export type BrowserHelmDomainPolicyDecision = {
   reason?: string | undefined;
 };
 
+export type BrowserHelmDomainPolicyOperation =
+  | 'observe'
+  | 'debug_hook'
+  | 'form_fill'
+  | 'submit'
+  | 'storage_read'
+  | 'advanced_action';
+
 export function isBrowserHelmDomainPolicy(value: unknown): value is BrowserHelmDomainPolicy {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -78,6 +86,26 @@ export function evaluateBrowserHelmDomainPolicy(
   return { allowed: true, hostname, restricted };
 }
 
+export function evaluateBrowserHelmDomainOperationPolicy(
+  input: string | URL | undefined,
+  policy: BrowserHelmDomainPolicy | undefined,
+  operation: BrowserHelmDomainPolicyOperation
+): BrowserHelmDomainPolicyDecision {
+  if (operation === 'observe') {
+    return evaluateBrowserHelmDomainPolicy(input, policy);
+  }
+  const hostname = input ? readHostname(input) : undefined;
+  if (hostname && isLocalDevelopmentHostname(hostname)) {
+    return { allowed: true, hostname, restricted: false };
+  }
+  return evaluateBrowserHelmDomainPolicy(input, {
+    enabledDomains: policy?.enabledDomains ?? [],
+    blockedDomains: policy?.blockedDomains,
+    allowRestrictedDomains: policy?.allowRestrictedDomains,
+    defaultEnabled: false
+  });
+}
+
 function readHostname(input: string | URL): string | undefined {
   if (input instanceof URL) {
     return input.hostname.toLowerCase();
@@ -97,4 +125,11 @@ function matchesDomainList(hostname: string, domains: string[] | undefined): boo
     const normalized = readHostname(domain);
     return normalized ? hostname === normalized || hostname.endsWith(`.${normalized}`) : false;
   });
+}
+
+function isLocalDevelopmentHostname(hostname: string): boolean {
+  return hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname.endsWith('.localhost');
 }

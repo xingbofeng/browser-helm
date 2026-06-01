@@ -9,8 +9,10 @@ import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import { toolMeta } from '../core/tool-meta';
 import type { ToolSpec } from '../core/tool-spec';
 
+const FORM_FILL_AUTH_ATTEMPTS = 5;
+
 const argsSchema = z.object({
-  formRefId: z.string().min(1).optional(),
+  formRefId: z.preprocess((value) => value === null ? undefined : value, z.string().min(1).optional()),
   fields: z.array(z.object({
     fieldRefId: z.string().min(1),
     value: z.string(),
@@ -41,24 +43,7 @@ export function bhFormFillMany(
     argsSchema,
     resultSchema: toolResultSchema,
     async execute(args, ctx) {
-      const grant = await rpc.request({
-        type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
-        action: 'fill',
-        fieldRefIds: args.fields.map((field) => field.fieldRefId),
-        runId: ctx.runId,
-        stepId: ctx.stepId
-      });
-      if (!grant.ok || !('actionToken' in grant)) {
-        const message = grant.ok ? 'form fill authorization failed' : grant.message;
-        return { ok: false, code: grant.ok ? ERROR_CODES.FORM_ACTION_UNAUTHORIZED : grant.code, summary: message, error: { message }, changedPage: false, requiresObserve: false };
-      }
-      const resp = await rpc.request({
-        type: CONTENT_RPC_MESSAGES.FORM_FILL_MANY,
-        targets: args.fields,
-        actionToken: grant.actionToken,
-        runId: ctx.runId,
-        stepId: ctx.stepId
-      });
+      const resp = await authorizeAndFillMany(rpc, args, ctx);
 
       if (!resp.ok) {
         return { ok: false, code: resp.code ?? ERROR_CODES.TOOL_EXECUTION_FAILED, summary: 'batch fill failed', error: { message: 'batch fill failed' }, changedPage: false, requiresObserve: true };
@@ -71,4 +56,63 @@ export function bhFormFillMany(
       return { ok: result.ok, code: result.ok ? ERROR_CODES.OK : ERROR_CODES.TOOL_EXECUTION_FAILED, summary: result.summary, data: result, changedPage: result.changedPage, requiresObserve: result.requiresObserve };
     },
   };
+}
+
+async function authorizeAndFillMany(
+  rpc: ContentRpcClient,
+  args: z.infer<typeof argsSchema>,
+  ctx: { runId: string; stepId: string }
+) {
+  let lastFailure: Awaited<ReturnType<ContentRpcClient['request']>> | undefined;
+  for (let attempt = 0; attempt < FORM_FILL_AUTH_ATTEMPTS; attempt += 1) {
+    const grant = await rpc.request({
+      type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+      action: 'fill',
+      fieldRefIds: args.fields.map((field) => field.fieldRefId),
+      runId: ctx.runId,
+      stepId: ctx.stepId
+    });
+    if (!grant.ok || !('actionToken' in grant)) {
+      return grant;
+    }
+    const resp = await rpc.request({
+      type: CONTENT_RPC_MESSAGES.FORM_FILL_MANY,
+      targets: args.fields,
+      actionToken: grant.actionToken,
+      runId: ctx.runId,
+      stepId: ctx.stepId
+    });
+    if (
+      resp.ok ||
+      !isRetryableTransientFillFailure(resp.code) ||
+      attempt === FORM_FILL_AUTH_ATTEMPTS - 1
+    ) {
+      return resp;
+    }
+    lastFailure = resp;
+    await refreshPageRefsAfterTransientFillFailure(rpc);
+  }
+  return lastFailure ?? {
+    ok: false,
+    code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED,
+    message: 'form fill authorization failed'
+  };
+}
+
+function isRetryableTransientFillFailure(code: string | undefined): boolean {
+  return code === ERROR_CODES.FORM_ACTION_UNAUTHORIZED ||
+    code === ERROR_CODES.TOOL_EXECUTION_FAILED ||
+    code === ERROR_CODES.REF_STALE;
+}
+
+async function refreshPageRefsAfterTransientFillFailure(
+  rpc: ContentRpcClient
+): Promise<void> {
+  await rpc.request({
+    type: CONTENT_RPC_MESSAGES.PAGE_WAIT_UNTIL_STABLE,
+    quietMs: 300
+  }).catch(() => undefined);
+  await rpc.request({
+    type: CONTENT_RPC_MESSAGES.PAGE_OBSERVE
+  });
 }

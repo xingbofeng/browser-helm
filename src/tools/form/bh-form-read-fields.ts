@@ -38,7 +38,45 @@ export function bhFormReadFields(
         submit: data.submit,
         warnings: data.warnings
       });
-      return { ok: true, code: ERROR_CODES.OK, summary: `Read ${data.fields.length} fields`, data: payload, changedPage: false, requiresObserve: false };
+      return {
+        ok: true,
+        code: ERROR_CODES.OK,
+        summary: summarizeFields(data.fields),
+        data: payload,
+        changedPage: false,
+        requiresObserve: false
+      };
     }
   };
+}
+
+function summarizeFields(
+  fields: Array<{
+    refId: string;
+    label?: string | undefined;
+    name?: string | undefined;
+    type: string;
+    required: boolean;
+    disabled: boolean;
+    sensitive: boolean;
+    valuePreview: string;
+  }>
+): string {
+  if (fields.length === 0) {
+    return 'Read 0 fields';
+  }
+  const shown = fields.slice(0, 6).map((field) => {
+    const name = field.label || field.name || '(unnamed)';
+    const flags = [
+      field.required ? 'required' : '',
+      field.disabled ? 'disabled' : '',
+      field.sensitive ? 'sensitive' : '',
+      field.valuePreview ? `value=${field.valuePreview}` : ''
+    ].filter(Boolean).join(', ');
+    return `${field.refId} ${name} type=${field.type}${flags ? ` (${flags})` : ''}`;
+  });
+  const omitted = fields.length > shown.length
+    ? `; +${fields.length - shown.length} more`
+    : '';
+  return `Read ${fields.length} fields: ${shown.join('; ')}${omitted}`;
 }

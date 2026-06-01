@@ -51,7 +51,7 @@ export class DocumentManager {
     const pageCount = countPdfPages(pdfText);
     const pageStart = clampPage(options.pageStart, 1, pageCount);
     const pageEnd = clampPage(options.pageEnd, pageStart, pageCount);
-    const text = extractPdfText(pdfText).trim();
+    const text = extractPdfTextForRange(pdfText, pageStart, pageEnd).trim();
     return {
       sourceUrl: sanitizeUrl(options.url),
       mimeType,
@@ -125,6 +125,62 @@ function extractPdfText(source: string): string {
     ...extractLiteralText(source),
     ...extractHexText(source)
   ].join(' ').replace(/\s+/gu, ' ').trim();
+}
+
+function extractPdfTextForRange(source: string, pageStart: number, pageEnd: number): string {
+  const objects = parsePdfObjects(source);
+  const pages = [...objects.values()]
+    .filter((object) => /\/Type\s*\/Page\b/u.test(object.body))
+    .sort((left, right) => left.offset - right.offset);
+  if (!pages.length) {
+    return extractPdfText(source);
+  }
+  const selectedStreams: string[] = [];
+  for (let index = pageStart - 1; index < pageEnd; index += 1) {
+    const page = pages[index];
+    if (!page) {
+      continue;
+    }
+    for (const objectId of readPageContentObjectIds(page.body)) {
+      const contentObject = objects.get(objectId);
+      const stream = contentObject ? readStreamPayload(contentObject.body) : undefined;
+      if (stream !== undefined) {
+        selectedStreams.push(stream);
+      }
+    }
+  }
+  return extractPdfText(selectedStreams.join('\n'));
+}
+
+function parsePdfObjects(source: string): Map<number, { body: string; offset: number }> {
+  const objects = new Map<number, { body: string; offset: number }>();
+  const objectPattern = /(\d+)\s+\d+\s+obj\b([\s\S]*?)\bendobj\b/gu;
+  for (const match of source.matchAll(objectPattern)) {
+    const id = Number.parseInt(match[1] ?? '', 10);
+    const body = match[2] ?? '';
+    if (Number.isFinite(id)) {
+      objects.set(id, { body, offset: match.index ?? 0 });
+    }
+  }
+  return objects;
+}
+
+function readPageContentObjectIds(pageBody: string): number[] {
+  const content = pageBody.match(/\/Contents\s*(?:\[(?<array>[^\]]+)\]|(?<single>\d+\s+\d+\s+R))/u);
+  const rawRefs = content?.groups?.array ?? content?.groups?.single ?? '';
+  const ids: number[] = [];
+  for (const match of rawRefs.matchAll(/(\d+)\s+\d+\s+R/gu)) {
+    const id = Number.parseInt(match[1] ?? '', 10);
+    if (Number.isFinite(id)) {
+      ids.push(id);
+    }
+  }
+  return ids;
+}
+
+function readStreamPayload(objectBody: string): string | undefined {
+  const match = objectBody.match(/\bstream\r?\n?([\s\S]*?)\r?\n?endstream\b/u);
+  return match?.[1];
 }
 
 function extractLiteralText(source: string): string[] {

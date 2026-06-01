@@ -34,6 +34,9 @@ describe('shadow tools', () => {
       requiresObserve: false,
       data: { shadowRoots: [expect.objectContaining({ hostSelector: '#search-widget' })] }
     });
+    expect(result.summary).toContain('host=#search-widget');
+    expect(result.summary).toContain('interactive=1');
+    expect(result.summary).toContain('Search');
   });
 
   it('queries a selected shadow root without changing page state', async () => {
@@ -67,6 +70,9 @@ describe('shadow tools', () => {
       requiresObserve: false
     });
     expect(JSON.stringify(result.data)).toContain('"hostSelector":"#menu-widget"');
+    expect(result.summary).toContain('#menu-widget');
+    expect(result.summary).toContain('name=Open menu');
+    expect(result.summary).toContain('role=button');
   });
 
   it('registers stable v1.5 shadow tool names', () => {

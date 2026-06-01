@@ -12,12 +12,20 @@ export type RealModelScenarioResult = {
   settings: ProviderSettings;
 };
 
+export type RealModelScenarioContext = {
+  fixtureOrigin: string;
+};
+
+export type RealModelScenarioText =
+  | string
+  | ((context: RealModelScenarioContext) => string);
+
 export type RealModelScenario = {
   id: string;
   title: string;
-  url: string;
+  url: RealModelScenarioText;
   enabledDomains?: string[] | undefined;
-  task: string;
+  task: RealModelScenarioText;
   mode: RunMode;
   runKind: 'answer' | 'form_assist';
   dumpName: string;

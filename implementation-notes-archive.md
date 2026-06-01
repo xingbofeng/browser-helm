@@ -213,3 +213,16 @@
 **待确认**：
 - [ ] 是否为 Deep Inspect 增加跨 CDP 工具结果的持久聚合视图，而不只展示最近一次结果。
 - [ ] 是否把 CDP 真实浏览器验证脚本固化为专门 E2E spec。
+
+## 2026-06-01 主文件瘦身归档摘要
+
+**来源**：`implementation-notes.md` 在 2026-06-01 达到 295 行；继续追加本轮收口记录会超过维护阈值，因此将较早的主文件历史条目收起到本 archive。
+
+**归档范围**：
+- v1.4 Vision / Screenshot Agent：DOM/a11y 为主路径，vision/CDP screenshot 和 pointer fallback 保持安全边界；当时验证包含 typecheck、lint、tool docs 和 vision E2E。
+- v1.5 Advanced Browser Tools 起步与收尾：tab/shadow/download/file/upload/doc/PDF/clipboard 工具按任务相关性与权限动态暴露；本地文件读取、上传 handoff 和剪贴板读写保持 approval。
+- Floating Panel E2E 稳定性修复：只收敛测试等待逻辑，不改变产品运行时。
+- Review P0/P1 收口修复：submit token 绑定 submitTargetRefId/formRefId，PromptBuilder 裁剪 interactive items，README/release hygiene 修正 provider/API key/page-health 描述。
+- v1.6 Domain Adapters：adapter 只提供站点知识、workflow/locator hint 与 failure report，真实动作继续走通用工具、risk 和 approval 边界。
+
+**主文件保留策略**：`implementation-notes.md` 继续保留维护规则、真实模型 E2E 扩展、successCriteria、review 收口、v1.6 adapter review、v1.2-v1.6 当前补全和最终验证记录。

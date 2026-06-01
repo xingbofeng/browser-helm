@@ -80,6 +80,17 @@ const tools: ToolPromptContract[] = [
     readOnly: false,
     requiresApproval: true,
     contextVisibility: 'summary'
+  },
+  {
+    name: 'bh_storage_list',
+    title: 'Storage list',
+    description: 'List web storage',
+    modes: ['advanced'],
+    risk: 'medium',
+    argsSchema: {},
+    readOnly: true,
+    requiresApproval: false,
+    contextVisibility: 'summary'
   }
 ];
 
@@ -280,6 +291,59 @@ describe('core ToolSelector', () => {
     expect(downloadTask.hiddenTools).toContainEqual({
       tool: 'bh_clipboard_write_with_approval',
       reason: 'Clipboard permission is unavailable'
+    });
+  });
+
+  it('exposes storage inspection only for storage tasks with capability and domain consent', () => {
+    const result = selectToolsForRun({
+      mode: 'full',
+      task: '检查 localStorage 里有哪些状态',
+      tools,
+      capabilities: {
+        hasActiveTab: true,
+        hasDebuggerPermission: false,
+        hasClipboardPermission: false,
+        hasDownloadsPermission: false,
+        hasStorageInspection: true,
+        hostPermissions: [],
+        shallowDebugAvailable: true,
+        cdp: 'reserved'
+      },
+      permissions: {
+        allowedDomains: ['example.com'],
+        requireExplicitDomainConsent: true
+      },
+      pageDomain: 'docs.example.com'
+    });
+
+    expect(result.visibleTools).toContain('bh_storage_list');
+  });
+
+  it('hides storage inspection when the storage capability is unavailable', () => {
+    const result = selectToolsForRun({
+      mode: 'full',
+      task: '检查 localStorage',
+      tools,
+      capabilities: {
+        hasActiveTab: true,
+        hasDebuggerPermission: false,
+        hasClipboardPermission: false,
+        hasDownloadsPermission: false,
+        hasStorageInspection: false,
+        hostPermissions: [],
+        shallowDebugAvailable: true,
+        cdp: 'reserved'
+      },
+      permissions: {
+        allowedDomains: ['example.com'],
+        requireExplicitDomainConsent: true
+      },
+      pageDomain: 'docs.example.com'
+    });
+
+    expect(result.hiddenTools).toContainEqual({
+      tool: 'bh_storage_list',
+      reason: 'Storage inspection capability is unavailable'
     });
   });
 

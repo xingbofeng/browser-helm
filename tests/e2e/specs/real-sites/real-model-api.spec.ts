@@ -6,7 +6,7 @@ import {
   resolveProviderConfigWithDotEnvFallback
 } from '../../../../src/agent/model/provider-config';
 import { RealModelScenarioRunner } from '../../flows/real-model-scenario-runner';
-import { realModelScenarios } from '../../real-sites/model-scenarios';
+import { realModelScenarios } from '../../real-cases';
 
 const dotEnvText = [
   readDotEnvFile('.env'),
