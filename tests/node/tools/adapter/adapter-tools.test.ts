@@ -34,7 +34,7 @@ describe('adapter tools', () => {
     expect(adapter?.id).toBe('github');
     expect(adapter?.label).toBe('GitHub');
     expect(readRecord(adapter?.driftStatus)).toMatchObject({
-      status: 'not_checked',
+      status: 'ok',
       genericFallbackReason: 'Use generic browser tools if adapter hints fail drift checks.'
     });
   });

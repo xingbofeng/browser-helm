@@ -381,6 +381,49 @@ describe('content-rpc-handler iframe actions', () => {
     }
   });
 
+  it('allows form action tokens across same-origin SPA URL changes', () => {
+    const happyDOM = (window as unknown as { happyDOM: { setURL(url: string): void } }).happyDOM;
+    const originalUrl = window.location.href;
+    try {
+      happyDOM.setURL('https://docs.example.com/form');
+      document.body.innerHTML = '<input id="name" name="name" type="text" />';
+      const handler = new ContentRpcHandler(document);
+      const snapshot = handler.handle({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
+      if (!snapshot.ok || !('snapshot' in snapshot)) {
+        throw new Error('expected snapshot');
+      }
+      const fieldRefId = snapshot.snapshot.elements.find(
+        (element) => element.tagName === 'input'
+      )?.refId ?? '';
+      const grant = handler.handle({
+        type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+        action: 'fill',
+        fieldRefIds: [fieldRefId],
+        runId: 'run_1',
+        stepId: 'run_1:fill'
+      });
+      if (!grant.ok || !('actionToken' in grant)) {
+        throw new Error('expected form action token');
+      }
+
+      happyDOM.setURL('https://docs.example.com/watch?v=abc123');
+
+      expect(handler.handle({
+        type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
+        fieldRefId,
+        value: 'Alice',
+        actionToken: grant.actionToken,
+        runId: 'run_1',
+        stepId: 'run_1:fill'
+      })).toMatchObject({
+        ok: true
+      });
+      expect((document.getElementById('name') as HTMLInputElement).value).toBe('Alice');
+    } finally {
+      happyDOM.setURL(originalUrl);
+    }
+  });
+
   it('rejects form action tokens for wrong frame, run, step, ref, or expiry', () => {
     vi.useFakeTimers();
     const happyDOM = (window as unknown as { happyDOM: { setURL(url: string): void } }).happyDOM;

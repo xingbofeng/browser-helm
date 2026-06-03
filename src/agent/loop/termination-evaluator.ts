@@ -9,6 +9,7 @@ export type TerminationEvaluationInput = {
   goal: RunSnapshot['goal'];
   taskState: RuntimeTaskState | undefined;
   trace: RuntimeEvent[] | undefined;
+  finalMessage?: string | undefined;
 };
 
 export type TerminationEvaluation = {
@@ -26,7 +27,9 @@ export class TerminationEvaluator {
     );
     return {
       ...finishCriteria,
-      completionEvidence: verifyTaskCompletionBeforeFinish(input.trace)
+      completionEvidence: verifyTaskCompletionBeforeFinish(input.trace, {
+        finalMessage: input.finalMessage
+      })
     };
   }
 }

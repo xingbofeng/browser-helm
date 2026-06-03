@@ -33,10 +33,11 @@ describe('coverage thresholds', () => {
 
     for (const file of securityCriticalThresholds) {
       const fileThreshold = thresholds?.[file] as CoverageThresholds | undefined;
-      expect(typeof fileThreshold?.statements).toBe('number');
-      expect(typeof fileThreshold?.branches).toBe('number');
-      expect(typeof fileThreshold?.functions).toBe('number');
-      expect(typeof fileThreshold?.lines).toBe('number');
+      const expectedBranchThreshold = file === 'src/shared/redaction.ts' ? 90 : 80;
+      expect(fileThreshold?.statements).toBeGreaterThanOrEqual(80);
+      expect(fileThreshold?.branches).toBeGreaterThanOrEqual(expectedBranchThreshold);
+      expect(fileThreshold?.functions).toBeGreaterThanOrEqual(80);
+      expect(fileThreshold?.lines).toBeGreaterThanOrEqual(80);
     }
   });
 });

@@ -233,7 +233,7 @@ class FormFrameStrategy implements ContentRpcStrategy {
     const localMessage = stripFormMessageFrameRefs(message);
     const response = await safeSendFrameMessage(
       this.context,
-      frameId === 0 ? undefined : frameId,
+      frameId,
       localMessage
     );
     return prefixFormResponseFrameRefs(response, frameId);

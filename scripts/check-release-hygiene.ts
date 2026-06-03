@@ -11,6 +11,9 @@ import { execSync } from 'node:child_process';
 const ROOT = process.cwd();
 const COMPLETION_MATRIX_PATH = 'docs/audits/v1-1-v1-6-completion-matrix.md';
 const REQUIRED_COMPLETION_MATRIX_VERSIONS = ['v1.1', 'v1.2', 'v1.3', 'v1.4', 'v1.5', 'v1.6'];
+const RELEASE_PROFILES = ['internal-alpha', 'controlled-beta', 'production'] as const;
+type ReleaseProfile = typeof RELEASE_PROFILES[number];
+const releaseProfile = parseReleaseProfile(process.env.BROWSER_HELM_RELEASE_PROFILE);
 
 // ── Patterns that must be gitignored ──
 const GITIGNORE_PATTERNS = [
@@ -133,9 +136,54 @@ if (existsSync(outputDir)) {
 }
 
 if (!hasError) {
+  const profileErrors = validateReleaseProfile(releaseProfile);
+  for (const error of profileErrors) {
+    console.error(`❌ ${error}`);
+    hasError = true;
+  }
+}
+
+if (!hasError) {
   console.log('✅ Release hygiene check passed.');
+  console.log(`✅ Release profile passed: ${releaseProfile}`);
 } else {
   process.exit(1);
+}
+
+function parseReleaseProfile(value: string | undefined): ReleaseProfile {
+  if (!value) {
+    return 'controlled-beta';
+  }
+  if ((RELEASE_PROFILES as readonly string[]).includes(value)) {
+    return value as ReleaseProfile;
+  }
+  console.error(`❌ Unknown release profile: ${value}`);
+  hasError = true;
+  return 'controlled-beta';
+}
+
+function validateReleaseProfile(profile: ReleaseProfile): string[] {
+  if (profile === 'internal-alpha') {
+    return [];
+  }
+  const errors: string[] = [];
+  if (profile === 'production') {
+    if (process.env.BROWSER_HELM_REAL_MODEL_E2E_VERIFIED !== '1') {
+      errors.push('Production profile requires real-model E2E verification.');
+    }
+    if (!sourceContains('src/agent/loop/context-assembler.ts', 'requireExplicitDomainConsent: true')) {
+      errors.push('Production profile requires provider-context domain consent gate.');
+    }
+    if (!sourceContains('vitest.config.ts', 'branches: 80') || !sourceContains('vitest.config.ts', 'branches: 90')) {
+      errors.push('Production profile requires security-critical coverage thresholds.');
+    }
+  }
+  return errors;
+}
+
+function sourceContains(file: string, needle: string): boolean {
+  const fullPath = resolve(ROOT, file);
+  return existsSync(fullPath) && readFileSync(fullPath, 'utf8').includes(needle);
 }
 
 function isForbiddenOutputPath(file: string): boolean {

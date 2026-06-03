@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { WorkflowRepo } from '../../../src/storage/workflow-repo';
+import {
+  evaluateWorkflowPostconditions,
+  evaluateWorkflowPreconditionResults,
+  WorkflowRepo
+} from '../../../src/storage/workflow-repo';
 import type { WorkflowRepoPersistence } from '../../../src/storage/browser-helm-db';
 
 describe('WorkflowRepo', () => {
@@ -102,6 +106,60 @@ describe('WorkflowRepo', () => {
       'tool_manifest_hash',
       'adapter_version'
     ]));
+  });
+
+  it('evaluates structured workflow invariants for URL, text, form value, and adapter signals', () => {
+    const repo = new WorkflowRepo();
+    const workflow = repo.save({
+      domain: 'app.example.com',
+      preconditions: [
+        { kind: 'url', id: 'billing-url', pattern: 'https://app.example.com/billing/*' },
+        { kind: 'text', id: 'billing-copy', text: 'Monthly invoice' },
+        { kind: 'form_value', id: 'period-value', name: 'period', value: 'June' },
+        { kind: 'adapter_signal', id: 'adapter-ok', signal: 'url_domain_match', expected: true }
+      ],
+      postconditions: [
+        { kind: 'text', id: 'downloaded-copy', text: 'Downloaded monthly invoice' }
+      ],
+      intent: 'Download monthly invoice',
+      taskDescription: 'Open billing and download the monthly invoice',
+      steps: [{
+        id: 'step_1',
+        tool: 'bh_page_observe',
+        summary: 'Observe billing page',
+        risk: 'safe',
+        requiresApproval: false
+      }]
+    });
+
+    const precheck = evaluateWorkflowPreconditionResults(workflow, {
+      domain: 'app.example.com',
+      url: 'https://app.example.com/billing/june',
+      visibleTextSummary: 'Monthly invoice',
+      formValues: [{ name: 'period', value: 'June' }],
+      adapterSignals: { url_domain_match: true }
+    });
+    expect(precheck).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'billing-url', kind: 'url', status: 'pass' }),
+      expect.objectContaining({ id: 'period-value', kind: 'form_value', status: 'pass' }),
+      expect.objectContaining({ id: 'adapter-ok', kind: 'adapter_signal', status: 'pass' })
+    ]));
+
+    const postcheck = evaluateWorkflowPostconditions(workflow, {
+      domain: 'app.example.com',
+      url: 'https://app.example.com/billing/june',
+      visibleTextSummary: 'Still processing',
+      formValues: [{ name: 'period', value: 'July' }],
+      adapterSignals: { url_domain_match: false }
+    });
+    expect(postcheck).toEqual([
+      expect.objectContaining({
+        id: 'downloaded-copy',
+        kind: 'text',
+        status: 'fail',
+        reason: 'text_not_found'
+      })
+    ]);
   });
 
   it('redacts secret-looking workflow args and tags before storage', () => {

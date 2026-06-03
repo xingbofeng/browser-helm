@@ -16,4 +16,8 @@ describe('package scripts', () => {
   it('includes release hygiene in the release check gate', () => {
     expect(packageJson.scripts?.['check:release']).toContain('npm run check:release-hygiene');
   });
+
+  it('includes manifest permission audit in the release check gate', () => {
+    expect(packageJson.scripts?.['check:release']).toContain('npm run check:manifest-permissions');
+  });
 });

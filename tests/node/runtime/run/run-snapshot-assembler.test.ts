@@ -143,7 +143,7 @@ describe('snapshotFromObserveResult', () => {
       workflowCount: 1,
       locatorCount: 1,
       driftStatus: {
-        status: 'not_checked',
+        status: 'ok',
         genericFallbackReason: 'Use generic browser tools if adapter hints fail drift checks.'
       },
       approvalEnforced: true
@@ -371,6 +371,12 @@ describe('fallbackSnapshotFields', () => {
     expect(fields.goal).toBeDefined();
     expect(fields.plan).toBeDefined();
     expect(fields.debugReport?.title).toContain('Form Doctor');
+    expect(fields.capabilities).toMatchObject({
+      hasDebuggerPermission: false,
+      hasClipboardPermission: false,
+      hasDownloadsPermission: false,
+      shallowDebugAvailable: false
+    });
   });
 
   it('generates fallback debug diagnostic fields', () => {

@@ -1,6 +1,6 @@
 import type {
   DecideApprovalInput,
-  ExecuteToolInput,
+  PublicExecuteToolInput,
   RuntimeEvent,
   RuntimeProviderSettings,
   RuntimeProviderTestResult,
@@ -19,7 +19,7 @@ export interface RuntimePort {
   cancelRun(runId: string): Promise<void>;
   reviseGoal(input: ReviseGoalInput): Promise<RunSnapshot>;
   highlightRef(input: HighlightRefInput): Promise<RuntimeToolExecutionResult>;
-  executeTool(input: ExecuteToolInput): Promise<RuntimeToolExecutionResult>;
+  executeTool(input: PublicExecuteToolInput): Promise<RuntimeToolExecutionResult>;
   sendUserReply(runId: string, message: string): Promise<void>;
   getRunSnapshot(runId: string): Promise<RunSnapshot>;
   subscribeRun(runId: string, listener: (event: RuntimeEvent) => void): () => void;

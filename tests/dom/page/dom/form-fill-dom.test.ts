@@ -268,6 +268,15 @@ describe('fillSingleField', () => {
     expect((document.querySelector('input') as HTMLInputElement).value).toBe('');
   });
 
+  it('fills text combobox fields when the task provides literal text', () => {
+    setupPage('<input type="search" role="combobox" aria-autocomplete="list" name="search_query" aria-label="Search">');
+    const input = document.querySelector('input') as HTMLInputElement;
+    const refId = reg(input, { name: 'Search', role: 'combobox' });
+    const r = fillSingleField(document, refMap, { fieldRefId: refId, value: 'keyboard accessibility tutorial' });
+    expect(r.status).toBe('filled');
+    expect(input.value).toBe('keyboard accessibility tutorial');
+  });
+
   it('skips rich editor plugin surfaces while still allowing plain contenteditable fields', () => {
     setupPage('<div contenteditable="true" class="ProseMirror"></div>');
     const refId = reg(document.querySelector('div')!, { name: 'editor' });

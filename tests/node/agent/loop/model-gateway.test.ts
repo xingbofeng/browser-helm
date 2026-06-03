@@ -54,4 +54,55 @@ describe('ModelGateway', () => {
     expect(JSON.stringify(trace)).toContain('[MASKED]');
     expect(JSON.stringify(trace)).not.toContain('sk-secret-key');
   });
+
+  it('returns a failed decision when streaming and fallback completion both fail', async () => {
+    const trace: RuntimeEvent[] = [];
+    const record: RunRecord = {
+      task: '检查页面',
+      mode: 'ask',
+      trace
+    };
+    const gateway = new ModelGateway({
+      appendTrace: (target, event) => {
+        target.trace.push(event);
+      },
+      updateStreaming: vi.fn()
+    });
+    const client: ModelClient = {
+      complete: vi.fn(async () => {
+        throw new Error('Model request failed with status 402: endpoint is inactive: FREE_QUOTA_EXHAUSTED sk-secret-key');
+      }),
+      streamComplete: vi.fn(async () => {
+        throw new Error('Model stream request failed with status 402: endpoint is inactive: FREE_QUOTA_EXHAUSTED sk-secret-key');
+      })
+    };
+
+    const output = await gateway.requestDecision({
+      client,
+      settings: {
+        baseUrl: 'https://tokenhub.tencentmaas.com/v1',
+        model: 'deepseek-v4-flash',
+        streamingEnabled: true
+      },
+      runId: 'run_1',
+      record,
+      stepIndex: 0,
+      messages: []
+    });
+
+    expect(JSON.parse(output?.text ?? '{}')).toMatchObject({
+      type: 'fail',
+      code: 'MODEL_REQUEST_FAILED'
+    });
+    expect(output?.text).toContain('FREE_QUOTA_EXHAUSTED');
+    expect(output?.text).not.toContain('sk-secret-key');
+    expect(trace.map((event) => event.type)).toEqual([
+      TRACE_EVENT_NAMES.MODEL_STREAM_STARTED,
+      TRACE_EVENT_NAMES.MODEL_STREAM_FAILED,
+      TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_STARTED,
+      TRACE_EVENT_NAMES.MODEL_STREAM_FAILED
+    ]);
+    expect(JSON.stringify(trace)).toContain('FREE_QUOTA_EXHAUSTED');
+    expect(JSON.stringify(trace)).not.toContain('sk-secret-key');
+  });
 });

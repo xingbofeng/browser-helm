@@ -319,13 +319,24 @@ export class PageObservationFlow {
     });
     const refId = `frame_${detailsRef.frameId}:${detailsRef.innerRefId}`;
 
-    const click = await sidePanel.executeTool({
+    const clickRequest = await sidePanel.executeTool({
       runId: snapshot.runId,
       tool: TOOL_NAMES.ACTION_CLICK,
       args: {
-        refId,
-        source: 'agent'
+        refId
       }
+    });
+    expect(clickRequest).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.APPROVAL_REQUIRED,
+      requiresApproval: true
+    });
+    const waiting = await sidePanel.snapshot(snapshot.runId);
+    const click = await sidePanel.decideApproval({
+      runId: snapshot.runId,
+      requestId: requireApprovalId(waiting.pendingApproval?.id),
+      decision: 'approved',
+      reason: 'e2e approve first public iframe click'
     });
 
     expect(click).toMatchObject({
@@ -401,6 +412,13 @@ export class PageObservationFlow {
   async close(): Promise<void> {
     await this.flowContext.close();
   }
+}
+
+function requireApprovalId(value: string | undefined): string {
+  if (!value) {
+    throw new Error('Expected a pending approval id');
+  }
+  return value;
 }
 
 export function findFrameRef(

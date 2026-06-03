@@ -40,6 +40,10 @@ _避免使用_：frame page、embedded page、sub-document
 可以读取滚动状态或执行滚动的上下文，可以是顶层页面，也可以是 iframe 页面。滚动属于低风险视口变更，不等同于点击、输入或提交等业务动作。
 _避免使用_：frame scroll、page mutation
 
+**Domain Adapter / 站点适配器**：
+面向高价值站点的非执行型站点增强，提供 guidance、workflow template、locator hint、failure report 和 policy composition 证据；真实页面动作仍必须通过通用 ToolRouter、runtime authorization、approval coordinator 和 verifier。
+_避免使用_：site executor、private API adapter、approval bypass
+
 **Tool-calling User Task Path / 工具调用型用户任务路径**：
 用户主动提交的任务必须进入 AgentLoop，由模型基于工具结果迭代决策；不能只基于一次页面 snapshot 摘要直接生成 provider 回答。
 _避免使用_：snapshot answer path、provider-only answer
@@ -135,6 +139,7 @@ _避免使用_：empty reason、unsupported
 - **Long Page Reading / 长页面读取** 用于弥补 bounded observation 的上下文上限；默认仍通过摘要和分页 chunk 控制模型上下文，不代表无限制读取完整 DOM。
 - **Iframe Page / iframe 页面** 是页面级读取对象；iframe 内的具体按钮、输入框等仍属于元素语义，使用 element 工具和 stable ref。
 - **Viewport Scroll Context / 视口滚动上下文** 负责页面或 iframe 的滚动状态与滚动动作；不单独引入 frame scroll 语义。
+- **Domain Adapter / 站点适配器** 只增强站点理解和候选流程，不直接执行页面动作；adapter workflow 的高风险步骤仍走全局 approval policy。
 - **Tool-calling User Task Path / 工具调用型用户任务路径** 是用户任务主路径；内部自动观察或 deterministic diagnostic fallback 不能替代用户任务 AgentLoop。
 - **Tab Data** 供 **Cockpit UI / 驾驶舱 UI** 和 runtime snapshot 使用；Agent context 只接收从 Tab Data 裁剪出的摘要。
 - **Interactive Tab Data** 和 **Form Fields Tab Data** 只负责识别与诊断页面结构，不判断动作是否可以安全执行。

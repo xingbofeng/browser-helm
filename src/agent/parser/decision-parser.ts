@@ -227,5 +227,52 @@ function normalizeZodError(error: ZodError): {
 function extractJsonObjectText(rawText: string): string {
   const trimmed = rawText.trim();
   const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return fenced?.[1]?.trim() ?? trimmed;
+  const candidate = fenced?.[1]?.trim() ?? trimmed;
+  if (!candidate.startsWith('{')) {
+    return candidate;
+  }
+  const objectEnd = firstJsonObjectEnd(candidate);
+  return objectEnd === undefined ? candidate : candidate.slice(0, objectEnd + 1);
+}
+
+function firstJsonObjectEnd(value: string): number | undefined {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+    if (char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char !== '}') {
+      continue;
+    }
+    depth -= 1;
+    if (depth === 0) {
+      return index;
+    }
+  }
+
+  return undefined;
 }

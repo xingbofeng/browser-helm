@@ -1,4 +1,4 @@
-import { Camera, Eye } from 'lucide-react';
+import { Camera, Download, Eye } from 'lucide-react';
 
 import type { ScreenshotCapture, VisionObservation } from '../../shared/schemas/vision';
 import { useT } from '../../i18n/context';
@@ -87,7 +87,18 @@ export function VisionPanel({
       ) : null}
       {screenshot?.dataUrl ? (
         <figure className="bh-visionShotPreview">
-          <img src={screenshot.dataUrl} alt={t('vision.panel.screenshotAlt')} />
+          <div className="bh-visionShotFrame">
+            <img src={screenshot.dataUrl} alt={t('vision.panel.screenshotAlt')} />
+            <a
+              className="bh-visionShotDownload"
+              href={screenshot.dataUrl}
+              download={screenshotDownloadName(screenshot)}
+              aria-label={t('vision.panel.downloadScreenshot')}
+              title={t('vision.panel.downloadScreenshot')}
+            >
+              <Download size={14} />
+            </a>
+          </div>
           <figcaption>{t('vision.panel.previewNote')}</figcaption>
         </figure>
       ) : null}
@@ -110,6 +121,12 @@ export function VisionPanel({
       <VisionPointerFallback observation={observation} />
     </section>
   );
+}
+
+function screenshotDownloadName(screenshot: VisionScreenshotMeta): string {
+  const mode = screenshot.mode ?? 'viewport';
+  const extension = screenshot.mimeType === 'image/jpeg' ? 'jpg' : 'png';
+  return `browserhelm-${mode}-screenshot.${extension}`;
 }
 
 function VisionList({ title, items }: { title: string; items: string[] }) {

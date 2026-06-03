@@ -6,6 +6,7 @@ export type ProviderSettings = {
   baseUrl: string;
   model: string;
   apiKey?: string;
+  apiKeyPersistence?: 'session' | 'local';
   streamingEnabled?: boolean;
   allowLocalProviderEndpoints?: boolean;
 };

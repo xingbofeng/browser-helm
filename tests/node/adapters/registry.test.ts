@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { defaultDomainAdapterRegistry } from '../../../src/adapters/registry';
+import { DomainAdapterRegistry, defaultDomainAdapterRegistry } from '../../../src/adapters/registry';
 import { defaultDomainAdapterPreferences } from '../../../src/adapters/preferences';
+import { githubAdapter } from '../../../src/adapters/github';
 
 const adapterUrls = {
   github: 'https://github.com/openai/browser-helm/issues',
@@ -75,10 +76,42 @@ describe('domain adapter registry', () => {
       expect(detection.adapter.supportedUrlPatterns.length).toBeGreaterThan(0);
       expect(detection.adapter.requiredSignals).toContain('url_domain_match');
       expect(detection.adapter.driftStatus).toMatchObject({
-        status: 'not_checked',
+        status: 'ok',
+        checks: [
+          expect.objectContaining({
+            requiredSignal: 'url_domain_match',
+            status: 'pass'
+          })
+        ],
+        missingSignals: [],
         genericFallbackReason: 'Use generic browser tools if adapter hints fail drift checks.'
       });
     }
+  });
+
+  it('marks drift suspected when observed page signals contradict required adapter signals', () => {
+    const registry = new DomainAdapterRegistry([githubAdapter]);
+    const detection = registry.detect(adapterUrls.github, {
+      observedSignals: {
+        url_domain_match: false
+      }
+    });
+
+    expect(detection.enabled).toBe(true);
+    if (!detection.enabled) {
+      throw new Error('Expected GitHub adapter detection');
+    }
+    expect(detection.adapter.driftStatus).toMatchObject({
+      status: 'drift_suspected',
+      checks: [
+        expect.objectContaining({
+          requiredSignal: 'url_domain_match',
+          status: 'fail'
+        })
+      ],
+      missingSignals: ['url_domain_match'],
+      genericFallbackReason: 'Use generic browser tools if adapter hints fail drift checks.'
+    });
   });
 
   it.each(Object.entries(adapterUrls))('keeps %s adapter skeleton executable through metadata only', (adapterId, url) => {

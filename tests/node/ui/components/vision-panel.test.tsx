@@ -187,6 +187,9 @@ describe('VisionPanel', () => {
 
     expect(captures).toBe(1);
     expect(container.querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,preview');
+    const downloadLink = container.querySelector<HTMLAnchorElement>('a[download]');
+    expect(downloadLink?.getAttribute('href')).toBe('data:image/png;base64,preview');
+    expect(downloadLink?.getAttribute('aria-label')).toBe('下载截图');
     expect(container.textContent).toContain('截图已捕获');
     expect(container.textContent).toContain('800 x 600');
     await unmountRoot(root);

@@ -10,6 +10,8 @@ import {
   defaultWorkflowRepo,
   evaluateWorkflowCompletionEvidence,
   evaluateWorkflowPreconditions,
+  evaluateWorkflowPostconditions,
+  evaluateWorkflowPreconditionResults,
   type WorkflowPreviewContext
 } from '../../../../../../storage/workflow-repo';
 import { snapshotToolResult } from '../../../run-snapshot-assembler';
@@ -39,7 +41,12 @@ export class WorkflowReplayApprovalFlow implements ToolApprovalFlow {
       return this.finish(input, unavailableResult('Run is not available for workflow replay'), record);
     }
     const workflowId = workflowIdFromPendingAction(pendingAction) ??
-      workflowIdFromPendingAction({ runId: input.runId, tool: input.tool, args: approvalArgsFromSnapshot(this.deps.getSnapshot(input.runId)) });
+      workflowIdFromPendingAction({
+        runId: input.runId,
+        tool: input.tool,
+        args: approvalArgsFromSnapshot(this.deps.getSnapshot(input.runId)),
+        source: 'runtime'
+      });
     if (!workflowId) {
       return this.finish(input, unavailableResult('Workflow replay request is missing workflow id'), record);
     }
@@ -48,17 +55,21 @@ export class WorkflowReplayApprovalFlow implements ToolApprovalFlow {
       return this.finish(input, unavailableResult('Workflow not found for replay'), record);
     }
 
-    const preconditionFailures = evaluateWorkflowPreconditions(
-      workflow,
-      workflowContextFromSnapshot(this.deps.getSnapshot(input.runId))
-    );
+    const precheckContext = workflowContextFromSnapshot(this.deps.getSnapshot(input.runId));
+    const preconditionFailures = evaluateWorkflowPreconditions(workflow, precheckContext);
+    const preconditionResults = evaluateWorkflowPreconditionResults(workflow, precheckContext);
     if (preconditionFailures.length > 0) {
       defaultWorkflowRepo.score(workflow.id, 'failed');
       return this.finish(
         input,
         failedResult(
           ERROR_CODES.WORKFLOW_PRECONDITION_FAILED,
-          `Workflow replay preconditions failed: ${preconditionFailures.join(', ')}`
+          `Workflow replay preconditions failed: ${preconditionFailures.join(', ')}`,
+          {
+            workflowId: workflow.id,
+            preconditionResults,
+            missingEvidence: preconditionFailures
+          }
         ),
         record
       );
@@ -77,7 +88,8 @@ export class WorkflowReplayApprovalFlow implements ToolApprovalFlow {
       const result = await this.deps.executeTool({
         runId: input.runId,
         tool: step.tool,
-        args
+        args,
+        source: 'runtime'
       });
       if (result.requiresApproval) {
         return result;
@@ -88,17 +100,21 @@ export class WorkflowReplayApprovalFlow implements ToolApprovalFlow {
       }
     }
 
-    const missingEvidence = evaluateWorkflowCompletionEvidence(
-      workflow,
-      workflowContextFromSnapshot(this.deps.getSnapshot(input.runId))
-    );
+    const postcheckContext = workflowContextFromSnapshot(this.deps.getSnapshot(input.runId));
+    const postconditionResults = evaluateWorkflowPostconditions(workflow, postcheckContext);
+    const missingEvidence = evaluateWorkflowCompletionEvidence(workflow, postcheckContext);
     if (missingEvidence.length > 0) {
       defaultWorkflowRepo.score(workflow.id, 'failed');
       return this.finish(
         input,
         failedResult(
           ERROR_CODES.WORKFLOW_POSTCONDITION_FAILED,
-          `Workflow replay postconditions failed: ${missingEvidence.join(', ')}`
+          `Workflow replay postconditions failed: ${missingEvidence.join(', ')}`,
+          {
+            workflowId: workflow.id,
+            postconditionResults,
+            missingEvidence
+          }
         ),
         record
       );
@@ -125,7 +141,8 @@ export class WorkflowReplayApprovalFlow implements ToolApprovalFlow {
       summary: `Workflow replay completed: ${workflow.intent}`,
       data: {
         workflowId: workflow.id,
-        stepCount: workflow.steps.length
+        stepCount: workflow.steps.length,
+        postconditionResults
       },
       changedPage: false,
       requiresObserve: false
@@ -196,11 +213,12 @@ function unavailableResult(message: string): ToolResult {
   };
 }
 
-function failedResult(code: string, message: string): ToolResult {
+function failedResult(code: string, message: string, data?: unknown): ToolResult {
   return {
     ok: false,
     code,
     summary: message,
+    ...(data === undefined ? {} : { data }),
     changedPage: false,
     requiresObserve: false,
     error: { message }
@@ -222,7 +240,8 @@ function workflowContextFromSnapshot(snapshot: RunSnapshot): WorkflowPreviewCont
       refId: ref.refId,
       role: ref.role,
       name: ref.name,
-      tagName: ref.tagName
+      tagName: ref.tagName,
+      disabled: 'disabled' in ref ? ref.disabled : undefined
     })),
     toolManifestHash: TOOL_MANIFEST_MODULES_HASH,
     adapter: snapshot.domainAdapter?.enabled
@@ -230,6 +249,14 @@ function workflowContextFromSnapshot(snapshot: RunSnapshot): WorkflowPreviewCont
           id: snapshot.domainAdapter.id,
           ...(snapshot.domainAdapter.version ? { version: snapshot.domainAdapter.version } : {})
         }
-      : undefined
+      : undefined,
+    adapterSignals: snapshot.domainAdapter?.enabled
+      ? { url_domain_match: snapshot.domainAdapter.driftStatus?.status !== 'drift_suspected' }
+      : undefined,
+    formValues: snapshot.structuredPageData?.forms.items.map((field) => ({
+      refId: field.refId,
+      ...(field.name ? { name: field.name } : {}),
+      value: field.writable?.actualValue ?? field.valuePreview
+    }))
   };
 }

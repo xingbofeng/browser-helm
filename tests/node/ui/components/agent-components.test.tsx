@@ -681,8 +681,89 @@ describe('agent side panel components', () => {
     const savedSettings = (onSave.mock.calls as unknown as Array<[unknown]>)[0]?.[0];
     expect(savedSettings).toMatchObject({
       apiKey: 'sk-new-secret',
+      apiKeyPersistence: 'session',
       streamingEnabled: true
     });
+    await unmountRoot(root);
+    container.remove();
+  });
+
+  it('requires explicit local persistence choice before saving provider API keys locally', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const onSave = vi.fn(() => Promise.resolve());
+
+    await act(async () => {
+      root.render(
+        <I18nProvider>
+          <ModelConfigForm
+            settings={{
+              baseUrl: 'https://api.example.com/v1',
+              model: 'gpt-test',
+              apiKey: 'sk-existing-secret',
+              apiKeyPersistence: 'local'
+            }}
+            maskedApiKey="sk-...cret"
+            onClose={() => undefined}
+            onSave={onSave}
+            onTest={() => Promise.resolve({
+              ok: true,
+              code: 'OK',
+              message: '连接正常'
+            })}
+          />
+        </I18nProvider>
+      );
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('API key storage');
+    expect(container.textContent).toContain('Current browser session');
+    expect(container.textContent).toContain('Persist on this device');
+    expect(container.textContent).toContain('Local persistence keeps the key in extension storage');
+
+    await act(async () => {
+      button('保存配置', container).click();
+      await Promise.resolve();
+    });
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      apiKeyPersistence: 'local'
+    }));
+    await unmountRoot(root);
+    container.remove();
+  });
+
+  it('warns when session-stored provider API key is no longer available', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <I18nProvider>
+          <ModelConfigForm
+            settings={{
+              baseUrl: 'https://tokenhub.tencentmaas.com/v1/',
+              model: 'deepseek-v4-flash-202605',
+              apiKeyPersistence: 'session',
+              streamingEnabled: true
+            }}
+            onClose={() => undefined}
+            onSave={() => Promise.resolve()}
+            onTest={() => Promise.resolve({
+              ok: false,
+              code: 'PROVIDER_NOT_CONFIGURED',
+              message: 'missing key'
+            })}
+          />
+        </I18nProvider>
+      );
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('当前只保存了 Base URL/Model，API Key 不在会话存储中');
     await unmountRoot(root);
     container.remove();
   });

@@ -33,7 +33,8 @@ describe('TerminationEvaluator', () => {
     const result = new TerminationEvaluator().evaluateFinish({
       goal,
       taskState,
-      trace
+      trace,
+      finalMessage: 'I do not have enough evidence from the page to explain the fix.'
     });
 
     expect(result.goal).toMatchObject({
@@ -41,6 +42,50 @@ describe('TerminationEvaluator', () => {
       unsatisfiedCriteria: ['给出修复建议']
     });
     expect(result.unmetCriteria).toEqual(['给出修复建议']);
-    expect(result.completionEvidence).toEqual({ ok: true });
+    expect(result.completionEvidence).toMatchObject({
+      ok: true,
+      status: 'unknown',
+      verifier: 'answer',
+      nextAction: 'finish'
+    });
+  });
+
+  it('returns a continue action when semantic completion evidence is missing', () => {
+    const result = new TerminationEvaluator().evaluateFinish({
+      goal: undefined,
+      taskState: undefined,
+      finalMessage: 'The click is complete.',
+      trace: [
+        {
+          runId: 'run_1',
+          type: TRACE_EVENT_NAMES.TOOL_RESULT,
+          payload: {
+            tool: 'bh_action_click',
+            ok: true,
+            code: 'OK',
+            summary: 'Clicked',
+            changedPage: true,
+            requiresObserve: true
+          }
+        },
+        {
+          runId: 'run_1',
+          type: TRACE_EVENT_NAMES.TOOL_RESULT,
+          payload: {
+            tool: 'bh_page_observe',
+            ok: true,
+            code: 'OK',
+            summary: 'Observed'
+          }
+        }
+      ]
+    });
+
+    expect(result.completionEvidence).toMatchObject({
+      ok: false,
+      status: 'unknown',
+      nextAction: 'continue',
+      verifier: 'click_effect'
+    });
   });
 });

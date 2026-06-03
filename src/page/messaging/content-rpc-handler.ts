@@ -73,7 +73,6 @@ type FormActionGrant = {
   submitTargetRefId?: string | undefined;
   frameId: number;
   origin: string;
-  documentId: string;
   createdAt: number;
   expiresAt: number;
   runId: string;
@@ -818,7 +817,6 @@ export class ContentRpcHandler {
       submitTargetRefId,
       frameId,
       origin: metadata.origin,
-      documentId: metadata.url,
       createdAt: now,
       expiresAt: now + FORM_ACTION_TOKEN_TTL_MS,
       runId,
@@ -862,7 +860,7 @@ export class ContentRpcHandler {
       return undefined;
     }
     const metadata = readPageMetadata(this.document);
-    if (resolvedGrant.origin !== metadata.origin || resolvedGrant.documentId !== metadata.url) {
+    if (resolvedGrant.origin !== metadata.origin) {
       return undefined;
     }
     this.consumedFormActionTokens.add(token);

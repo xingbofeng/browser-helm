@@ -1,3 +1,13 @@
+## v1.1-v1.6 P0 安全收口首批 - 2026-06-01
+
+**目标**：按外部审计先闭合可独立验证的发布阻断：Full mode 审批语义、表单动作 capability token、工具注册覆盖，以及执行层授权入口。
+
+**设计决策**：Full mode 只扩大工具可见性，不绕过高风险审批；form action token 改为 content handler 内存 nonce，Map miss 直接拒绝；`ToolRegistry.register()` 遇到重名直接抛错；新增 `AuthorizationService` 并接入 `ToolExecutionService`，后续继续扩展 domain/capability/user-intent 判断。
+
+**偏差说明**：本轮只完成 AuthorizationService 第一版，尚未补齐 `changedPageExpected`、`source`、`domainPolicy` 和 `USER_INTENT_MISMATCH` 等完整上下文字段；form token 尚未绑定 frame/origin，后续继续补。
+
+**验证结果**：`npx vitest run tests/node/agent/prompts/safety-policy-prompt.test.ts tests/node/i18n/t.test.ts tests/node/runtime/run/tools/tool-runtime-policy.test.ts tests/node/runtime/run/security/authorization-service.test.ts tests/node/runtime/run/tools/tool-execution-service.test.ts tests/dom/page/messaging/content-rpc-handler.test.ts tests/node/tools/core/tool-registry.test.ts` 通过：7 files / 58 tests；`npm run typecheck` 通过。
+
 ## Full 模式与 Agent Loop 目录收敛 - 2026-05-31
 
 **目标**：新增 Full Run Mode，并把真实 Agent loop 收敛到更直白的 `src/agent/loop/`。
@@ -226,3 +236,121 @@
 - v1.6 Domain Adapters：adapter 只提供站点知识、workflow/locator hint 与 failure report，真实动作继续走通用工具、risk 和 approval 边界。
 
 **主文件保留策略**：`implementation-notes.md` 继续保留维护规则、真实模型 E2E 扩展、successCriteria、review 收口、v1.6 adapter review、v1.2-v1.6 当前补全和最终验证记录。
+
+## 2026-06-01 主文件第二次瘦身归档摘要
+
+**来源**：`implementation-notes.md` 在 2026-06-01 再次达到 309 行；继续追加 P0 approval coordinator 记录前，将较早的真实模型 E2E 扩展与 successCriteria 门控记录迁移到 archive。
+
+**归档范围**：
+- 真实站点与真实模型 E2E 扩展：`test:e2e:real` 默认走真实模型 suite，12 个真实站点覆盖 provider streaming、model decision、正文/可见文本读取、低风险字段填写和 trace 落盘；第三方写入场景仍需显式 domain policy。
+- successCriteria 完成门控审查修复：显式 successCriteria 在 observe/fallback 和模型 finish 时保留并作为硬门控，不满足时 run 转为 `waiting_for_user`；默认 mode criteria 仍作为提示以保持 ask/observe 兼容。
+- Review P1/P2 全量审查补齐：ToolSelector 与 direct `executeTool` 对普通外部域名写入/诊断 hook 要求 explicit consent，prompt tool schema 改为紧凑摘要，manifest 移除 `assets/*` web-accessible 暴露，并新增本地 `setup:pre-push` 入口。
+
+**主文件保留策略**：`implementation-notes.md` 继续保留维护规则、review 收口、v1.6 adapter review、v1.2-v1.6 当前补全、最终验证和正在推进的 P0 安全闭环记录。
+
+## 2026-06-02 主文件第三次瘦身归档摘要
+
+**来源**：`implementation-notes.md` 在继续推进 P0-1.6 前为 293 行；为给新的 approval coordinator 记录留出空间，将 2026-06-01 较早的 v1.6 adapter review、v1.2-v1.6 验收补齐、真实模型 E2E 拆分与最终验证记录归档为摘要。
+
+**归档范围**：
+- v1.6 Domain Adapter Review：adapter 禁用后 registry/snapshot/prompt 回退到 generic，workflow failure 自动记录，Cockpit enabled 状态有 E2E 覆盖。
+- v1.2-v1.5 验收补齐：同域 workflow preview/replay、成功 run workflow draft 和 iframe 公共点击真实写动作补齐。
+- 真实模型 E2E 分层与长对话拆分：24 个真实模型场景按 P0/P1/P2 聚合，真实站点长任务拆入独立 scenario runner。
+- v1.2-v1.6 Review/最终验证：domain policy、workflow replay approval、PDF 页码范围、self-approval 工具边界和真实模型/扩展回归均完成当轮验证。
+
+**主文件保留策略**：`implementation-notes.md` 继续保留维护规则、当前 P0/P1/P2 严格验收、近期用户反馈修复和正在推进的 P0 安全闭环记录。
+
+## 2026-06-02 主文件第四次瘦身归档摘要
+
+**来源**：`implementation-notes.md` 在完成 v1.2 Task 3.2 前为 293 行；为继续追加当前 v1.2 收口记录，将较早的 Advanced Storage 与分层 Domain Policy 详细记录归档为摘要。
+
+**归档范围**：
+- Advanced Storage 与分层 Domain Policy：`bh_storage_list/get` 只读脱敏，`bh_storage_set/delete/clear_with_approval` 通过 `StorageApprovalFlow` 审批后执行，storage mutation 不泄露原始值。
+- Domain operation policy：observe 允许普通域只读注入；debug hook、form fill、submit/storage read 和 advanced action 默认要求显式 domain consent。
+- 当轮验证曾覆盖 storage 工具、content RPC、approval flow、扩展 E2E、typecheck、build、lint、release hygiene 和真实模型失败用例定向回归。
+- v1.2 Task 3.2 memory trust 与隐私控制：MemoryRepo 保存和 lookup 要求非空 domain；无 domain 时不注入 memory/workflow/scratchpad；MemoryViewer 增加 clear all 并接入 side panel；secret-looking task/summary/tags/workflow args 通过 redaction 保证 password/token/OTP/payment/provider key/clipboard text 不落 raw 值。
+
+**主文件保留策略**：`implementation-notes.md` 继续保留维护规则、近期用户反馈修复、P0 安全闭环和当前 v1.1/v1.2 completion task 记录。
+
+## GitHub CI 单测隔离修复 - 2026-06-01
+
+**目标**：修复 GitHub Actions `CI / Typecheck, Lint & Unit Tests` 在 `tests/node/ui/components/agent-components.test.tsx` 中偶发点错 Debug drawer 按钮，导致 Vision tab 断言失败。
+
+**设计决策**：将该测试文件的 `button()` helper 改为支持传入当前 `container`，涉及 Debug drawer 和 model config 的点击都限定在当前 render 容器内；同时新增 `openDebugDrawer()`，若 Debug tabs 已因 `localStorage` 持久化处于展开状态，则不再重复点击标题导致反向关闭。
+
+**偏差说明**：未改产品组件行为；这是测试隔离修复。
+
+**权衡分析**：
+- 方案一：调整等待时间或增加更多 `act()` flush。优点是改动少；缺点是不能解决全局 DOM 查询可能点到错误按钮的问题。
+- 方案二：把交互查询限定到当前测试容器，并让 Debug drawer 打开操作对已展开状态幂等。优点是更贴近测试隔离边界，且兼容 `localStorage` 保留 open 状态；缺点是需要改多个 helper 调用点。
+- 选择方案二，因为 CI 日志显示按钮查找/点击范围不够稳定，二次 CI 也证明 open 状态持久化会让标题点击变成关闭操作。
+
+**验证结果**：
+- `npx vitest run tests/node/ui/components/agent-components.test.tsx --reporter=verbose` 通过：1 file / 11 tests。
+- `npm test` 通过：183 files passed / 1 skipped，1183 tests passed / 1 skipped。
+
+**待确认**：
+- [ ] 推送后确认 GitHub Actions 新 run 通过。
+
+## v1.2 Task 3.1 workflow replay 前后置条件 - 2026-06-02
+
+**目标**：补齐 workflow replay 的执行前页面匹配和执行后完成证据，避免 workflow 只因为步骤工具返回 ok 就被记为成功。
+
+**设计决策**：`WorkflowRepo` 保存 domain、origin、URL pattern、页面 title/text hints、key ref hints、tool manifest hash、adapter id/version 和 completion evidence；preview 会把当前页面 context 的 unmet preconditions 展示给审批卡。`WorkflowReplayApprovalFlow` 在 approval 后、第一步前重新从 snapshot 计算 preconditions，不匹配则返回 `WORKFLOW_PRECONDITION_FAILED` 且不执行步骤；步骤执行后再按 completion evidence 检查 snapshot，缺失则返回 `WORKFLOW_POSTCONDITION_FAILED` 并计 failure。runtime domain adapter snapshot 增加可选 `version`，供 workflow binding 校验。
+
+**偏差说明**：本轮只闭合 workflow replay pre/postcondition；adapter 自身的 version/drift metadata 仍留给 Task 7.2，Task 3.2 memory privacy 尚未开始。
+
+**验证结果**：`npx vitest run tests/node/storage/workflow-repo.test.ts tests/node/runtime/run/workflow-replay-approval-flow.test.ts tests/node/ui/components/memory-replay-components.test.tsx --reporter=verbose` 通过：3 files / 12 tests；`npm run typecheck` 通过。
+
+## v1.1 Task 2.4 UI acceptance states - 2026-06-02
+
+**目标**：补齐 v1.1 UI 验收态，让页面摘要、表单提交卡和 Cockpit E2E 能稳定覆盖 no form、valid/invalid form、disabled submit、console/network、approval required/denied/stale 以及窄侧栏布局。
+
+**设计决策**：`AgentMessageList` 在页面观察统计里追加轻量 state signals，来源保持在现有 `structuredPageData.forms` 与 `bh_debug_collect_page_health` 的 snapshot tool result，不新增 runtime contract。`FormActionCard` 按错误码区分 submit approval required、user denied 和 approval context stale。E2E 用 sidepanel debug tab 做 390px 窄宽度截图和横向溢出断言，并通过 `chrome.sidePanel.getOptions` 验证 native side panel 绑定到目标 tab 的产品 path。
+
+**偏差说明**：headless Chrome for Testing 无法可靠截图系统原生 side panel 宿主；本轮自动化验证 native path/binding，最终发布前仍保留人工确认原生宿主 resize/关闭交互。
+
+**验证结果**：`npx vitest run tests/node/ui/components/agent-components.test.tsx tests/node/ui/lib/merge-elements-forms.test.ts tests/node/ui/sidepanel/cockpit-app.test.tsx tests/node/ui/styles/cockpit-css.test.ts tests/node/runtime/side-panel-target.test.ts tests/node/i18n/t.test.ts` 通过：6 files / 49 tests；`npm run build` 通过；`npx playwright test tests/e2e/specs/extension/cockpit-ui.spec.ts` 通过：11 tests；`npm run typecheck`、`npm run lint -- --max-warnings=0`、`git diff --check` 通过。
+## 2026-06-02 主文件归档补充
+
+- `implementation-notes.md` 为追加 v1.4 Task 5.3 记录，移出了 2026-06-01 的 “YouTube 动态搜索框 stale 收口与失败用例定向回归” 长条目；该条目属于早期真实站点/真实模型 E2E 扩展后续修复，完整验证命令包括定向 YouTube real-model E2E、普通 E2E、typecheck、lint、unit 和 release check。
+- `implementation-notes.md` 为追加 v1.5 Task 6.3 记录，移出了 2026-06-01 的 “过时验收报告后续修复：release hygiene 与存储边界文档” 条目；该条目补齐 `.output` 路径级 release hygiene 和 README/architecture storage 边界，验证包含 `check:release-hygiene`、typecheck、lint、release check 和 diff check。
+- `implementation-notes.md` 为追加 v1.6 Task 7.2 记录，移出了 2026-06-01 的 “面板内置截图入口与 vision 正则门禁收口” 条目；该条目补齐 Cockpit 直接截图入口、vision unavailable 文案和任务文本正则门禁删除，验证包含 Vision/Cockpit 单测、typecheck、lint、diff check、cockpit-ui 定向 E2E 和 vision-screenshot E2E。
+
+## v1.1-v1.6 P0 Approval Coordinator fail-closed - 2026-06-01
+
+**目标**：继续收口 P0-1.6，避免用户批准后在 pending action 缺失、错 run 或错 tool 时仍执行副作用 approval flow。
+
+**设计决策**：新增 `ApprovalCoordinator` 作为 flow 执行前的事务边界，统一校验 request runId、pending action runId/tool、deny 清理和 stale expire；`ApprovalService` 只在 coordinator 成功后才调用 `onApproved`，side-effect flow 缺少匹配 pending action 时返回 `APPROVAL_CONTEXT_STALE` 且不改变页面。
+
+**偏差说明**：本轮只完成 fail-closed 和第一层 coordinator 抽取；approve/deny 的幂等响应、显式 run generation 绑定、TTL/resume/audit 全量迁移仍保留在 P0-1.6 后续项。
+
+**验证结果**：approval coordinator/service 与 clipboard/storage/workflow/form stale 相关定向测试通过：6 files / 24 tests；`npm run typecheck`、`npm run lint -- --max-warnings=0` 通过。
+
+**待确认**：
+- [ ] 是否把 stale approval 在 UI 中展示为“请重新验证”而不是普通 failed 状态。
+
+## v1.1-v1.6 P0 页面 mutation 意图门控续补 - 2026-06-01
+
+**目标**：继续收口 P0-1.3，把“页面文本诱导点击/填写”不能变成新动作目标的规则下沉到执行层。
+
+**设计决策**：`ToolExecutionService` 在构造授权上下文时为 `bh_form_fill_field` / `bh_form_fill_many` 生成 `userIntent`，要求每个填写值都能在用户任务中找到明确来源；未明确提供的值返回 `USER_INTENT_MISMATCH`，不会执行 content RPC。已有 click/pointer 首次 mutation approval 继续作为未验证页面动作的兜底。
+
+**偏差说明**：本轮补的是执行层 direct form fill 防线、click grounding 与 prompt-injection mutation 回归；未扩大到完整模型决策层 prompt injection suite。
+
+**验证结果**：`npx vitest run tests/node/runtime/run/security/prompt-injection-mutation.test.ts tests/node/runtime/run/tools/tool-execution-service.test.ts -t "prompt injection|public click actions|direct form fill"` 通过：2 files / 6 tests；`npm run test:e2e -- tests/e2e/specs/extension/prompt-injection.spec.ts` 通过：2 passed；`npm run typecheck`、`npm run lint -- --max-warnings=0`、`git diff --check` 通过。
+
+**待确认**：
+- [ ] 后续是否把真实模型 prompt injection suite 也升级为 mutation 非执行断言。
+
+## v1.1-v1.6 P0 verifier finish gate 收口 - 2026-06-02
+
+**目标**：闭合 P0-1.5 专用完成门控，避免模型在页面动作、表单提交或 workflow replay 后缺少后验状态证据仍直接 finish。
+
+**设计决策**：保留 explicit `successCriteria` 文本门控作为兼容 fallback；新增 trace 顺序 verifier，要求 `requiresObserve` 页面动作后有成功 `bh_page_observe`，`FORM_SUBMIT_RESULT` 后有 post-submit observe，`bh_flow_run_with_approval` 后有 `bh_flow_score` 成功证据。AgentLoop 传递 `source: 'agent'`，运行时直接执行默认 `runtime`，避免把人工调试工具调用误判成模型页面指令。
+
+**验证结果**：`tests/node/agent/verification/task-verifier.test.ts`、`tests/node/runtime/run-manager.test.ts`、`tests/node/runtime/run/workflow-replay-approval-flow.test.ts` 全文件通过：82 tests；P0 security/approval 定向 64 tests 通过；prompt-injection 扩展 E2E 2 passed；`npm run typecheck`、`npm run lint -- --max-warnings=0`、`git diff --check` 通过。
+
+## 2026-06-03 主文件第五次瘦身归档摘要
+
+从 `implementation-notes.md` 主文件移出 2026-06-01/02 的 P0 执行层授权与 verifier、Approval Coordinator 幂等/generation、Approval Request 恢复、Approval audit 收敛、Tool manifest allowlist、Approval request 创建收敛、Milestone 0 completion matrix 条目。主文件继续保留维护规则、归档索引和 2026-06-02 之后仍高频参考的 v1.1-v1.6 任务要点。

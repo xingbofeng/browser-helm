@@ -56,6 +56,7 @@ import { ProviderService } from './provider-service';
 import { DomainPolicyService } from './domain-policy-service';
 import { MemoryWorkflowService } from './memory-workflow-service';
 import { ToolExecutionFacade } from './tool-execution-facade';
+import { probeRuntimeCapabilities } from './capability-probe';
 
 export class RunManager {
   private readonly store: RunStore;
@@ -104,6 +105,7 @@ export class RunManager {
       createProviderModelClient: deps.createProviderModelClient,
       initialMessages,
       errorMessage,
+      probeRuntimeCapabilities: deps.probeRuntimeCapabilities ?? probeRuntimeCapabilities,
       executeTool: async (input) => await this.executeTool(input)
     });
 

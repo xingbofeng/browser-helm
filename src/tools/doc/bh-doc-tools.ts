@@ -40,7 +40,7 @@ export function bhDocReadUrl(): ToolSpec<z.infer<typeof docReadUrlArgsSchema>, T
           code: ERROR_CODES.OK,
           summary: document.scanned
             ? `Read ${document.mimeType}; no extractable text found.`
-            : `Read ${document.text.length} characters from ${document.mimeType}.`,
+            : `Read ${document.text.length} characters from ${document.mimeType}: ${textPreview(document.text)}`,
           data: { document },
           changedPage: false,
           requiresObserve: false,
@@ -66,6 +66,10 @@ export function bhDocReadUrl(): ToolSpec<z.infer<typeof docReadUrlArgsSchema>, T
       }
     }
   };
+}
+
+function textPreview(text: string): string {
+  return text.replace(/\s+/gu, ' ').trim().slice(0, 160) || 'empty text';
 }
 
 function docReadOptions(args: z.infer<typeof docReadUrlArgsSchema>) {

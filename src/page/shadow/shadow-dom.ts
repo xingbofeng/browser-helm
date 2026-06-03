@@ -40,7 +40,9 @@ export function queryShadowRoot(
   if (!host?.shadowRoot) {
     throw new Error(`Open shadow root not found for host: ${input.hostSelector}`);
   }
-  const hostSelector = input.hostSelector === '*' ? selectorForHost(host) : input.hostSelector;
+  const hostSelector = input.hostSelector === '*' || !selectorMatchesHost(document, input.hostSelector, host)
+    ? selectorForHost(host)
+    : input.hostSelector;
   const elements = Array.from(host.shadowRoot.querySelectorAll(input.selector)).slice(0, 50).map((element) => {
     const name = element.getAttribute('aria-label') ??
       element.getAttribute('alt') ??
@@ -61,11 +63,40 @@ export function queryShadowRoot(
 
 function resolveShadowHost(document: Document, hostSelector: string): Element | null {
   if (hostSelector === '*') {
-    return Array.from(document.querySelectorAll('*')).find((host) =>
-      !isBrowserHelmInjectedHost(host) && host.shadowRoot
-    ) ?? null;
+    return firstPageOwnedOpenShadowHost(document);
   }
-  return document.querySelector(hostSelector);
+  const selected = querySelectorSafe(document, hostSelector);
+  if (selected?.shadowRoot) {
+    return selected;
+  }
+  return singlePageOwnedOpenShadowHost(document);
+}
+
+function firstPageOwnedOpenShadowHost(document: Document): Element | null {
+  return pageOwnedOpenShadowHosts(document)[0] ?? null;
+}
+
+function singlePageOwnedOpenShadowHost(document: Document): Element | null {
+  const hosts = pageOwnedOpenShadowHosts(document);
+  return hosts.length === 1 ? hosts[0] ?? null : null;
+}
+
+function pageOwnedOpenShadowHosts(document: Document): Element[] {
+  return Array.from(document.querySelectorAll('*')).filter((host) =>
+    !isBrowserHelmInjectedHost(host) && Boolean(host.shadowRoot)
+  );
+}
+
+function selectorMatchesHost(document: Document, hostSelector: string, host: Element): boolean {
+  return querySelectorSafe(document, hostSelector) === host;
+}
+
+function querySelectorSafe(document: Document, selector: string): Element | null {
+  try {
+    return document.querySelector(selector);
+  } catch {
+    return null;
+  }
 }
 
 function isBrowserHelmInjectedHost(host: Element): boolean {

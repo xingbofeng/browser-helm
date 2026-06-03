@@ -79,7 +79,7 @@ export class VisionScreenshotFlow {
     });
     const point = await centerPoint(fixture.page.locator('#dismiss-overlay'));
 
-    const click = await executeToolResult(sidePanel.executeTool({
+    const clickRequest = await executeToolResult(sidePanel.executeTool({
       runId: snapshot.runId,
       tool: TOOL_NAMES.POINTER_CLICK,
       args: {
@@ -87,6 +87,16 @@ export class VisionScreenshotFlow {
         reason: 'Visual fallback click on the dismiss overlay control after DOM ref was unavailable.',
         visionGrounding: highConfidenceVisionFallback()
       }
+    }));
+    expect(clickRequest.ok).toBe(false);
+    expect(clickRequest.code).toBe(ERROR_CODES.APPROVAL_REQUIRED);
+    expect(clickRequest.requiresApproval).toBe(true);
+    const waiting = await sidePanel.snapshot(snapshot.runId);
+    const click = await executeToolResult(sidePanel.decideApproval({
+      runId: snapshot.runId,
+      requestId: requireApprovalId(waiting.pendingApproval?.id),
+      decision: 'approved',
+      reason: 'e2e approve first visual fallback click'
     }));
     expect(click.ok, JSON.stringify(click)).toBe(true);
     expect(click.changedPage).toBe(true);
@@ -124,6 +134,13 @@ export class VisionScreenshotFlow {
   async close(): Promise<void> {
     await this.flowContext.close();
   }
+}
+
+function requireApprovalId(value: string | undefined): string {
+  if (!value) {
+    throw new Error('Expected a pending approval id');
+  }
+  return value;
 }
 
 function highConfidenceVisionFallback() {

@@ -44,8 +44,7 @@ export const startRunInputSchema = z.object({
 export const executeToolInputSchema = z.object({
   runId: z.string().min(1),
   tool: z.string().min(1),
-  args: z.record(z.string(), z.unknown()),
-  source: z.enum(['agent', 'runtime', 'user']).optional()
+  args: z.record(z.string(), z.unknown())
 });
 
 export const decideApprovalInputSchema = z.object({
@@ -70,6 +69,7 @@ export const providerSettingsInputSchema = z.object({
   baseUrl: z.string().min(1),
   model: z.string().min(1),
   apiKey: z.string().min(1).optional(),
+  apiKeyPersistence: z.enum(['session', 'local']).optional(),
   streamingEnabled: z.boolean().optional(),
   allowLocalProviderEndpoints: z.boolean().optional()
 });
@@ -144,7 +144,11 @@ export const runtimeResponseSchema = z.discriminatedUnion('ok', [
 
 export type StartRunInput = z.input<typeof startRunInputSchema>;
 export type RunKind = NonNullable<z.infer<typeof startRunInputSchema>['runKind']>;
-export type ExecuteToolInput = z.infer<typeof executeToolInputSchema>;
+export type PublicExecuteToolInput = z.infer<typeof executeToolInputSchema>;
+export type TrustedToolExecutionSource = 'agent' | 'runtime' | 'user';
+export type ExecuteToolInput = PublicExecuteToolInput & {
+  source?: TrustedToolExecutionSource | undefined;
+};
 export type DecideApprovalInput = z.infer<typeof decideApprovalInputSchema>;
 export type ReviseGoalInput = z.infer<typeof reviseGoalInputSchema>;
 export type HighlightRefInput = z.infer<typeof highlightRefInputSchema>;

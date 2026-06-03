@@ -1,16 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 import { RunLifecycleService } from '../../../../src/background/runtime/run/run-lifecycle-service';
+import type { LifecycleDeps } from '../../../../src/background/runtime/run/run-lifecycle-service';
 import type { RunSnapshot, RuntimeEvent } from '../../../../src/runtime/runtime-messages';
 import type { RunMode } from '../../../../src/shared/schemas/tool.schema';
 import type { ToolResult } from '../../../../src/shared/schemas/tool-result.schema';
 import { ERROR_CODES } from '../../../../src/shared/constants/error-codes';
+import { TRACE_EVENT_NAMES } from '../../../../src/shared/constants/event-names';
 
 const succeedObserve: ToolResult = {
   ok: true, code: ERROR_CODES.OK, summary: 'ok', changedPage: false, requiresObserve: false,
   data: { url: 'https://x.com', title: 'X', currentDomain: 'x.com', origin: 'https://x.com', visibleTextSummary: '', pageStateSummary: '', refSummary: [{ refId: 'r1', role: 'button', name: 'Go', tagName: 'button', visible: true }], warnings: [] }
 };
 
-function deps(overrides = {}) {
+function deps(overrides: Partial<LifecycleDeps> = {}): LifecycleDeps {
   return {
     store: {
       createRunId: vi.fn().mockReturnValue('run_1'),
@@ -30,8 +32,20 @@ function deps(overrides = {}) {
     emptyStreamingState: vi.fn().mockReturnValue({ enabled: true, active: false, chunkCount: 0, fallbackUsed: false }),
     initialMessages: vi.fn().mockReturnValue([]),
     errorMessage: vi.fn().mockReturnValue({ id: 'err', role: 'agent' as const, kind: 'error' as const, status: 'error' as const, title: 'X', content: 'X', createdAt: 0, updatedAt: 0 }),
-    enrichDiagnostics: vi.fn().mockResolvedValue({}),
     executeTool: vi.fn().mockResolvedValue(succeedObserve),
+    probeRuntimeCapabilities: vi.fn().mockResolvedValue({
+      capabilities: {
+        hasActiveTab: true,
+        hasDebuggerPermission: false,
+        hasClipboardPermission: false,
+        hasDownloadsPermission: false,
+        hasStorageInspection: true,
+        hostPermissions: ['https://x.com/*'],
+        shallowDebugAvailable: true,
+        cdp: 'unavailable'
+      },
+      limitations: ['Debugger capability is unavailable']
+    }),
     ...overrides
   };
 }
@@ -77,6 +91,82 @@ describe('RunLifecycleService', () => {
       expect.any(String),
       expect.objectContaining({ includeObserveStatus: true })
     );
+  });
+
+  it('resolves runtime capabilities from probe before initial observation', async () => {
+    const d = deps();
+    const svc = new RunLifecycleService(d);
+
+    await svc.startRun({ task: 'test', mode: 'debug' });
+
+    expect(d.probeRuntimeCapabilities).toHaveBeenCalledWith({ tabId: 42 });
+    const appendTraceCalls = vi.mocked(d.store.appendTrace).mock.calls;
+    const capabilitiesEvent = appendTraceCalls.find(
+      ([, event]) => event.type === TRACE_EVENT_NAMES.CAPABILITIES_RESOLVED
+    );
+    expect(capabilitiesEvent?.[1].payload).toMatchObject({
+      capabilities: {
+        hasDebuggerPermission: false
+      },
+      limitations: ['Debugger capability is unavailable']
+    });
+  });
+
+  it('preserves probed capabilities when simple observe-only flow adds fallback fields', async () => {
+    const probedCapabilities = {
+      hasActiveTab: true,
+      hasDebuggerPermission: true,
+      hasClipboardPermission: true,
+      hasDownloadsPermission: true,
+      hasStorageInspection: true,
+      hostPermissions: ['https://x.com/*'],
+      shallowDebugAvailable: true,
+      cdp: 'available' as const
+    };
+    const d = deps({
+      store: {
+        createRunId: vi.fn().mockReturnValue('run_1'),
+        setRecord: vi.fn(),
+        setSnapshot: vi.fn(),
+        getSnapshot: vi.fn().mockReturnValue({
+          runId: 'run_1',
+          mode: 'full',
+          status: 'created' as const,
+          capabilities: probedCapabilities,
+          capabilityLimitations: []
+        }),
+        getRecord: vi.fn().mockReturnValue({ task: 'test', mode: 'full' as RunMode, tabId: 42, trace: [] as RuntimeEvent[], locale: 'zh', runKind: 'observe_only' }),
+        appendTrace: vi.fn(),
+        notifySnapshotUpdated: vi.fn()
+      },
+      fallbackSnapshotFields: vi.fn().mockReturnValue({
+        capabilities: {
+          hasActiveTab: true,
+          hasDebuggerPermission: false,
+          hasClipboardPermission: false,
+          hasDownloadsPermission: false,
+          hasStorageInspection: true,
+          hostPermissions: [],
+          shallowDebugAvailable: false,
+          cdp: 'reserved'
+        }
+      })
+    });
+    const svc = new RunLifecycleService(d);
+
+    await svc.observeInitial('run_1', {
+      task: 'test',
+      mode: 'full',
+      tabId: 42,
+      trace: [],
+      locale: 'zh',
+      runKind: 'observe_only'
+    }, 42);
+
+    expect(d.store.setSnapshot).toHaveBeenLastCalledWith('run_1', expect.objectContaining({
+      capabilities: probedCapabilities,
+      capabilityLimitations: []
+    }));
   });
 
   it('cancelRun updates snapshot to cancelled', () => {

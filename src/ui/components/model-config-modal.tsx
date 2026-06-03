@@ -24,6 +24,9 @@ export function ModelConfigForm(props: ModelConfigFormProps) {
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState(props.settings?.baseUrl ?? '');
   const [model, setModel] = useState(props.settings?.model ?? '');
+  const [apiKeyPersistence, setApiKeyPersistence] = useState(
+    props.settings?.apiKeyPersistence ?? 'session'
+  );
   const [streamingEnabled, setStreamingEnabled] = useState(
     props.settings?.streamingEnabled ?? true
   );
@@ -38,10 +41,18 @@ export function ModelConfigForm(props: ModelConfigFormProps) {
     baseUrl,
     model,
     ...(apiKey ? { apiKey } : props.settings?.apiKey ? { apiKey: props.settings.apiKey } : {}),
+    apiKeyPersistence,
     streamingEnabled,
     allowLocalProviderEndpoints
   });
   const usesLocalProviderEndpoint = isLocalProviderEndpoint(baseUrl);
+  const sessionApiKeyMissing = Boolean(
+    baseUrl.trim() &&
+    model.trim() &&
+    apiKeyPersistence === 'session' &&
+    !apiKey &&
+    !props.settings?.apiKey
+  );
 
   const testConnection = async () => {
     setBusy(true);
@@ -111,6 +122,38 @@ export function ModelConfigForm(props: ModelConfigFormProps) {
         />
         <small>{t('settings.apiKeyNotice')}</small>
       </label>
+      {sessionApiKeyMissing ? (
+        <p className="bh-configNotice" role="status">
+          {t('settings.apiKeyMissingSessionWarning')}
+        </p>
+      ) : null}
+
+      <div className="bh-switchRow">
+        <div>
+          <strong>{t('settings.apiKeyStorage')}</strong>
+          <small>
+            {apiKeyPersistence === 'local'
+              ? t('settings.apiKeyStorageLocalWarning')
+              : t('settings.apiKeyStorageSessionNote')}
+          </small>
+        </div>
+        <div className="bh-localeSelect" role="group" aria-label={t('settings.apiKeyStorage')}>
+          <button
+            type="button"
+            className={apiKeyPersistence === 'session' ? 'bh-localeOption is-selected' : 'bh-localeOption'}
+            onClick={() => setApiKeyPersistence('session')}
+          >
+            {t('settings.apiKeyStorageSession')}
+          </button>
+          <button
+            type="button"
+            className={apiKeyPersistence === 'local' ? 'bh-localeOption is-selected' : 'bh-localeOption'}
+            onClick={() => setApiKeyPersistence('local')}
+          >
+            {t('settings.apiKeyStorageLocal')}
+          </button>
+        </div>
+      </div>
 
       <div className="bh-switchRow">
         <div>

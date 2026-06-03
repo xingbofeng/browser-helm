@@ -161,11 +161,7 @@ export function fallbackSnapshotFields(
     explicitMode: mode
   });
   const capabilities = resolveRuntimeCapabilities({
-    hasActiveTab: true,
-    hasDebuggerPermission: true,
-    hasClipboardPermission: true,
-    hasDownloadsPermission: true,
-    shallowDebugAvailable: true
+    hasActiveTab: true
   });
   const goal = initializeGoalState({
     locale,

@@ -44,11 +44,7 @@ export class ContextAssembler {
       task: input.record.task,
       tools: input.allToolsContracts,
       capabilities: input.snapshot.capabilities ?? resolveRuntimeCapabilities({
-        hasActiveTab: Boolean(input.tabId),
-        hasDebuggerPermission: true,
-        hasClipboardPermission: true,
-        hasDownloadsPermission: true,
-        shallowDebugAvailable: true
+        hasActiveTab: Boolean(input.tabId)
       }),
       ...(this.deps.getDomainPolicy
         ? {

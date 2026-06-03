@@ -21,6 +21,15 @@ function readManifest() {
 
 const manifest = readManifest();
 const manifestVersion = manifest.manifest_version as number;
+const e2eElevatedPermissions = ['downloads', 'offscreen', 'clipboardRead', 'clipboardWrite'] as const;
+
+function isE2eRequiredPermissionManifest(): boolean {
+  const permissions = (manifest.permissions as string[] | undefined) ?? [];
+  const optionalPermissions = (manifest.optional_permissions as string[] | undefined) ?? [];
+
+  return e2eElevatedPermissions.every((permission) => permissions.includes(permission))
+    && e2eElevatedPermissions.every((permission) => !optionalPermissions.includes(permission));
+}
 
 describe('manifest 权限契约', () => {
   it('是 Manifest V3', () => {
@@ -52,24 +61,42 @@ describe('manifest 权限契约', () => {
     expect(permissions).toContain('storage');
   });
 
-  it('包含 debugger 权限用于 v1.3 CDP deep tools', () => {
+  it('始终把 debugger 声明为 required，因为 Chrome 不允许它作为 optional permission', () => {
     const permissions = manifest.permissions as string[];
+    const optionalPermissions = manifest.optional_permissions as string[];
+
     expect(permissions).toContain('debugger');
+    expect(optionalPermissions).not.toContain('debugger');
   });
 
-  it('包含 downloads 权限用于 v1.5 下载列表工具', () => {
+  it('默认产物不授予 downloads；E2E 产物仅在测试 profile 中提升为 required', () => {
     const permissions = manifest.permissions as string[];
-    expect(permissions).toContain('downloads');
+    const optionalPermissions = manifest.optional_permissions as string[];
+    if (isE2eRequiredPermissionManifest()) {
+      expect(permissions).toContain('downloads');
+      expect(optionalPermissions).not.toContain('downloads');
+      return;
+    }
+
+    expect(permissions).not.toContain('downloads');
+    expect(optionalPermissions).toContain('downloads');
   });
 
-  it('包含 offscreen 与 clipboard 权限用于 v1.5 剪贴板审批工具', () => {
+  it('默认产物不授予 clipboard；E2E 产物仅在测试 profile 中提升为 required', () => {
     const permissions = manifest.permissions as string[];
-    expect(permissions).toContain('offscreen');
-    expect(permissions).toContain('clipboardRead');
-    expect(permissions).toContain('clipboardWrite');
+    const optionalPermissions = manifest.optional_permissions as string[];
+    if (isE2eRequiredPermissionManifest()) {
+      expect(permissions).toEqual(expect.arrayContaining(['offscreen', 'clipboardRead', 'clipboardWrite']));
+      expect(optionalPermissions).not.toEqual(expect.arrayContaining(['offscreen', 'clipboardRead', 'clipboardWrite']));
+      return;
+    }
+
+    expect(optionalPermissions).toEqual(expect.arrayContaining(['offscreen', 'clipboardRead', 'clipboardWrite']));
+    expect(permissions).not.toContain('clipboardRead');
+    expect(permissions).not.toContain('clipboardWrite');
   });
 
-  it('使用 activeTab，并把 http/https 与 <all_urls> 放入 optional host 权限', () => {
+  it('使用 activeTab，并只把 http/https 放入 optional host 权限', () => {
     const permissions = manifest.permissions as string[];
     const hostPermissions = (manifest.host_permissions as string[] | undefined) ?? [];
     const optionalHostPermissions = manifest.optional_host_permissions as string[];
@@ -78,7 +105,7 @@ describe('manifest 权限契约', () => {
     expect(hostPermissions).toEqual([]);
     expect(hostPermissions).not.toContain('<all_urls>');
     expect(optionalHostPermissions).toEqual(expect.arrayContaining(['http://*/*', 'https://*/*']));
-    expect(optionalHostPermissions).toContain('<all_urls>');
+    expect(optionalHostPermissions).not.toContain('<all_urls>');
   });
 });
 

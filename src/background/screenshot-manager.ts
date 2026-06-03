@@ -71,19 +71,23 @@ export class ScreenshotManager {
   async captureElement(input: CaptureElementInput): Promise<ScreenshotCapture> {
     const bounds = await readElementBounds(input.tabId, input.selector);
     const captured = await captureVisible(input);
+    const cropped = await cropElementCapture(captured.dataUrl, bounds);
     return screenshotCaptureSchema.parse({
       id: `shot_${input.tabId}_element`,
       tabId: input.tabId,
       mode: 'element',
-      mimeType: mimeTypeFromDataUrl(captured.dataUrl),
-      dataUrl: captured.dataUrl,
+      mimeType: mimeTypeFromDataUrl(cropped.dataUrl),
+      dataUrl: cropped.dataUrl,
       selector: input.selector,
       bounds,
       width: Math.max(1, Math.round(bounds.width)),
       height: Math.max(1, Math.round(bounds.height)),
       captureSource: captured.captureSource,
-      ...(captured.fallbackReason ? { fallbackReason: captured.fallbackReason } : {}),
-      truncated: false,
+      cropStatus: cropped.status,
+      ...(cropped.fallbackReason ?? captured.fallbackReason
+        ? { fallbackReason: cropped.fallbackReason ?? captured.fallbackReason }
+        : {}),
+      truncated: cropped.status === 'unavailable',
       sensitivity: 'unknown',
       capturedAt: Date.now(),
       traceSafe: false
@@ -93,12 +97,81 @@ export class ScreenshotManager {
 
 export const defaultScreenshotManager = new ScreenshotManager();
 
+type ElementCropResult = {
+  dataUrl: string;
+  status: 'cropped' | 'unavailable';
+  fallbackReason?: string | undefined;
+};
+
+async function cropElementCapture(
+  dataUrl: string,
+  bounds: ScreenshotBounds
+): Promise<ElementCropResult> {
+  if (
+    typeof globalThis.fetch !== 'function' ||
+    typeof globalThis.createImageBitmap !== 'function' ||
+    typeof globalThis.OffscreenCanvas !== 'function'
+  ) {
+    return {
+      dataUrl,
+      status: 'unavailable',
+      fallbackReason: 'element_crop_unavailable_viewport_with_bounds_fallback'
+    };
+  }
+
+  try {
+    const response = await fetch(dataUrl);
+    const image = await createImageBitmap(await response.blob());
+    const width = Math.max(1, Math.round(bounds.width));
+    const height = Math.max(1, Math.round(bounds.height));
+    const canvas = new OffscreenCanvas(width, height);
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('2d canvas context unavailable');
+    }
+    context.drawImage(
+      image,
+      Math.max(0, Math.round(bounds.x)),
+      Math.max(0, Math.round(bounds.y)),
+      width,
+      height,
+      0,
+      0,
+      width,
+      height
+    );
+    const blob = await canvas.convertToBlob({ type: 'image/png' });
+    return {
+      dataUrl: await blobToDataUrl(blob),
+      status: 'cropped'
+    };
+  } catch {
+    return {
+      dataUrl,
+      status: 'unavailable',
+      fallbackReason: 'element_crop_unavailable_viewport_with_bounds_fallback'
+    };
+  }
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error('Unable to convert screenshot blob to data URL'));
+    };
+    reader.onerror = () => reject(new Error('Unable to convert screenshot blob to data URL'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 async function captureVisible(input: CaptureViewportInput): Promise<CapturedImage> {
   if (!globalThis.chrome?.tabs?.captureVisibleTab) {
-    return {
-      ...await defaultDebuggerManager.captureScreenshot(input.tabId),
-      captureSource: 'cdp_capture_screenshot'
-    };
+    return captureWithDebugger(input.tabId);
   }
   try {
     const dataUrl = input.windowId === undefined
@@ -110,14 +183,21 @@ async function captureVisible(input: CaptureViewportInput): Promise<CapturedImag
     };
   } catch (error) {
     if (canFallbackToDebugger(error)) {
-      return {
-        ...await defaultDebuggerManager.captureScreenshot(input.tabId),
-        captureSource: 'cdp_capture_screenshot',
-        fallbackReason: 'tabs_capture_visible_tab_unavailable'
-      };
+      return captureWithDebugger(input.tabId, 'tabs_capture_visible_tab_unavailable');
     }
     throw error;
   }
+}
+
+async function captureWithDebugger(
+  tabId: number,
+  fallbackReason?: string
+): Promise<CapturedImage> {
+  return {
+    ...await defaultDebuggerManager.captureScreenshot(tabId),
+    captureSource: 'cdp_capture_screenshot',
+    ...(fallbackReason ? { fallbackReason } : {})
+  };
 }
 
 async function captureFullPage(input: CaptureViewportInput): Promise<CapturedImage> {

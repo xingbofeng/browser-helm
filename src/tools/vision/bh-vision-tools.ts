@@ -204,7 +204,13 @@ function visionTool<TArgs>(input: {
         return await input.execute(args, ctx);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'screenshot_failed';
-        return failed(ERROR_CODES.SCREENSHOT_FAILED, message, { reason: message });
+        const hints = message.includes('debugger_permission_denied')
+          ? [
+              'Screenshot requires the "Debugger" permission. Open chrome://extensions, find BrowserHelm details, and enable it.',
+              'Use bh_page_observe or bh_page_read_visible_text as DOM-based fallback evidence instead.'
+            ]
+          : undefined;
+        return failed(ERROR_CODES.SCREENSHOT_FAILED, message, { reason: message }, hints);
       }
     }
   };
@@ -236,7 +242,7 @@ function ok(summary: string, data: unknown): ToolResult {
   };
 }
 
-function failed(code: string, summary: string, data: unknown): ToolResult {
+function failed(code: string, summary: string, data: unknown, nextHints?: string[]): ToolResult {
   const fallbackSummary = code === ERROR_CODES.VISION_UNAVAILABLE
     ? `${summary} Use DOM/a11y or visible-text fallback evidence; do not retry the vision model unless settings change.`
     : summary;
@@ -246,13 +252,13 @@ function failed(code: string, summary: string, data: unknown): ToolResult {
     summary: fallbackSummary,
     data,
     error: { message: fallbackSummary, detail: data },
-    nextHints: code === ERROR_CODES.VISION_UNAVAILABLE
+    nextHints: nextHints ?? (code === ERROR_CODES.VISION_UNAVAILABLE
       ? [
           'The screenshot capture succeeded, but the vision model result is unavailable.',
           'Use bh_page_read_visible_text or page observation as fallback evidence.',
           'Do not call another vision model tool unless provider settings change.'
         ]
-      : undefined,
+      : undefined),
     changedPage: false,
     requiresObserve: false,
     context: {

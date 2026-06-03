@@ -59,6 +59,21 @@ export function selectToolsForRun(input: SelectToolsInput): ToolSelection {
       continue;
     }
 
+    const capabilityGate = evaluateCapabilityGate(tool.name, input.capabilities);
+    if (capabilityGate) {
+      hiddenTools.push({
+        tool: tool.name,
+        reason: capabilityGate
+      });
+      if (
+        (capabilityGate.endsWith('capability is unavailable') || capabilityGate === 'Shallow debug signals are unavailable') &&
+        !limitations.includes(capabilityGate)
+      ) {
+        limitations.push(capabilityGate);
+      }
+      continue;
+    }
+
     if (tool.modes.includes('advanced')) {
       const advancedGate = evaluateAdvancedToolGate(tool.name, input.task, input.capabilities);
       if (advancedGate) {
@@ -156,33 +171,52 @@ export function selectToolsForRun(input: SelectToolsInput): ToolSelection {
   };
 }
 
+function evaluateCapabilityGate(
+  toolName: string,
+  capabilities: RuntimeCapabilities
+): string | undefined {
+  if (toolName.startsWith('bh_cdp_') && !capabilities.hasDebuggerPermission) {
+    return 'Debugger capability is unavailable';
+  }
+  if (toolName.startsWith('bh_debug_') && !capabilities.shallowDebugAvailable) {
+    return 'Shallow debug signals are unavailable';
+  }
+  if (toolName.startsWith('bh_clipboard_') && !capabilities.hasClipboardPermission) {
+    return 'Clipboard capability is unavailable';
+  }
+  if (
+    (
+      toolName.startsWith('bh_download_') ||
+      (toolName.startsWith('bh_file_') && toolName !== TOOL_NAMES.FILE_UPLOAD_WITH_APPROVAL)
+    ) &&
+    !capabilities.hasDownloadsPermission
+  ) {
+    return 'Downloads capability is unavailable';
+  }
+  if (toolName.startsWith('bh_storage_') && capabilities.hasStorageInspection !== true) {
+    return 'Storage inspection capability is unavailable';
+  }
+  return undefined;
+}
+
 function evaluateAdvancedToolGate(
   toolName: string,
   task: string,
-  capabilities: RuntimeCapabilities
+  _capabilities: RuntimeCapabilities
 ): string | undefined {
   if (toolName === TOOL_NAMES.FILE_UPLOAD_WITH_APPROVAL) {
     return taskNeedsAdvancedFamily(task, /upload|file upload|上传|选择文件/u);
   }
   if (toolName.startsWith('bh_download_') || toolName.startsWith('bh_file_')) {
-    if (!capabilities.hasDownloadsPermission) {
-      return 'Downloads permission is unavailable';
-    }
     return taskNeedsAdvancedFamily(task, /download|downloads|file|files|下载|文件/u);
   }
   if (toolName.startsWith('bh_clipboard_')) {
-    if (!capabilities.hasClipboardPermission) {
-      return 'Clipboard permission is unavailable';
-    }
     return taskNeedsAdvancedFamily(task, /clipboard|copy|paste|剪贴板|复制|粘贴/u);
   }
   if (toolName.startsWith('bh_tab_')) {
     return taskNeedsAdvancedFamily(task, /tab|tabs|window|windows|标签|窗口|新页面|新标签/u);
   }
   if (toolName.startsWith('bh_storage_')) {
-    if (capabilities.hasStorageInspection !== true) {
-      return 'Storage inspection capability is unavailable';
-    }
     return taskNeedsAdvancedFamily(task, /storage|localstorage|sessionstorage|cookie|cookies|browser state|浏览器存储|本地存储|会话存储|状态|缓存/u);
   }
   if (toolName.startsWith('bh_shadow_')) {

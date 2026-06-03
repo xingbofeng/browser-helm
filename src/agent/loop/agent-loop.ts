@@ -35,9 +35,16 @@ import { ContextAssembler } from './context-assembler';
 import { TaskStateReducer } from './task-state-reducer';
 import { TerminationEvaluator } from './termination-evaluator';
 import { DecisionPipeline } from './decision-pipeline';
+import { verifyTaskCompletionBeforeFinish } from '../verification/task-verifier';
+import { isRecord } from '../verification/verifier-utils';
 
 // ── Runtime constants ──
 const MAX_REPAIR_ATTEMPTS = 1;
+const AUTO_RECOVERABLE_REQUIRED_TOOLS = new Set<string>([
+  TOOL_NAMES.FORM_READ_FIELDS,
+  TOOL_NAMES.PAGE_READ_VISIBLE_TEXT,
+  TOOL_NAMES.STORAGE_GET
+]);
 
 // ── Types ──
 
@@ -92,15 +99,17 @@ export class AgentLoop {
   }
 
   async run(input: AgentLoopInput): Promise<RunSnapshot> {
+    const locale = input.record.locale ?? 'zh';
     const settings = await this.deps.settingsStore.getProviderSettings();
     if (!settings?.baseUrl || !settings.apiKey || !settings.model) {
+      const message = t('runtime.error.providerNotConfiguredContent', locale);
       const current = this.deps.getSnapshot(input.runId);
       const snapshot: RunSnapshot = {
         ...current,
         status: 'waiting_for_user',
         error: {
           code: ERROR_CODES.PROVIDER_NOT_CONFIGURED,
-          message: 'Provider settings are required for the agent loop'
+          message
         },
         streaming: {
           enabled: false,
@@ -119,13 +128,11 @@ export class AgentLoop {
       apiKey: settings.apiKey,
       model: settings.model
     });
-    const maxSteps = input.maxSteps ?? 6;
+    const maxSteps = input.maxSteps ?? 8;
     const allToolsContracts = getPromptToolContracts(
       this.deps.getToolContracts(input.record.mode),
       input.record.mode
     );
-    const locale = input.record.locale ?? 'zh';
-
     for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
       const current = this.deps.getSnapshot(input.runId);
       if (isTerminalStatus(current.status)) {
@@ -238,6 +245,16 @@ export class AgentLoop {
                 message: repeatedFormFillFinishMessage(locale)
               });
               return handled.snapshot;
+            }
+            if (decisionError.kind === 'repeated_page_read') {
+              const message = repeatedDocumentReadFinishMessage(this.deps.getSnapshot(input.runId), locale);
+              if (message) {
+                const handled = await this.handleDecision(input, {
+                  type: 'finish',
+                  message
+                });
+                return handled.snapshot;
+              }
             }
             const failed: RunSnapshot = {
               ...this.deps.getSnapshot(input.runId),
@@ -366,7 +383,8 @@ export class AgentLoop {
       const termination = this.terminationEvaluator.evaluateFinish({
         goal: current.goal,
         taskState: input.record.taskState,
-        trace: input.record.trace
+        trace: input.record.trace,
+        finalMessage: decision.message
       });
       if (termination.unmetCriteria.length > 0) {
         const snapshot: RunSnapshot = {
@@ -398,6 +416,50 @@ export class AgentLoop {
       }
       const completionEvidence = termination.completionEvidence;
       if (!completionEvidence.ok) {
+        if (completionEvidence.nextAction === 'continue') {
+          const recoveredTool = await this.runAutoRecoverableRequiredTool(input, completionEvidence.missingEvidence);
+          if (recoveredTool) {
+            this.deps.appendTrace(input.record, {
+              runId: input.runId,
+              type: TRACE_EVENT_NAMES.STATE_CHANGED,
+              payload: {
+                status: 'thinking',
+                reason: 'auto_recovered_missing_required_tool',
+                tool: recoveredTool
+              }
+            });
+            const snapshot: RunSnapshot = {
+              ...current,
+              status: 'thinking',
+              taskState: input.record.taskState,
+              ...(termination.goal ? { goal: termination.goal } : {}),
+              trace: input.record.trace
+            };
+            this.setSnapshot(input.runId, this.deps.withRunMessages(snapshot, input.record));
+            return { done: false, snapshot };
+          }
+          this.deps.appendTrace(input.record, {
+            runId: input.runId,
+            type: TRACE_EVENT_NAMES.STATE_CHANGED,
+            payload: {
+              status: 'thinking',
+              reason: 'semantic_completion_evidence_missing',
+              verifierReason: completionEvidence.reason,
+              verifier: completionEvidence.verifier,
+              missingEvidence: completionEvidence.missingEvidence,
+              tool: completionEvidence.tool
+            }
+          });
+          const snapshot: RunSnapshot = {
+            ...current,
+            status: 'thinking',
+            taskState: input.record.taskState,
+            ...(termination.goal ? { goal: termination.goal } : {}),
+            trace: input.record.trace
+          };
+          this.setSnapshot(input.runId, this.deps.withRunMessages(snapshot, input.record));
+          return { done: false, snapshot };
+        }
         const snapshot: RunSnapshot = {
           ...current,
           status: 'waiting_for_user',
@@ -469,6 +531,16 @@ export class AgentLoop {
     }
 
     if (decision.type === 'fail') {
+      const recoveredDocMessage = repeatedDocumentReadFinishMessage(
+        this.deps.getSnapshot(input.runId),
+        input.record.locale ?? 'zh'
+      );
+      if (recoveredDocMessage && /doc|pdf|文档|内容|read|读取/iu.test(decision.message)) {
+        return await this.handleDecision(input, {
+          type: 'finish',
+          message: recoveredDocMessage
+        });
+      }
       const snapshot: RunSnapshot = {
         ...this.deps.getSnapshot(input.runId),
         status: 'failed',
@@ -563,8 +635,147 @@ export class AgentLoop {
     if (executableDecision.tool === TOOL_NAMES.AGENT_FINISH) {
       return { done: true, snapshot: snapshotWithTaskState };
     }
+    const recoveredTool = await this.runAutoRecoverableRequiredToolAfterTool(input, executableDecision.tool);
+    if (recoveredTool) {
+      this.deps.appendTrace(input.record, {
+        runId: input.runId,
+        type: TRACE_EVENT_NAMES.STATE_CHANGED,
+        payload: {
+          status: 'thinking',
+          reason: 'auto_recovered_missing_required_tool_after_tool',
+          afterTool: executableDecision.tool,
+          tool: recoveredTool
+        }
+      });
+      const recoveredSnapshot = this.deps.getSnapshot(input.runId);
+      this.taskStateReducer.syncFromToolResult(input.record, recoveredSnapshot.toolResult);
+      const recoveredSnapshotWithTaskState: RunSnapshot = {
+        ...recoveredSnapshot,
+        taskState: input.record.taskState
+      };
+      this.setSnapshot(input.runId, recoveredSnapshotWithTaskState);
+      return { done: false, snapshot: recoveredSnapshotWithTaskState };
+    }
     return { done: false, snapshot: snapshotWithTaskState };
   }
+
+  private async runAutoRecoverableRequiredToolAfterTool(
+    input: AgentLoopInput,
+    afterTool: string
+  ): Promise<string | undefined> {
+    const evidence = verifyTaskCompletionBeforeFinish(input.record.trace);
+    if (evidence.ok || evidence.nextAction !== 'continue') {
+      return undefined;
+    }
+    const tool = recoverableToolReadyAfterTool(input.record.trace, evidence.missingEvidence, afterTool);
+    return tool
+      ? await this.runAutoRecoverableRequiredTool(input, [`required_tool:${tool}`])
+      : undefined;
+  }
+
+  private async runAutoRecoverableRequiredTool(
+    input: AgentLoopInput,
+    missingEvidence: string[]
+  ): Promise<string | undefined> {
+    const tool = missingEvidence
+      .map((item) => item.match(/^required_tool:(bh_[a-z0-9_]+)$/u)?.[1])
+      .find((candidate): candidate is string =>
+        typeof candidate === 'string' && AUTO_RECOVERABLE_REQUIRED_TOOLS.has(candidate)
+      );
+    if (!tool) {
+      return undefined;
+    }
+    const args = autoRecoverableToolArgs(tool, input.record.task);
+    if (!args) {
+      return undefined;
+    }
+
+    await this.deps.executeTool({
+      runId: input.runId,
+      tool,
+      args,
+      source: 'runtime'
+    });
+    return tool;
+  }
+}
+
+function autoRecoverableToolArgs(tool: string, task: string): Record<string, unknown> | undefined {
+  if (tool === TOOL_NAMES.STORAGE_GET) {
+    return storageGetArgsFromTask(task);
+  }
+  return {};
+}
+
+function recoverableToolReadyAfterTool(
+  trace: RuntimeEvent[] | undefined,
+  missingEvidence: string[],
+  afterTool: string
+): string | undefined {
+  const missingTools = missingEvidence
+    .map((item) => item.match(/^required_tool:(bh_[a-z0-9_]+)$/u)?.[1])
+    .filter((tool): tool is string =>
+      typeof tool === 'string' && AUTO_RECOVERABLE_REQUIRED_TOOLS.has(tool)
+    );
+
+  if (
+    missingTools.includes(TOOL_NAMES.STORAGE_GET) &&
+    afterTool === TOOL_NAMES.STORAGE_LIST &&
+    hasSuccessfulToolResult(trace, TOOL_NAMES.STORAGE_LIST)
+  ) {
+    return TOOL_NAMES.STORAGE_GET;
+  }
+
+  if (
+    missingTools.includes(TOOL_NAMES.PAGE_READ_VISIBLE_TEXT) &&
+    afterTool === TOOL_NAMES.VIEWPORT_SCROLL &&
+    latestSuccessfulToolResult(trace)?.requiresObserve === true
+  ) {
+    return TOOL_NAMES.PAGE_READ_VISIBLE_TEXT;
+  }
+
+  if (
+    missingTools.includes(TOOL_NAMES.FORM_READ_FIELDS) &&
+    (
+      afterTool === TOOL_NAMES.FORM_FILL_FIELD ||
+      afterTool === TOOL_NAMES.FORM_FILL_MANY ||
+      afterTool === TOOL_NAMES.PAGE_OBSERVE
+    )
+  ) {
+    return TOOL_NAMES.FORM_READ_FIELDS;
+  }
+
+  return undefined;
+}
+
+function hasSuccessfulToolResult(trace: RuntimeEvent[] | undefined, tool: string): boolean {
+  return (trace ?? []).some((event) =>
+    event.type === TRACE_EVENT_NAMES.TOOL_RESULT &&
+    isRecord(event.payload) &&
+    event.payload.tool === tool &&
+    event.payload.ok === true
+  );
+}
+
+function latestSuccessfulToolResult(trace: RuntimeEvent[] | undefined): Record<string, unknown> | undefined {
+  return [...(trace ?? [])].reverse().find((event) =>
+    event.type === TRACE_EVENT_NAMES.TOOL_RESULT &&
+    isRecord(event.payload) &&
+    event.payload.ok === true
+  )?.payload;
+}
+
+function storageGetArgsFromTask(task: string): Record<string, unknown> | undefined {
+  const area = /sessionStorage/u.test(task)
+    ? 'sessionStorage'
+    : /localStorage/u.test(task)
+      ? 'localStorage'
+      : undefined;
+  const key = task.match(/(?:sessionStorage|localStorage)\s*(?:的|key\s*)?\s*`?([A-Za-z_$][\w$.-]*)`?/u)?.[1];
+  if (!area || !key) {
+    return undefined;
+  }
+  return { area, key };
 }
 
 // ── Message helpers ──
@@ -703,6 +914,20 @@ function repeatedFormFillFinishMessage(locale: Locale): string {
   return locale === 'en'
     ? 'The requested field has already been filled. I did not submit the form.'
     : '请求的字段已经填写完成，未提交表单。';
+}
+
+function repeatedDocumentReadFinishMessage(snapshot: RunSnapshot, locale: Locale): string | undefined {
+  const toolResult = snapshot.toolResult;
+  if (toolResult?.ok !== true || toolResult.tool !== TOOL_NAMES.DOC_READ_URL) {
+    return undefined;
+  }
+  const summary = typeof toolResult.summary === 'string' ? toolResult.summary : '';
+  if (!summary) {
+    return undefined;
+  }
+  return locale === 'en'
+    ? `The document was already read with bh_doc_read_url. Summary from the available evidence: ${summary}`
+    : `已通过 bh_doc_read_url 读取浏览器可访问 PDF/文档。根据已返回内容总结：${summary}`;
 }
 
 function plainTextFinishMessage(text: string): string | undefined {

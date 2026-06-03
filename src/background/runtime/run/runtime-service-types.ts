@@ -4,6 +4,7 @@ import type { SettingsStore } from '../../../storage/interfaces/settings-store';
 import type { ExecuteToolInput, RuntimeEvent } from '../../../runtime/runtime-messages';
 import type { RunMode } from '../../../shared/schemas/tool.schema';
 import type { RunSessionPersistence } from './session-persistence';
+import type { RuntimeCapabilityProbeResult } from '../capability-probe';
 export type { RunRecord } from '../../../agent/loop/types';
 export type { ToolPromptContract } from '../../../tools/core/tool-router';
 
@@ -13,6 +14,7 @@ export type RunManagerDeps = {
   createContentRpcClient?: (tabId: number) => ContentRpcClient;
   settingsStore?: SettingsStore;
   runSessionPersistence?: RunSessionPersistence | undefined;
+  probeRuntimeCapabilities?: ((input: { tabId: number }) => Promise<RuntimeCapabilityProbeResult>) | undefined;
   createProviderModelClient?: (settings: {
     baseUrl: string;
     apiKey: string;

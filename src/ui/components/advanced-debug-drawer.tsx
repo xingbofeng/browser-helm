@@ -192,6 +192,33 @@ export function AdvancedDebugPanel({
   );
 }
 
+function buildCdpDiagnosis(
+  cdpStatus: string,
+  capabilityLimitations: string[]
+): { tooltip: string } {
+  if (cdpStatus === 'available') {
+    return { tooltip: 'CDP deep inspection available' };
+  }
+  const blockers: string[] = [];
+  if (cdpStatus === 'reserved') {
+    blockers.push('CDP 状态未探测（reserved）');
+  }
+  const cdpRelated = capabilityLimitations.filter(
+    (l) =>
+      l.includes('Debugger') ||
+      l.includes('debugger') ||
+      l.includes('Chrome permissions') ||
+      l.includes('No active tab')
+  );
+  if (cdpRelated.length > 0) {
+    blockers.push(...cdpRelated);
+  }
+  if (cdpStatus === 'unavailable' && blockers.length === 0) {
+    blockers.push('Debugger 权限未授予或 chrome.debugger API 不可用');
+  }
+  return { tooltip: blockers.join('；') || 'CDP deep inspection unavailable' };
+}
+
 function DebugSummary(props: {
   snapshot?: RunSnapshot | undefined;
   structuredPageData: StructuredPageData;
@@ -199,11 +226,9 @@ function DebugSummary(props: {
   const t = useT();
   const observation = props.snapshot?.observation;
   const streaming = props.snapshot?.streaming;
-  const debugLimitations = [
-    ...(props.snapshot?.capabilityLimitations ?? []),
-    ...(props.snapshot?.debugReport?.limitations ?? [])
-  ];
-  const showDebugBoundary = props.snapshot?.mode === 'debug' || debugLimitations.length > 0;
+  const cdpStatus = props.snapshot?.capabilities?.cdp ?? 'reserved';
+  const showDebugBoundary = props.snapshot?.mode === 'debug' && cdpStatus !== 'available';
+  const cdpDiagnosis = buildCdpDiagnosis(cdpStatus, props.snapshot?.capabilityLimitations ?? []);
   return (
     <div className="bh-debugSummary">
       <span>{observation?.currentDomain ?? t('debug.notObserved')}</span>
@@ -213,7 +238,7 @@ function DebugSummary(props: {
       <span>{t('debug.elements.warningCount', { count: String(props.structuredPageData.observation.warnings.length) })}</span>
       <span>{streaming?.enabled ? t('debug.streaming.on') : t('debug.streaming.off')}</span>
       {showDebugBoundary ? (
-        <span title={debugLimitations.join('; ') || t('debug.shallowBoundaryTitle')}>
+        <span title={cdpDiagnosis.tooltip}>
           {t('debug.shallowBoundary')}
         </span>
       ) : null}

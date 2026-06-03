@@ -34,6 +34,6 @@ export const assistedFormFillVerifyScenario: RealModelScenario = {
     await expect(page.locator('#country')).toHaveValue('us');
     await expect(page.locator('input[name="agree"]')).toBeChecked();
     await expect(page.locator('#success')).toBeHidden();
-    helpers.expectFinalMessage(snapshot, /verify|复查|通过|未提交|没有提交/i);
+    helpers.expectFinalMessage(snapshot, /verify|verified|复查|通过|未提交|没有提交|no submit|not submitted|no submit action/i);
   }
 };

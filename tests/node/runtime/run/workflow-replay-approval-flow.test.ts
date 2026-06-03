@@ -92,7 +92,8 @@ describe('WorkflowReplayApprovalFlow', () => {
     expect(executeTool).toHaveBeenCalledWith({
       runId: 'run_1',
       tool: TOOL_NAMES.PAGE_OBSERVE,
-      args: {}
+      args: {},
+      source: 'runtime'
     });
     expect(record.trace.some((event) =>
       event.type === TRACE_EVENT_NAMES.TOOL_RESULT &&
@@ -153,6 +154,166 @@ describe('WorkflowReplayApprovalFlow', () => {
     expect(executeTool).not.toHaveBeenCalled();
     expect(snapshot.status).toBe('error');
     defaultWorkflowRepo.delete(workflow.id);
+  });
+
+  it('fails safely when an approved replay request no longer has an active tab', async () => {
+    let snapshot: RunSnapshot = {
+      runId: 'run_1',
+      mode: 'ask',
+      status: 'waiting_for_approval'
+    };
+    const deletePendingAction = vi.fn();
+    const flow = new WorkflowReplayApprovalFlow({
+      getRecord: () => ({ task: 'Replay workflow', mode: 'ask' as const, trace: [] }),
+      getPendingAction: () => ({
+        runId: 'run_1',
+        tool: TOOL_NAMES.FLOW_RUN_WITH_APPROVAL,
+        args: { id: 'workflow_missing_tab' }
+      }),
+      deletePendingAction,
+      createToolRouter: () => fakeRouter(true),
+      executeTool: vi.fn(),
+      appendTrace: vi.fn(),
+      setSnapshot: (_runId, next) => {
+        snapshot = next;
+      },
+      getSnapshot: () => snapshot
+    });
+
+    const result = await flow.onApproved({
+      runId: 'run_1',
+      requestId: 'req_1',
+      tool: TOOL_NAMES.FLOW_RUN_WITH_APPROVAL
+    });
+
+    expect(deletePendingAction).toHaveBeenCalledWith('req_1');
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('RUNTIME_UNAVAILABLE');
+    expect(result.summary).toContain('not available');
+    expect(snapshot.status).toBe('error');
+  });
+
+  it('recovers the workflow id from the preview snapshot when the pending action was already cleared', async () => {
+    const workflow = defaultWorkflowRepo.save({
+      domain: 'app.example.com',
+      origin: 'https://app.example.com',
+      completionEvidence: ['Workflow finished'],
+      intent: 'Replay from preview',
+      taskDescription: 'Replay a previewed workflow',
+      steps: [{
+        id: 'step_1',
+        tool: TOOL_NAMES.PAGE_OBSERVE,
+        summary: 'Observe page',
+        argsPreview: { reason: 'preview-only args are replayable' },
+        risk: 'safe',
+        requiresApproval: false
+      }]
+    });
+    const record = { task: 'Replay from preview', mode: 'ask' as const, tabId: 1, trace: [] };
+    let snapshot: RunSnapshot = {
+      runId: 'run_1',
+      mode: 'ask',
+      status: 'waiting_for_approval',
+      observation: {
+        url: 'https://app.example.com/replay',
+        title: 'Replay',
+        currentDomain: 'app.example.com',
+        origin: 'https://app.example.com',
+        visibleTextSummary: 'Workflow finished',
+        pageStateSummary: 'Replay page',
+        interactiveCount: 1,
+        warnings: []
+      },
+      toolResult: {
+        tool: TOOL_NAMES.FLOW_PREVIEW,
+        ok: true,
+        code: 'OK',
+        summary: 'Preview ready',
+        detail: {
+          data: {
+            preview: {
+              workflowId: workflow.id
+            }
+          }
+        }
+      }
+    };
+    const executeTool = vi.fn().mockResolvedValue({
+      ok: true,
+      code: 'OK',
+      summary: 'Observed',
+      changedPage: false,
+      requiresObserve: false
+    });
+    const flow = new WorkflowReplayApprovalFlow({
+      getRecord: () => record,
+      getPendingAction: () => undefined,
+      deletePendingAction: vi.fn(),
+      createToolRouter: () => fakeRouter(true),
+      executeTool,
+      appendTrace: (target, event) => target.trace.push(event),
+      setSnapshot: (_runId, next) => {
+        snapshot = next;
+      },
+      getSnapshot: () => snapshot
+    });
+
+    const result = await flow.onApproved({
+      runId: 'run_1',
+      requestId: 'req_1',
+      tool: TOOL_NAMES.FLOW_RUN_WITH_APPROVAL
+    });
+
+    expect(result.ok).toBe(true);
+    expect(executeTool).toHaveBeenCalledWith({
+      runId: 'run_1',
+      tool: TOOL_NAMES.PAGE_OBSERVE,
+      args: { reason: 'preview-only args are replayable' },
+      source: 'runtime'
+    });
+    expect(snapshot.status).toBe('finished');
+    defaultWorkflowRepo.delete(workflow.id);
+  });
+
+  it('fails safely when the approved replay cannot resolve a workflow id', async () => {
+    const record = { task: 'Replay missing workflow', mode: 'ask' as const, tabId: 1, trace: [] };
+    let snapshot: RunSnapshot = {
+      runId: 'run_1',
+      mode: 'ask',
+      status: 'waiting_for_approval',
+      toolResult: {
+        tool: TOOL_NAMES.FLOW_PREVIEW,
+        ok: true,
+        code: 'OK',
+        summary: 'Preview ready',
+        detail: { data: { preview: {} } }
+      }
+    };
+    const executeTool = vi.fn();
+    const flow = new WorkflowReplayApprovalFlow({
+      getRecord: () => record,
+      getPendingAction: () => undefined,
+      deletePendingAction: vi.fn(),
+      createToolRouter: () => fakeRouter(true),
+      executeTool,
+      appendTrace: (target, event) => target.trace.push(event),
+      setSnapshot: (_runId, next) => {
+        snapshot = next;
+      },
+      getSnapshot: () => snapshot
+    });
+
+    const result = await flow.onApproved({
+      runId: 'run_1',
+      requestId: 'req_1',
+      tool: TOOL_NAMES.FLOW_RUN_WITH_APPROVAL
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('RUNTIME_UNAVAILABLE');
+    expect(result.summary).toContain('missing workflow id');
+    expect(executeTool).not.toHaveBeenCalled();
+    expect(snapshot.status).toBe('error');
   });
 
   it('stops before the first step when page preconditions do not match', async () => {
@@ -312,6 +473,9 @@ describe('WorkflowReplayApprovalFlow', () => {
     const workflow = defaultWorkflowRepo.save({
       domain: 'app.example.com',
       completionEvidence: ['Monthly invoice downloaded'],
+      postconditions: [
+        { kind: 'text', id: 'invoice-downloaded', text: 'Monthly invoice downloaded' }
+      ],
       intent: 'Download invoice',
       taskDescription: 'Download the billing invoice',
       steps: [{
@@ -381,6 +545,16 @@ describe('WorkflowReplayApprovalFlow', () => {
 
     expect(result.ok).toBe(false);
     expect(result.code).toBe('WORKFLOW_POSTCONDITION_FAILED');
+    expect(result.data).toMatchObject({
+      postconditionResults: [
+        expect.objectContaining({
+          id: 'invoice-downloaded',
+          kind: 'text',
+          status: 'fail',
+          reason: 'text_not_found'
+        })
+      ]
+    });
     expect(defaultWorkflowRepo.get(workflow.id)).toMatchObject({
       successCount: 0,
       failureCount: 1

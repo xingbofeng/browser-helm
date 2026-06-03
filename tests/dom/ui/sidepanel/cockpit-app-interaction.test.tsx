@@ -14,6 +14,7 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 describe('CockpitApp interaction', () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
     document.body.replaceChildren();
   });
 
@@ -672,6 +673,64 @@ describe('CockpitApp interaction', () => {
     container.remove();
   });
 
+  it('delegates vision capture to runtime without requesting optional debugger permission', async () => {
+    const request = vi.fn(async (
+      _request: unknown,
+      callback: (granted: boolean) => void
+    ) => callback(false));
+    vi.stubGlobal('chrome', {
+      permissions: {
+        contains: vi.fn(async (
+          _request: unknown,
+          callback: (granted: boolean) => void
+        ) => callback(false)),
+        request
+      }
+    });
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const runtime = new FakeRuntimePort({
+      snapshots: [
+        {
+          runId: 'seed',
+          mode: 'ask',
+          status: 'observed',
+          refs: [],
+          structuredPageData: structuredData()
+        }
+      ]
+    });
+    const executeTool = vi.spyOn(runtime, 'executeTool');
+
+    await act(async () => {
+      root.render(<I18nProvider initialLocale="zh"><CockpitApp runtime={runtime} initialRunId="seed" targetTabId={99} /></I18nProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      button('高级开发者选项').click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      button('视觉检查').click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      button('截取视口').click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(executeTool).toHaveBeenCalledWith(expect.objectContaining({
+      tool: 'bh_vision_capture_viewport'
+    }));
+    expect(request).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain('用户未授予 debugger 权限');
+    root.unmount();
+    container.remove();
+  });
+
   it('keeps background auto-observe retries out of the chat waterfall', async () => {
     vi.useFakeTimers();
     const container = document.createElement('div');
@@ -800,6 +859,7 @@ describe('CockpitApp interaction', () => {
       baseUrl: 'https://api.new.example/v1',
       model: 'gpt-new',
       apiKey: 'sk-new-secret',
+      apiKeyPersistence: 'session',
       streamingEnabled: true,
       allowLocalProviderEndpoints: false
     });
@@ -841,6 +901,7 @@ describe('CockpitApp interaction', () => {
       baseUrl: 'https://api.next.example/v1',
       model: 'gpt-next',
       apiKey: 'sk-existing-secret',
+      apiKeyPersistence: 'session',
       streamingEnabled: true,
       allowLocalProviderEndpoints: false
     });
@@ -1449,6 +1510,7 @@ async function expectProviderSettings(
     baseUrl: string;
     model: string;
     apiKey: string;
+    apiKeyPersistence?: 'session' | 'local';
     streamingEnabled?: boolean;
     allowLocalProviderEndpoints?: boolean;
   }

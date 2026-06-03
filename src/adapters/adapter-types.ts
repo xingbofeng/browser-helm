@@ -18,6 +18,7 @@ export type DomainAdapterRuntimeBehavior =
   | 'policy_composition';
 
 export type AdapterRequiredSignal = 'url_domain_match';
+export type AdapterObservedSignals = Partial<Record<AdapterRequiredSignal, boolean>>;
 
 export type AdapterDriftCheck = {
   id: string;
@@ -32,6 +33,7 @@ export type AdapterDriftCheckResult = AdapterDriftCheck & {
 export type AdapterDriftStatus = {
   status: 'not_checked' | 'ok' | 'drift_suspected';
   checks: AdapterDriftCheckResult[];
+  missingSignals: AdapterRequiredSignal[];
   genericFallbackReason: string;
 };
 
@@ -58,6 +60,7 @@ export const DOMAIN_ADAPTER_RUNTIME_CONTRACT = {
 export type AdapterContext = {
   url: URL;
   task?: string | undefined;
+  observedSignals?: AdapterObservedSignals | undefined;
 };
 
 export type AdapterGuidance = {

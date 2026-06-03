@@ -27,6 +27,7 @@ describe('doc tools', () => {
 
     expect(result.ok).toBe(true);
     expect(result.code).toBe(ERROR_CODES.OK);
+    expect(result.summary).toContain('BrowserHelm document');
     expect(JSON.stringify(result.data)).toContain('BrowserHelm document');
     expect(JSON.stringify(result.data)).not.toContain('token=secret');
   });

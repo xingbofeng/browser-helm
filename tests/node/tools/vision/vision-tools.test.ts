@@ -76,7 +76,9 @@ describe('vision tools', () => {
           bounds: { x: 1, y: 2, width: 100, height: 30 },
           width: 100,
           height: 30,
-          truncated: false,
+          cropStatus: 'unavailable',
+          fallbackReason: 'element_crop_unavailable_viewport_with_bounds_fallback',
+          truncated: true,
           sensitivity: 'unknown'
         }
       }

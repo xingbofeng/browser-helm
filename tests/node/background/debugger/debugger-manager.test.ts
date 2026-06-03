@@ -8,7 +8,12 @@ afterEach(() => {
 
 describe('DebuggerManager', () => {
   it('reports attach failure when chrome.debugger is unavailable', async () => {
-    vi.stubGlobal('chrome', {});
+    const request = vi.fn();
+    vi.stubGlobal('chrome', {
+      permissions: {
+        request
+      }
+    });
     const manager = new DebuggerManager();
 
     await expect(manager.attach(12)).resolves.toMatchObject({
@@ -16,6 +21,7 @@ describe('DebuggerManager', () => {
       attached: false,
       reason: 'chrome.debugger permission or API is unavailable'
     });
+    expect(request).not.toHaveBeenCalled();
   });
 
   it('attaches, collects network/console events, reads body, and detaches', async () => {

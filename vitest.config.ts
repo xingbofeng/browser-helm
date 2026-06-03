@@ -1,10 +1,17 @@
 import { defineConfig } from 'vitest/config';
 
 const securityCriticalThresholds = {
-  statements: 35,
-  branches: 20,
-  functions: 25,
-  lines: 35
+  statements: 80,
+  branches: 80,
+  functions: 80,
+  lines: 80
+};
+
+const redactionThresholds = {
+  statements: 80,
+  branches: 90,
+  functions: 80,
+  lines: 80
 };
 
 export default defineConfig({
@@ -35,7 +42,7 @@ export default defineConfig({
         'src/page/messaging/content-rpc-handler.ts': securityCriticalThresholds,
         'src/tools/core/tool-registry.ts': securityCriticalThresholds,
         'src/background/runtime/run/tools/approval/flows/workflow-replay-approval-flow.ts': securityCriticalThresholds,
-        'src/shared/redaction.ts': securityCriticalThresholds
+        'src/shared/redaction.ts': redactionThresholds
       }
     }
   }

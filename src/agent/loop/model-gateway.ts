@@ -138,20 +138,44 @@ export class ModelGateway {
       this.deps.updateStreaming(ctx.runId, ctx.record);
     }
 
-    const output = await withModelDecisionTimeout(ctx.client.complete(common), controller);
-    if (output === MODEL_TIMEOUT) {
-      return this.modelTimeoutDecision(ctx, 0);
-    }
-    this.deps.appendTrace(ctx.record, {
-      runId: ctx.runId,
-      type: TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_FINISHED,
-      payload: {
-        stepIndex: ctx.stepIndex,
-        model: ctx.settings.model,
-        finalPreview: redactModelOutputText(output.text)
+    try {
+      const output = await withModelDecisionTimeout(ctx.client.complete(common), controller);
+      if (output === MODEL_TIMEOUT) {
+        return this.modelTimeoutDecision(ctx, 0);
       }
-    });
-    return output;
+      this.deps.appendTrace(ctx.record, {
+        runId: ctx.runId,
+        type: TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_FINISHED,
+        payload: {
+          stepIndex: ctx.stepIndex,
+          model: ctx.settings.model,
+          finalPreview: redactModelOutputText(output.text)
+        }
+      });
+      return output;
+    } catch (error) {
+      if (controller.signal.aborted) {
+        return undefined;
+      }
+      const message = maskSecret(error instanceof Error ? error.message : String(error));
+      this.deps.appendTrace(ctx.record, {
+        runId: ctx.runId,
+        type: TRACE_EVENT_NAMES.MODEL_STREAM_FAILED,
+        payload: {
+          stepIndex: ctx.stepIndex,
+          model: ctx.settings.model,
+          summary: `fallback_failed: ${message}`
+        }
+      });
+      this.deps.updateStreaming(ctx.runId, ctx.record);
+      return {
+        text: JSON.stringify({
+          type: 'fail',
+          code: ERROR_CODES.MODEL_REQUEST_FAILED,
+          message
+        })
+      };
+    }
   }
 
   private modelTimeoutDecision(ctx: ModelGatewayRequest, charCount: number): { text: string } {

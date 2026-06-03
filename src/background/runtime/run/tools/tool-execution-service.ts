@@ -217,6 +217,9 @@ export class ToolExecutionService {
     // Emit post-execution events via adapter
     const afterEvents = adapter.afterExecution(input, result);
     for (const evt of afterEvents) this.deps.appendTrace(record, evt);
+    if (result.ok) {
+      await this.runPostFillVerification(input, record, router, adapter);
+    }
 
     if (!result.ok && await this.handleRecovery(input, record, router, result, contract)) {
       return result;
@@ -258,6 +261,39 @@ export class ToolExecutionService {
     });
 
     return result;
+  }
+
+  private async runPostFillVerification(
+    input: ExecuteToolInput,
+    record: NonNullable<ReturnType<ToolExecutionDeps['getRecord']>>,
+    router: ToolRouter,
+    adapter: ToolRuntimeAdapter
+  ): Promise<void> {
+    if (!explicitlyRequestsTool(record.task, TOOL_NAMES.FORM_VERIFY)) {
+      return;
+    }
+    const verifyArgs = formVerifyArgsFromFill(input.tool, input.args);
+    if (!verifyArgs) {
+      return;
+    }
+    this.deps.appendTrace(record, toolStartedEvent(input.runId, TOOL_NAMES.FORM_VERIFY, verifyArgs));
+    const verifyResult = await router.execute(
+      { tool: TOOL_NAMES.FORM_VERIFY, args: verifyArgs },
+      {
+        runId: input.runId,
+        stepId: `${input.runId}:${TOOL_NAMES.FORM_VERIFY}:post_fill`,
+        tabId: record.tabId,
+        runMode: record.mode,
+        snapshot: this.deps.getSnapshot(input.runId)
+      }
+    );
+    this.deps.appendTrace(record, toolResultEvent(input.runId, TOOL_NAMES.FORM_VERIFY, verifyResult));
+    for (const evt of adapter.afterExecution(
+      { runId: input.runId, tool: TOOL_NAMES.FORM_VERIFY, args: verifyArgs, source: 'runtime' },
+      verifyResult
+    )) {
+      this.deps.appendTrace(record, evt);
+    }
   }
 
   private getAdapter(tool: string): ToolRuntimeAdapter {
@@ -312,14 +348,16 @@ export class ToolExecutionService {
       ? domainOperationForTool(input.tool)
       : undefined;
     const capabilities = snapshot.capabilities;
-    const requiredCapability = capabilities ? requiredCapabilityForTool(input.tool) : undefined;
+    const requiredCapability = requiredCapabilityForTool(input.tool);
     const changedPageExpected = changedPageExpectedForTool(input.tool, contract.readOnly);
-    const source = input.source ?? 'runtime';
+    const source = trustedToolExecutionSource(input);
     const userIntent = userIntentForTool(input.tool, input.args, record.task, snapshot, source);
     const firstMutationRequiresApproval =
-      source === 'agent' &&
       changedPageExpected &&
-      userIntent?.grounded !== true &&
+      (
+        source === 'user' ||
+        (source === 'agent' && userIntent?.grounded !== true)
+      ) &&
       requiresFirstMutationApproval(input.tool, record.trace);
     return {
       runId: input.runId,
@@ -533,6 +571,13 @@ function changedPageExpectedForTool(tool: string, readOnly: boolean | undefined)
     tool === TOOL_NAMES.TAB_FOCUS;
 }
 
+function trustedToolExecutionSource(
+  input: ExecuteToolInput
+): NonNullable<ToolAuthorizationContext['source']> {
+  const { source = 'runtime' } = input;
+  return source;
+}
+
 function userIntentForTool(
   tool: string,
   args: unknown,
@@ -554,7 +599,7 @@ function userIntentForTool(
   if (tool !== TOOL_NAMES.FORM_FILL_FIELD && tool !== TOOL_NAMES.FORM_FILL_MANY) {
     return undefined;
   }
-  if (source !== 'agent') {
+  if (source === 'runtime') {
     return undefined;
   }
   const fields = formFillFieldsForIntent(tool, args);
@@ -630,6 +675,42 @@ function formFillFieldsForIntent(
     });
   }
   return values;
+}
+
+function formVerifyArgsFromFill(tool: string, args: unknown): { fieldRefIds: string[] } | undefined {
+  if (typeof args !== 'object' || args === null || Array.isArray(args)) {
+    return undefined;
+  }
+  const record = args as Record<string, unknown>;
+  if (tool === TOOL_NAMES.FORM_FILL_FIELD) {
+    return typeof record.fieldRefId === 'string'
+      ? { fieldRefIds: [record.fieldRefId] }
+      : undefined;
+  }
+  if (tool !== TOOL_NAMES.FORM_FILL_MANY || !Array.isArray(record.fields)) {
+    return undefined;
+  }
+  const fieldRefIds = record.fields
+    .filter((field): field is Record<string, unknown> =>
+      typeof field === 'object' && field !== null && !Array.isArray(field)
+    )
+    .map((field) => field.fieldRefId)
+    .filter((fieldRefId): fieldRefId is string => typeof fieldRefId === 'string');
+  return fieldRefIds.length > 0 ? { fieldRefIds } : undefined;
+}
+
+function explicitlyRequestsTool(task: string, tool: string): boolean {
+  for (const match of task.matchAll(new RegExp(`\\b${tool}\\b`, 'gu'))) {
+    if (!isNegatedToolMention(task, match.index ?? 0)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isNegatedToolMention(task: string, index: number): boolean {
+  const prefix = task.slice(Math.max(0, index - 16), index).toLowerCase();
+  return /(?:禁止|不要|不得|不能|避免)(?:调用|使用)?\s*$|(?:skip|without|do not|don't|not\s+call|never\s+call)\s*$/iu.test(prefix);
 }
 
 function formFillValue(value: unknown): string | undefined {

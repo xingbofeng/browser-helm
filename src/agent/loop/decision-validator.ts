@@ -30,6 +30,8 @@ export type ModelDecisionKind =
   | 'repeated_form_verify'
   | 'repeated_form_inspect'
   | 'repeated_page_read'
+  | 'forbidden_tool'
+  | 'ask_user_prohibited'
   | 'parse_failure';
 
 export type ModelDecisionError = {
@@ -50,6 +52,9 @@ export function validateModelDecision(
   if (decision.type === 'finish') {
     return undefined;
   }
+  if (decision.type === 'ask_user') {
+    return askUserDecisionError(record);
+  }
   if (decision.type !== 'tool_call') {
     return undefined;
   }
@@ -64,6 +69,10 @@ export function validateModelDecision(
         availableTools: [...availableToolNames]
       }
     };
+  }
+  const forbiddenTool = forbiddenToolDecisionError(decision, record);
+  if (forbiddenTool) {
+    return forbiddenTool;
   }
   return existingValueDecisionError(decision, snapshot, record) ??
     repeatedToolDecisionError(decision, snapshot, record);
@@ -115,6 +124,30 @@ export function validateRepairDecision(
       detail: lastRepairError.detail
     };
   }
+  if (lastRepairError.kind === 'forbidden_tool') {
+    return {
+      code: ERROR_CODES.TOOL_ARGS_INVALID,
+      message: [
+        lastRepairError.message,
+        'Forbidden-tool repair must return finish, ask_user, or fail.',
+        `Do not call tools such as ${decision.tool} during this repair.`
+      ].join(' '),
+      kind: 'forbidden_tool',
+      detail: lastRepairError.detail
+    };
+  }
+  if (lastRepairError.kind === 'ask_user_prohibited') {
+    return {
+      code: ERROR_CODES.TOOL_ARGS_INVALID,
+      message: [
+        lastRepairError.message,
+        'Ask-user repair must return finish or fail.',
+        `Do not call tools such as ${decision.tool} during this repair.`
+      ].join(' '),
+      kind: 'ask_user_prohibited',
+      detail: lastRepairError.detail
+    };
+  }
   if (lastRepairError.kind === 'repeated_form_inspect' && isFieldDiscoveryTool(decision.tool)) {
     return {
       code: ERROR_CODES.TOOL_ARGS_INVALID,
@@ -143,6 +176,45 @@ export function validateRepairDecision(
 }
 
 // ── Error checks ──
+
+function askUserDecisionError(record: RunRecord): ModelDecisionError | undefined {
+  if (!taskProhibitsAskUser(record.task)) {
+    return undefined;
+  }
+  return {
+    code: ERROR_CODES.TOOL_ARGS_INVALID,
+    message: [
+      'The user task explicitly requires a direct finish and does not allow asking for more input.',
+      'Use the evidence already collected to return finish, or fail if the task cannot be completed.'
+    ].join(' '),
+    kind: 'ask_user_prohibited',
+    detail: {
+      task: redactTextForModelContext(record.task)
+    }
+  };
+}
+
+function forbiddenToolDecisionError(
+  decision: ToolCallDecision,
+  record: RunRecord
+): ModelDecisionError | undefined {
+  if (!taskExplicitlyForbidsTool(record.task, decision.tool)) {
+    return undefined;
+  }
+  return {
+    code: ERROR_CODES.TOOL_ARGS_INVALID,
+    message: [
+      `The user explicitly prohibited ${decision.tool}.`,
+      'Do not execute a tool that the task says not to call.',
+      'Use existing evidence to return finish, ask_user, or fail.'
+    ].join(' '),
+    kind: 'forbidden_tool',
+    detail: {
+      tool: decision.tool,
+      task: redactTextForModelContext(record.task)
+    }
+  };
+}
 
 function existingValueDecisionError(
   decision: AgentDecision,
@@ -500,6 +572,20 @@ function sameStringSet(left: string[], right: string[]): boolean {
   return normalizedLeft.every((value, index) => value === normalizedRight[index]);
 }
 
+function taskExplicitlyForbidsTool(task: string, tool: string): boolean {
+  return task
+    .split(/[。！？!?；;，,\n]/u)
+    .some((sentence) =>
+      sentence.includes(tool) &&
+      !/(?:再次|重复|继续|another|again|repeat)/iu.test(sentence) &&
+      /(?:禁止|不要|不得|不能|避免)(?:调用|使用)?|(?:do\s+not|don't|never|not\s+call)\s+(?:call\s+|use\s+)?/iu.test(sentence)
+    );
+}
+
+function taskProhibitsAskUser(task: string): boolean {
+  return /(?:必须|直接)\s*finish|finish\s*(?:直接|即可)|不要\s*ask_user|不要\s*询问|不要\s*追问|do\s+not\s+ask|don't\s+ask/iu.test(task);
+}
+
 // ── Repair messages ──
 
 export function buildRepairMessages(
@@ -603,6 +689,40 @@ export function buildRepairMessages(
       }
     ];
   }
+  if (error.kind === 'forbidden_tool') {
+    return [
+      ...messages,
+      {
+        role: 'user' as const,
+        content: [
+          '═══ REPAIR (1 of 1) ═══',
+          `Error: ${error.message}`,
+          'The selected tool is explicitly prohibited by the user task.',
+          'You must NOT call any tool for this repair.',
+          'Return finish using already collected evidence, ask_user if the task cannot be completed safely, or fail if required evidence is unavailable.',
+          'System policy, tool list, approval rules, and output schema are unchanged.',
+          'Return one JSON AgentDecision only — no markdown, no explanation.'
+        ].join('\n')
+      }
+    ];
+  }
+  if (error.kind === 'ask_user_prohibited') {
+    return [
+      ...messages,
+      {
+        role: 'user' as const,
+        content: [
+          '═══ REPAIR (1 of 1) ═══',
+          `Error: ${error.message}`,
+          'The task requires a direct final answer instead of asking the user.',
+          'Use already collected tool results and return finish now, or return fail if completion is impossible.',
+          'Do not call another tool for this repair.',
+          'System policy, tool list, approval rules, and output schema are unchanged.',
+          'Return one JSON AgentDecision only — no markdown, no explanation.'
+        ].join('\n')
+      }
+    ];
+  }
   // parse_failure, tool_not_found, and other errors
   return [
     ...messages,
@@ -628,7 +748,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isPageContentReadTool(tool: string): boolean {
-  return tool === TOOL_NAMES.PAGE_READ_ARTICLE || tool === TOOL_NAMES.PAGE_READ_VISIBLE_TEXT;
+  return tool === TOOL_NAMES.PAGE_READ_ARTICLE ||
+    tool === TOOL_NAMES.PAGE_READ_VISIBLE_TEXT ||
+    tool === TOOL_NAMES.DOC_READ_URL;
 }
 
 function repeatsFormInspection(lastTool: string, nextTool: string): boolean {

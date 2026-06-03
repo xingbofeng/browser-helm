@@ -1,5 +1,5 @@
 import type { ToolApprovalFlow } from './flows/tool-approval-flow';
-import { DefaultApprovalFlow } from './flows/default-approval-flow';
+import { DefaultApprovalFlow, ExecutePendingActionApprovalFlow } from './flows/default-approval-flow';
 import { FormSubmitApprovalFlow } from './flows/form-submit-approval-flow';
 import { WorkflowReplayApprovalFlow } from './flows/workflow-replay-approval-flow';
 import { ClipboardApprovalFlow } from './flows/clipboard-approval-flow';
@@ -40,6 +40,8 @@ export class ToolApprovalFlowRegistry {
     this.flows.set(TOOL_NAMES.STORAGE_SET_WITH_APPROVAL, new StorageApprovalFlow(deps));
     this.flows.set(TOOL_NAMES.STORAGE_DELETE_WITH_APPROVAL, new StorageApprovalFlow(deps));
     this.flows.set(TOOL_NAMES.STORAGE_CLEAR_WITH_APPROVAL, new StorageApprovalFlow(deps));
+    this.flows.set(TOOL_NAMES.ACTION_CLICK, new ExecutePendingActionApprovalFlow(deps));
+    this.flows.set(TOOL_NAMES.POINTER_CLICK, new ExecutePendingActionApprovalFlow(deps));
   }
 
   getFlow(tool: string): ToolApprovalFlow {

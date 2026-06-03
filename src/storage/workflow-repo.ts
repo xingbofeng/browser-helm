@@ -1,6 +1,8 @@
 import { sanitizeMemoryDetail, sanitizeMemoryText } from '../agent/memory/memory-write-policy';
 import type {
   WorkflowAdapterBinding,
+  WorkflowInvariant,
+  WorkflowInvariantResult,
   WorkflowKeyRefHint,
   WorkflowMemory,
   WorkflowReplayPreview,
@@ -20,6 +22,8 @@ export type SaveWorkflowInput = {
   keyRefHints?: WorkflowKeyRefHint[] | undefined;
   toolManifestHash?: string | undefined;
   adapter?: WorkflowAdapterBinding | undefined;
+  preconditions?: WorkflowInvariant[] | undefined;
+  postconditions?: WorkflowInvariant[] | undefined;
   completionEvidence?: string[] | undefined;
   intent: string;
   taskDescription: string;
@@ -38,10 +42,17 @@ export type WorkflowPreviewContext = {
     role?: string | undefined;
     name?: string | undefined;
     tagName?: string | undefined;
+    disabled?: boolean | undefined;
     locator?: string | undefined;
   }> | undefined;
   toolManifestHash?: string | undefined;
   adapter?: WorkflowAdapterBinding | undefined;
+  formValues?: Array<{
+    refId?: string | undefined;
+    name?: string | undefined;
+    value?: string | undefined;
+  }> | undefined;
+  adapterSignals?: Record<string, boolean> | undefined;
 };
 
 export class WorkflowRepo {
@@ -64,6 +75,8 @@ export class WorkflowRepo {
       keyRefHints: sanitizeKeyRefHints(input.keyRefHints),
       ...(input.toolManifestHash ? { toolManifestHash: sanitizeMemoryText(input.toolManifestHash).value } : {}),
       ...(input.adapter ? { adapter: sanitizeAdapter(input.adapter) } : {}),
+      preconditions: sanitizeWorkflowInvariants(input.preconditions),
+      postconditions: sanitizeWorkflowInvariants(input.postconditions),
       completionEvidence: sanitizeTextArray(input.completionEvidence),
       intent: sanitizeMemoryText(input.intent).value,
       taskDescription: sanitizeMemoryText(input.taskDescription).value,
@@ -136,6 +149,7 @@ export class WorkflowRepo {
     }
     const highRisk = workflow.steps.some((step) => step.risk === 'high' || step.requiresApproval);
     const unmetPreconditions = context ? evaluateWorkflowPreconditions(workflow, context) : [];
+    const preconditionResults = context ? evaluateWorkflowPreconditionResults(workflow, context) : [];
     return {
       workflowId: workflow.id,
       domain: workflow.domain,
@@ -147,7 +161,8 @@ export class WorkflowRepo {
       warnings: highRisk
         ? ['Workflow contains high-risk or approval-gated steps.', ...unmetPreconditions.map((item) => `Unmet precondition: ${item}`)]
         : ['Workflow replay requires explicit user approval.', ...unmetPreconditions.map((item) => `Unmet precondition: ${item}`)],
-      unmetPreconditions
+      unmetPreconditions,
+      preconditionResults
     };
   }
 
@@ -203,6 +218,42 @@ function sanitizeAdapter(adapter: WorkflowAdapterBinding): WorkflowAdapterBindin
   };
 }
 
+function sanitizeWorkflowInvariants(invariants: WorkflowInvariant[] | undefined): WorkflowInvariant[] {
+  return (invariants ?? []).map((invariant) => {
+    const id = invariant.id ? { id: sanitizeMemoryText(invariant.id).value } : {};
+    if (invariant.kind === 'url') {
+      return { kind: invariant.kind, ...id, pattern: sanitizeMemoryText(invariant.pattern).value };
+    }
+    if (invariant.kind === 'dom_state') {
+      return {
+        kind: invariant.kind,
+        ...id,
+        ...(invariant.refId ? { refId: sanitizeMemoryText(invariant.refId).value } : {}),
+        ...(invariant.name ? { name: sanitizeMemoryText(invariant.name).value } : {}),
+        state: invariant.state
+      };
+    }
+    if (invariant.kind === 'form_value') {
+      return {
+        kind: invariant.kind,
+        ...id,
+        ...(invariant.refId ? { refId: sanitizeMemoryText(invariant.refId).value } : {}),
+        ...(invariant.name ? { name: sanitizeMemoryText(invariant.name).value } : {}),
+        value: sanitizeMemoryText(invariant.value).value
+      };
+    }
+    if (invariant.kind === 'adapter_signal') {
+      return {
+        kind: invariant.kind,
+        ...id,
+        signal: sanitizeMemoryText(invariant.signal).value,
+        expected: invariant.expected
+      };
+    }
+    return { kind: invariant.kind, ...id, text: sanitizeMemoryText(invariant.text).value };
+  });
+}
+
 export function evaluateWorkflowPreconditions(
   workflow: WorkflowMemory,
   context: WorkflowPreviewContext
@@ -236,22 +287,107 @@ export function evaluateWorkflowPreconditions(
   if (workflow.adapter?.version && context.adapter?.version !== workflow.adapter.version) {
     failures.push('adapter_version');
   }
-  return [...new Set(failures)];
+  return [...new Set([
+    ...failures,
+    ...evaluateWorkflowPreconditionResults(workflow, context)
+      .filter((result) => result.status === 'fail')
+      .map(resultId)
+  ])];
 }
 
 export function evaluateWorkflowCompletionEvidence(
   workflow: WorkflowMemory,
   context: WorkflowPreviewContext
 ): string[] {
+  const failedPostconditions = evaluateWorkflowPostconditions(workflow, context)
+    .filter((result) => result.status === 'fail')
+    .map(resultId);
   const pageText = [
     context.url,
     context.title,
     context.visibleTextSummary,
     context.pageStateSummary
   ].filter(Boolean).join(' ');
-  return workflow.completionEvidence.filter((evidence) =>
+  return [
+    ...failedPostconditions,
+    ...workflow.completionEvidence.filter((evidence) =>
     !pageText.toLowerCase().includes(evidence.toLowerCase())
+    )
+  ];
+}
+
+export function evaluateWorkflowPreconditionResults(
+  workflow: WorkflowMemory,
+  context: WorkflowPreviewContext
+): WorkflowInvariantResult[] {
+  return workflow.preconditions.map((assertion) => evaluateInvariant(assertion, context));
+}
+
+export function evaluateWorkflowPostconditions(
+  workflow: WorkflowMemory,
+  context: WorkflowPreviewContext
+): WorkflowInvariantResult[] {
+  return workflow.postconditions.map((assertion) => evaluateInvariant(assertion, context));
+}
+
+function evaluateInvariant(
+  assertion: WorkflowInvariant,
+  context: WorkflowPreviewContext
+): WorkflowInvariantResult {
+  if (assertion.kind === 'url') {
+    const pass = matchesUrlPattern(context.url, assertion.pattern);
+    return invariantResult(assertion, pass, pass ? 'url_pattern_matched' : 'url_pattern_mismatch');
+  }
+  if (assertion.kind === 'text') {
+    const pageText = [context.title, context.visibleTextSummary, context.pageStateSummary].filter(Boolean).join(' ');
+    const pass = pageText.toLowerCase().includes(assertion.text.toLowerCase());
+    return invariantResult(assertion, pass, pass ? 'text_found' : 'text_not_found');
+  }
+  if (assertion.kind === 'form_value') {
+    const matched = (context.formValues ?? []).some((field) =>
+      matchesHint(field.refId, assertion.refId) &&
+      matchesHint(field.name, assertion.name) &&
+      field.value === assertion.value
+    );
+    return invariantResult(assertion, matched, matched ? 'form_value_matched' : 'form_value_mismatch');
+  }
+  if (assertion.kind === 'adapter_signal') {
+    const actual = context.adapterSignals?.[assertion.signal];
+    const pass = actual === assertion.expected;
+    return invariantResult(assertion, pass, pass ? 'adapter_signal_matched' : 'adapter_signal_mismatch');
+  }
+  const matchedRef = (context.refs ?? []).some((ref) =>
+    matchesHint(ref.refId, assertion.refId) &&
+    matchesHint(ref.name, assertion.name)
   );
+  const disabled = (context.refs ?? []).some((ref) =>
+    matchesHint(ref.refId, assertion.refId) &&
+    matchesHint(ref.name, assertion.name) &&
+    ref.disabled === true
+  );
+  const pass = assertion.state === 'absent' ? !matchedRef :
+    assertion.state === 'present' ? matchedRef :
+      assertion.state === 'disabled' ? matchedRef && disabled :
+        matchedRef && !disabled;
+  return invariantResult(assertion, pass, pass ? 'dom_state_matched' : 'dom_state_mismatch');
+}
+
+function invariantResult(
+  assertion: WorkflowInvariant,
+  pass: boolean,
+  reason: string
+): WorkflowInvariantResult {
+  return {
+    kind: assertion.kind,
+    ...(assertion.id ? { id: assertion.id } : {}),
+    status: pass ? 'pass' : 'fail',
+    reason,
+    assertion
+  };
+}
+
+function resultId(result: WorkflowInvariantResult): string {
+  return result.id ?? result.kind;
 }
 
 function containsAllHints(value: string | undefined, hints: string[]): boolean {

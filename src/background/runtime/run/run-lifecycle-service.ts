@@ -17,6 +17,8 @@ import type { Locale } from '../../../i18n/types';
 import { GoalRevisionService } from './goal-revision-service';
 import { redactTextForModelContext } from '../../../shared/redaction';
 import { AgentLoop } from '../../../agent/loop/agent-loop';
+import type { RuntimeCapabilityProbeResult } from '../capability-probe';
+import { probeRuntimeCapabilities } from '../capability-probe';
 
 export type LifecycleStore = {
   createRunId: () => string;
@@ -40,6 +42,7 @@ export type LifecycleDeps = {
   initialMessages: (runId: string, task: string, locale: Locale, options: { includeUserTask?: boolean; includeObserveStatus?: boolean }) => NonNullable<RunSnapshot['messages']>;
   errorMessage: (runId: string, title: string, content: string) => NonNullable<RunSnapshot['messages']>[number];
   executeTool: (input: ExecuteToolInput) => Promise<unknown>;
+  probeRuntimeCapabilities?: ((input: { tabId: number }) => Promise<RuntimeCapabilityProbeResult>) | undefined;
   settingsStore?: SettingsStore | undefined;
   createProviderModelClient?: ((settings: {
     baseUrl: string;
@@ -167,6 +170,21 @@ export class RunLifecycleService {
     }
 
     record.tabId = tabId;
+    const capabilities = await (this.deps.probeRuntimeCapabilities ?? probeRuntimeCapabilities)({ tabId });
+    this.deps.store.appendTrace(record, {
+      runId,
+      type: TRACE_EVENT_NAMES.CAPABILITIES_RESOLVED,
+      payload: {
+        capabilities: capabilities.capabilities,
+        limitations: capabilities.limitations
+      }
+    });
+    this.deps.store.setSnapshot(runId, {
+      ...this.deps.store.getSnapshot(runId),
+      capabilities: capabilities.capabilities,
+      capabilityLimitations: capabilities.limitations,
+      trace: record.trace
+    });
     void this.observeInitial(runId, record as RunRecord & { tabId: number }, tabId);
     return { runId };
   }
@@ -234,7 +252,9 @@ export class RunLifecycleService {
           : {}),
         ...(previousSnapshot.taskState ?? observedSnapshot.taskState
           ? { taskState: previousSnapshot.taskState ?? observedSnapshot.taskState }
-          : {})
+          : {}),
+        ...(previousSnapshot.capabilities ? { capabilities: previousSnapshot.capabilities } : {}),
+        ...(previousSnapshot.capabilityLimitations ? { capabilityLimitations: previousSnapshot.capabilityLimitations } : {})
       },
       record
     );
@@ -265,6 +285,8 @@ export class RunLifecycleService {
         ...(baseSnapshot.plan ?? fallbackFields.plan
           ? { plan: baseSnapshot.plan ?? fallbackFields.plan }
           : {}),
+        ...(baseSnapshot.capabilities ? { capabilities: baseSnapshot.capabilities } : {}),
+        ...(baseSnapshot.capabilityLimitations ? { capabilityLimitations: baseSnapshot.capabilityLimitations } : {}),
         trace: record.trace,
         messages: this.deps.withRunMessages(baseSnapshot, record).messages,
         streaming: this.deps.streamingStateFromTrace(record.trace),
@@ -297,6 +319,8 @@ export class RunLifecycleService {
       ...(baseSnapshot.plan ?? fallbackFields.plan
         ? { plan: baseSnapshot.plan ?? fallbackFields.plan }
         : {}),
+      ...(baseSnapshot.capabilities ? { capabilities: baseSnapshot.capabilities } : {}),
+      ...(baseSnapshot.capabilityLimitations ? { capabilityLimitations: baseSnapshot.capabilityLimitations } : {}),
       trace: record.trace,
       messages: this.deps.withRunMessages(baseSnapshot, record).messages,
       streaming: this.deps.streamingStateFromTrace(record.trace),

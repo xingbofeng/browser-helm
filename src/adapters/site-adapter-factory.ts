@@ -1,6 +1,7 @@
 import type {
   AdapterContext,
   AdapterDriftCheck,
+  AdapterDriftStatus,
   AdapterRequiredSignal,
   AdapterGuidance,
   AdapterId,
@@ -43,11 +44,7 @@ export function createSiteAdapter(input: SiteAdapterInput): DomainAdapter {
     requiredSignals,
     driftChecks,
     matches: (url) => input.domains.some((domain) => matchesDomain(url.hostname, domain)),
-    getDriftStatus: () => ({
-      status: 'not_checked',
-      checks: driftChecks.map((check) => ({ ...check, status: 'not_checked' })),
-      genericFallbackReason: 'Use generic browser tools if adapter hints fail drift checks.'
-    }),
+    getDriftStatus: (ctx) => evaluateDriftStatus(ctx, input.domains, driftChecks),
     getGuidance: () => ({
       summary: input.guidance?.summary ?? `${input.label} adapter is active. Prefer known navigation, stable labels, and workflow templates before broad exploration.`,
       do: input.guidance?.do ?? [
@@ -63,6 +60,33 @@ export function createSiteAdapter(input: SiteAdapterInput): DomainAdapter {
     }),
     listWorkflows: (_ctx: AdapterContext) => input.workflows,
     listLocators: (_ctx: AdapterContext) => input.locators
+  };
+}
+
+function evaluateDriftStatus(
+  ctx: AdapterContext,
+  domains: string[],
+  driftChecks: AdapterDriftCheck[]
+): AdapterDriftStatus {
+  const signals = {
+    url_domain_match: domains.some((domain) => matchesDomain(ctx.url.hostname, domain)),
+    ...ctx.observedSignals
+  } satisfies Record<AdapterRequiredSignal, boolean>;
+  const checks = driftChecks.map((check) => {
+    const signalValue = signals[check.requiredSignal];
+    return {
+      ...check,
+      status: signalValue ? 'pass' as const : 'fail' as const
+    };
+  });
+  const missingSignals = checks
+    .filter((check) => check.status === 'fail')
+    .map((check) => check.requiredSignal);
+  return {
+    status: missingSignals.length > 0 ? 'drift_suspected' : 'ok',
+    checks,
+    missingSignals,
+    genericFallbackReason: 'Use generic browser tools if adapter hints fail drift checks.'
   };
 }
 

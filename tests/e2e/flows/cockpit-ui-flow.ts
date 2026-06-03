@@ -265,7 +265,7 @@ export class CockpitUiFlow {
     const sidePanel = this.flowContext.sidePanel();
     const snapshot = await sidePanel.runOnTab({
       tabId,
-      task: '填写并提交本地表单',
+      task: '填写并提交本地表单：姓名 Counter User，邮箱 counter@example.com，国家 us，同意条款 true',
       mode: 'form'
     });
     const observeResult = await executeToolResult(sidePanel.executeTool({
@@ -329,11 +329,11 @@ export class CockpitUiFlow {
     await expect(approvalPage.getByLabel('Approval')).toBeVisible();
     await expect(approvalPage.getByText('Form Fill Success', { exact: true })).toBeVisible();
     await expect(approvalPage.getByLabel('Approval').getByText('******').first()).toBeVisible();
-    await expect(approvalPage.getByText('Counter User')).toHaveCount(0);
+    await expect(approvalPage.getByLabel('Approval').getByText('Counter User')).toHaveCount(0);
     await approvalPage.getByRole('button', { name: /显示字段值|Show field values/u }).click();
-    await expect(approvalPage.getByText('Counter User')).toBeVisible();
+    await expect(approvalPage.getByLabel('Approval').getByText('Counter User')).toBeVisible();
     await approvalPage.getByRole('button', { name: /隐藏字段值|Hide field values/u }).click();
-    await expect(approvalPage.getByText('Counter User')).toHaveCount(0);
+    await expect(approvalPage.getByLabel('Approval').getByText('Counter User')).toHaveCount(0);
 
     await approvalPage.getByRole('button', { name: /^(高级开发者选项|Advanced debug options)$/u }).click();
     await approvalPage.getByRole('button', { name: /^(表单执行|Form Execution)$/u }).click();
@@ -345,14 +345,14 @@ export class CockpitUiFlow {
     await approvalPage.getByRole('button', { name: 'Approve' }).click();
     await expect(approvalPage.getByText(/Form submit executed after approval/u).first()).toBeVisible();
     const finalSnapshot = await waitForObservedSnapshot(sidePanel, snapshot.runId);
-    const traceJson = JSON.stringify(finalSnapshot.trace ?? []);
     expect(finalSnapshot.toolResult).toMatchObject({
       tool: TOOL_NAMES.FORM_SUBMIT_WITH_APPROVAL,
       ok: true,
       code: 'OK'
     });
-    expect(traceJson).not.toContain('Counter User');
-    expect(traceJson).not.toContain('counter@example.com');
+    const toolTraceJson = JSON.stringify((finalSnapshot.trace ?? []).filter((event) => event.type !== 'run_started'));
+    expect(toolTraceJson).not.toContain('Counter User');
+    expect(toolTraceJson).not.toContain('counter@example.com');
     expect((finalSnapshot.trace ?? []).map((event) => event.type)).toEqual(
       expect.arrayContaining([
         'field_fill_started',
@@ -372,7 +372,7 @@ export class CockpitUiFlow {
     const sidePanel = this.flowContext.sidePanel();
     const snapshot = await sidePanel.runOnTab({
       tabId,
-      task: '填写本地测试表单并检查提交审批',
+      task: '填写本地测试表单并检查提交审批：姓名 Counter User，邮箱 counter@example.com，国家 us，同意条款 true',
       mode: 'form'
     });
     const observeResult = await executeToolResult(sidePanel.executeTool({

@@ -62,6 +62,34 @@ describe('ScreenshotManager', () => {
         executeScript
       }
     });
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      blob: async () => new Blob(['viewport'])
+    })));
+    vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 640, height: 480 })));
+    class FakeOffscreenCanvas {
+      width: number;
+      height: number;
+      constructor(width: number, height: number) {
+        this.width = width;
+        this.height = height;
+      }
+      getContext() {
+        return { drawImage: vi.fn() };
+      }
+      async convertToBlob() {
+        return new Blob(['cropped'], { type: 'image/png' });
+      }
+    }
+    vi.stubGlobal('OffscreenCanvas', FakeOffscreenCanvas);
+    vi.stubGlobal('FileReader', class {
+      result: string | ArrayBuffer | null = null;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      readAsDataURL() {
+        this.result = 'data:image/png;base64,cropped';
+        this.onload?.();
+      }
+    });
 
     const manager = new ScreenshotManager();
     const screenshot = await manager.captureElement({
@@ -80,10 +108,44 @@ describe('ScreenshotManager', () => {
       width: 200,
       height: 80,
       selector: '#submit',
-      dataUrl: 'data:image/png;base64,element',
+      dataUrl: 'data:image/png;base64,cropped',
       captureSource: 'tabs_capture_visible_tab',
+      cropStatus: 'cropped',
       truncated: false,
       sensitivity: 'unknown'
+    });
+  });
+
+  it('marks element screenshots as viewport fallback when crop is unavailable', async () => {
+    vi.stubGlobal('chrome', {
+      tabs: {
+        captureVisibleTab: vi.fn(async () => 'data:image/png;base64,element')
+      },
+      scripting: {
+        executeScript: vi.fn(async () => [{
+          result: {
+            x: 10,
+            y: 20,
+            width: 200,
+            height: 80,
+            selector: '#submit'
+          }
+        }])
+      }
+    });
+
+    const manager = new ScreenshotManager();
+    const screenshot = await manager.captureElement({
+      tabId: 42,
+      selector: '#submit'
+    });
+
+    expect(screenshot).toMatchObject({
+      mode: 'element',
+      dataUrl: 'data:image/png;base64,element',
+      cropStatus: 'unavailable',
+      fallbackReason: 'element_crop_unavailable_viewport_with_bounds_fallback',
+      truncated: true
     });
   });
 
@@ -131,6 +193,57 @@ describe('ScreenshotManager', () => {
     });
     expect(attach).toHaveBeenCalledWith({ tabId: 42 }, '1.3');
     expect(detach).toHaveBeenCalledWith({ tabId: 42 });
+  });
+
+  it('uses available debugger API without requesting optional permission from the background', async () => {
+    const request = vi.fn(async (
+      _request: unknown,
+      callback: (granted: boolean) => void
+    ) => callback(false));
+    const sendCommand = vi.fn(async (_target: unknown, method: string) => {
+      if (method === 'Runtime.evaluate') {
+        return {
+          result: {
+            value: {
+              width: 1280,
+              height: 720
+            }
+          }
+        };
+      }
+      if (method === 'Page.captureScreenshot') {
+        return { data: 'cdpviewport' };
+      }
+      return {};
+    });
+    vi.stubGlobal('chrome', {
+      tabs: {
+        captureVisibleTab: vi.fn(async () => {
+          throw new Error("Either the '<all_urls>' or 'activeTab' permission is required.");
+        })
+      },
+      permissions: {
+        contains: vi.fn(async (
+          _request: unknown,
+          callback: (granted: boolean) => void
+        ) => callback(false)),
+        request
+      },
+      debugger: {
+        attach: vi.fn(async () => undefined),
+        detach: vi.fn(async () => undefined),
+        sendCommand,
+        onEvent: { addListener: vi.fn() },
+        onDetach: { addListener: vi.fn() }
+      }
+    });
+
+    const manager = new ScreenshotManager();
+    const screenshot = await manager.captureViewport({ tabId: 42 });
+
+    expect(screenshot.dataUrl).toBe('data:image/png;base64,cdpviewport');
+    expect(screenshot.captureSource).toBe('cdp_capture_screenshot');
+    expect(request).not.toHaveBeenCalled();
   });
 
   it('captures full-page screenshots with CDP content bounds instead of viewport fallback', async () => {

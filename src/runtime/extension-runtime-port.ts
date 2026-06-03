@@ -2,8 +2,8 @@ import type { RuntimePort } from './runtime-port';
 import {
   runtimeResponseSchema,
   type DecideApprovalInput,
-  type ExecuteToolInput,
   type HighlightRefInput,
+  type PublicExecuteToolInput,
   type RuntimeEvent,
   runtimeEventSchema,
   type RuntimeProviderSettings,
@@ -76,7 +76,7 @@ export class ExtensionRuntimePort implements RuntimePort {
     return response.data;
   }
 
-  async executeTool(input: ExecuteToolInput): Promise<RuntimeToolExecutionResult> {
+  async executeTool(input: PublicExecuteToolInput): Promise<RuntimeToolExecutionResult> {
     const response = await sendRuntimeMessage({
       type: RUNTIME_MESSAGES.EXECUTE_TOOL,
       input

@@ -62,3 +62,36 @@ describe('wxt config CSP safeguards', () => {
     )).toBe('<div></div><script src="/entry.js"></script>');
   });
 });
+
+describe('wxt config permission profile', () => {
+  it('keeps Chrome-only required debugger permission out of optional permissions', () => {
+    const manifest = config.manifest as {
+      permissions?: string[];
+      optional_permissions?: string[];
+      optional_host_permissions?: string[];
+    };
+
+    expect(manifest.permissions ?? []).toEqual(expect.arrayContaining([
+      'activeTab',
+      'storage',
+      'tabs',
+      'scripting',
+      'sidePanel',
+      'webNavigation',
+      'debugger'
+    ]));
+    expect(manifest.permissions ?? []).not.toEqual(expect.arrayContaining([
+      'downloads',
+      'clipboardRead',
+      'clipboardWrite'
+    ]));
+    expect(manifest.optional_permissions ?? []).toEqual(expect.arrayContaining([
+      'downloads',
+      'offscreen',
+      'clipboardRead',
+      'clipboardWrite'
+    ]));
+    expect(manifest.optional_permissions ?? []).not.toContain('debugger');
+    expect(manifest.optional_host_permissions ?? []).not.toContain('<all_urls>');
+  });
+});

@@ -25,6 +25,7 @@ export const screenshotCaptureSchema = z.object({
   width: z.number().int().positive(),
   height: z.number().int().positive(),
   captureSource: screenshotCaptureSourceSchema,
+  cropStatus: z.enum(['cropped', 'unavailable']).optional(),
   fallbackReason: z.string().min(1).optional(),
   truncated: z.boolean().default(false),
   sensitivity: screenshotSensitivitySchema.default('unknown'),

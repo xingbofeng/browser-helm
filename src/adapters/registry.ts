@@ -1,5 +1,6 @@
 import type {
   AdapterDetection,
+  AdapterObservedSignals,
   DetectedDomainAdapter,
   DomainAdapter
 } from './adapter-types';
@@ -20,7 +21,7 @@ export class DomainAdapterRegistry {
     return [...this.adapters];
   }
 
-  detect(rawUrl: string): AdapterDetection {
+  detect(rawUrl: string, options: { observedSignals?: AdapterObservedSignals | undefined } = {}): AdapterDetection {
     const url = new URL(rawUrl);
     const adapter = this.adapters.find((candidate) => candidate.matches(url));
     if (!adapter) {
@@ -44,7 +45,7 @@ export class DomainAdapterRegistry {
     }
     return {
       enabled: true,
-      adapter: detectedAdapter(adapter, url)
+      adapter: detectedAdapter(adapter, url, options.observedSignals)
     };
   }
 }
@@ -60,8 +61,12 @@ export const defaultDomainAdapterRegistry = new DomainAdapterRegistry([
   supabaseAdapter
 ]);
 
-function detectedAdapter(adapter: DomainAdapter, url: URL): DetectedDomainAdapter {
-  const ctx = { url };
+function detectedAdapter(
+  adapter: DomainAdapter,
+  url: URL,
+  observedSignals?: AdapterObservedSignals
+): DetectedDomainAdapter {
+  const ctx = { url, observedSignals };
   return {
     id: adapter.id,
     label: adapter.label,

@@ -195,4 +195,30 @@ describe('AuthorizationService', () => {
       risk: 'medium'
     });
   });
+
+  it('requires approval for public user-sourced first page mutations', () => {
+    const service = new AuthorizationService(policy({
+      allow: true,
+      requiresApproval: false,
+      reason: 'allowed',
+      risk: 'medium'
+    }));
+
+    expect(service.authorize({
+      ...baseContext,
+      tool: 'bh_action_click',
+      title: 'Click Action',
+      risk: 'medium',
+      changedPageExpected: true,
+      source: 'user',
+      userTask: 'Summarize this page without clicking.',
+      targetSummary: 'Continue',
+      firstMutationRequiresApproval: true
+    })).toMatchObject({
+      allow: false,
+      requiresApproval: true,
+      reason: 'First page-mutating action requires approval before execution',
+      risk: 'medium'
+    });
+  });
 });

@@ -119,6 +119,56 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
     ]);
   });
 
+  it('strips caller-provided execution source and attests public tool calls as user sourced', async () => {
+    const executeInputs: unknown[] = [];
+    const host = new BackgroundRuntimeHost({
+      startRun: async () => ({ runId: 'run_1' }),
+      getSnapshot: () => ({ runId: 'run_1', mode: 'act', status: 'observed' }),
+      cancelRun: async () => ({ runId: 'run_1', status: 'cancelled' }),
+      reviseGoal: async (input) => ({ runId: input.runId, mode: 'act', status: 'observed' }),
+      executeTool: async (input) => {
+        executeInputs.push(input);
+        return { ok: true, code: 'OK', summary: 'ok' };
+      },
+      highlightRef: async () => ({ ok: true, code: 'OK', summary: 'highlighted' }),
+      decideApproval: async () => ({ ok: true, code: 'OK', summary: 'ok' }),
+      testProviderSettings: async () => ({
+        ok: true,
+        code: 'OK',
+        message: '连接正常',
+        supportsStreaming: true
+      }),
+      setDomainAdapterEnabled: async (input) => ({
+        runId: input.runId,
+        mode: 'ask',
+        status: 'observed'
+      }),
+      subscribeRun: () => () => undefined
+    });
+
+    await host.handleMessage({
+      type: RUNTIME_MESSAGES.EXECUTE_TOOL,
+      input: {
+        runId: 'run_1',
+        tool: 'bh_form_fill_many',
+        args: { fields: [] },
+        source: 'runtime'
+      }
+    }, {
+      isExtensionPage: true,
+      isContentScript: false
+    });
+
+    expect(executeInputs).toEqual([
+      expect.objectContaining({
+        runId: 'run_1',
+        tool: 'bh_form_fill_many',
+        source: 'user'
+      })
+    ]);
+  });
+
+
   it('routes revise goal messages through the runtime boundary', async () => {
     const calls: string[] = [];
     const host = new BackgroundRuntimeHost({

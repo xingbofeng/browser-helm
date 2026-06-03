@@ -128,7 +128,8 @@ describe('memory and replay components', () => {
                 requiresApproval: true
               }],
               warnings: ['需要确认'],
-              unmetPreconditions: []
+              unmetPreconditions: [],
+              preconditionResults: []
             }}
             onApprove={onApprove}
             onDeny={onDeny}

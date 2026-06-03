@@ -80,6 +80,22 @@ describe('decision-parser', () => {
     expect(result.error.code).toBe('MODEL_OUTPUT_INVALID_JSON');
   });
 
+  it('parses a JSON decision followed by stray provider thinking tags', () => {
+    const result = parser.parse(
+      '{"type":"tool_call","tool":"bh_cdp_get_network_events","args":{},"reason":"读取 network"}\n</think>\n'
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error('expected parse success');
+    }
+    expect(result.decision).toMatchObject({
+      type: 'tool_call',
+      tool: 'bh_cdp_get_network_events',
+      args: {}
+    });
+  });
+
   it('normalizes wrapped tool_call decisions from provider JSON mode', () => {
     const result = parser.parse(JSON.stringify({
       tool_call: {

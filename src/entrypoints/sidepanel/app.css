@@ -148,9 +148,12 @@ body.animal-cursor--force *,
 }
 
 .bh-agentSidePanel .bh-headerIconButton {
+  display: inline-flex !important;
   width: 34px;
   height: 34px;
   min-width: 34px;
+  align-items: center !important;
+  justify-content: center !important;
   border: 1px solid #e7c989 !important;
   border-radius: 999px !important;
   padding: 0 !important;
@@ -184,6 +187,7 @@ body.animal-cursor--force *,
 }
 
 .bh-agentSidePanel .bh-headerIconButton svg {
+  display: block;
   color: inherit !important;
   stroke: currentColor !important;
   pointer-events: none;
@@ -1363,7 +1367,12 @@ body.animal-cursor--force *,
   margin: 0;
 }
 
-.bh-visionShotPreview img {
+.bh-visionShotFrame {
+  position: relative;
+  min-width: 0;
+}
+
+.bh-visionShotFrame img {
   display: block;
   width: 100%;
   max-height: 280px;
@@ -1371,6 +1380,37 @@ body.animal-cursor--force *,
   border-radius: 8px;
   background: #fffdf9;
   object-fit: contain;
+}
+
+.bh-visionShotDownload {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(231, 201, 137, 0.92);
+  border-radius: 999px;
+  background: rgba(255, 247, 230, 0.94);
+  color: #7a5127;
+  box-shadow: 0 2px 0 rgba(127, 86, 35, 0.18);
+  text-decoration: none;
+  cursor: url("../../../node_modules/animal-island-ui/dist/files/cursor-icon.1ea93a65.png") 4 0, default !important;
+}
+
+.bh-visionShotDownload:hover,
+.bh-visionShotDownload:focus-visible {
+  border-color: #d9aa55;
+  background: #fff0cf;
+  color: #6f431a;
+  outline: none;
+}
+
+.bh-visionShotDownload svg {
+  display: block;
+  stroke: currentColor;
 }
 
 .bh-visionShotPreview figcaption {

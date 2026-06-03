@@ -15,6 +15,22 @@ import { defaultMemoryRepo } from '../../../src/storage/memory-repo';
 import { defaultWorkflowRepo } from '../../../src/storage/workflow-repo';
 import { InMemoryRunSessionPersistence } from '../../../src/background/runtime/run/session-persistence';
 
+function grantedCapabilitiesProbe() {
+  return vi.fn().mockResolvedValue({
+    capabilities: {
+      hasActiveTab: true,
+      hasDebuggerPermission: true,
+      hasClipboardPermission: true,
+      hasDownloadsPermission: true,
+      hasStorageInspection: true,
+      hostPermissions: ['http://127.0.0.1/*'],
+      shallowDebugAvailable: true,
+      cdp: 'available'
+    },
+    limitations: []
+  });
+}
+
 describe('RunManager', () => {
   it('starts a run by observing the target tab through registered page tools', async () => {
     const calls: string[] = [];
@@ -93,13 +109,14 @@ describe('RunManager', () => {
         code: ERROR_CODES.OK
       }
     });
-    expect(snapshot.trace?.slice(0, 3).map((event) => event.type)).toEqual([
+    expect(snapshot.trace?.slice(0, 4).map((event) => event.type)).toEqual([
       TRACE_EVENT_NAMES.RUN_STARTED,
+      TRACE_EVENT_NAMES.CAPABILITIES_RESOLVED,
       TRACE_EVENT_NAMES.TOOL_STARTED,
       TRACE_EVENT_NAMES.TOOL_RESULT
     ]);
     expect(calls).toContain(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
-    expect(snapshot.trace?.slice(0, 3).every((event) => event.runId === started.runId)).toBe(true);
+    expect(snapshot.trace?.slice(0, 4).every((event) => event.runId === started.runId)).toBe(true);
     expect(snapshot.messages?.some((message) =>
       message.role === 'user' && message.kind === 'task' && message.content === '观察页面'
     )).toBe(false);
@@ -107,10 +124,10 @@ describe('RunManager', () => {
       task: '观察页面',
       mode: 'form'
     });
-    expect(payloadRecord(snapshot.trace?.[1]?.payload)).toMatchObject({
+    expect(payloadRecord(snapshot.trace?.[2]?.payload)).toMatchObject({
       tool: TOOL_NAMES.PAGE_OBSERVE
     });
-    expect(payloadRecord(snapshot.trace?.[2]?.payload)).toMatchObject({
+    expect(payloadRecord(snapshot.trace?.[3]?.payload)).toMatchObject({
       tool: TOOL_NAMES.PAGE_OBSERVE,
       code: ERROR_CODES.OK
     });
@@ -320,6 +337,7 @@ describe('RunManager', () => {
         expect(message.type).toBe(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
         return observationResponse();
       }),
+      probeRuntimeCapabilities: grantedCapabilitiesProbe(),
       settingsStore: providerSettings(),
       createProviderModelClient: () => decisionModel([
         {
@@ -367,6 +385,7 @@ describe('RunManager', () => {
         expect(message.type).toBe(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
         return observationResponse();
       }),
+      probeRuntimeCapabilities: grantedCapabilitiesProbe(),
       settingsStore: providerSettings(),
       createProviderModelClient: () => decisionModel(formFillDecisions('ref_reply', '你真牛逼'))
     });
@@ -441,6 +460,7 @@ describe('RunManager', () => {
         expect(message.type).toBe(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
         return observationResponse();
       }),
+      probeRuntimeCapabilities: grantedCapabilitiesProbe(),
       settingsStore: providerSettings(),
       createProviderModelClient: () => decisionModel([
         {
@@ -5038,7 +5058,8 @@ describe('RunManager', () => {
   it('keeps non-sensitive text fields in tool result detail while masking real secrets', async () => {
     const manager = new RunManager({
       getActiveTabId: async () => 42,
-      createContentRpcClient: () => rpcClient(async () => observationResponse())
+      createContentRpcClient: () => rpcClient(async () => observationResponse()),
+      probeRuntimeCapabilities: grantedCapabilitiesProbe()
     });
 
     const started = await manager.startRun({ task: '观察页面', mode: 'debug' });
@@ -5307,7 +5328,7 @@ describe('RunManager', () => {
         expect.objectContaining({
           kind: 'error',
           title: '运行出错',
-          content: 'Provider settings are required for the agent loop'
+          content: '模型配置缺少 Base URL、Model 或 API Key。请在设置中重新输入 API Key 并保存；如果调试扩展会频繁重载，可选择本机持久化保存。'
         })
       ])
     );
@@ -5333,7 +5354,7 @@ describe('RunManager', () => {
     const snapshot = await waitForSubscribedSnapshot(manager, started.runId, (nextSnapshot) =>
       nextSnapshot.messages?.some((message) =>
         message.kind === 'error' &&
-        message.content === 'Provider settings are required for the agent loop'
+        message.content === '模型配置缺少 Base URL、Model 或 API Key。请在设置中重新输入 API Key 并保存；如果调试扩展会频繁重载，可选择本机持久化保存。'
       ) === true
     );
 
@@ -5341,7 +5362,7 @@ describe('RunManager', () => {
       expect.arrayContaining([
         expect.objectContaining({
           kind: 'error',
-          content: 'Provider settings are required for the agent loop'
+          content: '模型配置缺少 Base URL、Model 或 API Key。请在设置中重新输入 API Key 并保存；如果调试扩展会频繁重载，可选择本机持久化保存。'
         })
       ])
     );

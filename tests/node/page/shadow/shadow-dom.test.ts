@@ -43,6 +43,36 @@ describe('shadow DOM reader', () => {
     });
   });
 
+  it('falls back to the only page-owned open shadow root when the model invents a host selector', () => {
+    document.body.innerHTML = '<x-search id="search-widget"></x-search><div id="browserhelm-floating-entry-host"></div>';
+    const host = document.querySelector('#search-widget') as HTMLElement;
+    const root = host.attachShadow({ mode: 'open' });
+    root.innerHTML = '<button aria-label="Run search">Go</button>';
+    const injectedHost = document.querySelector('#browserhelm-floating-entry-host') as HTMLElement;
+    injectedHost.attachShadow({ mode: 'open' }).innerHTML = '<button>BrowserHelm</button>';
+
+    const result = queryShadowRoot(document, {
+      hostSelector: 'custom-element',
+      selector: 'button'
+    });
+
+    expect(result).toMatchObject({
+      hostSelector: '#search-widget',
+      elements: [{ tagName: 'button', name: 'Run search', role: 'button' }]
+    });
+  });
+
+  it('does not fall back from an invented host selector when multiple page-owned roots exist', () => {
+    document.body.innerHTML = '<x-search id="search-widget"></x-search><x-menu id="menu-widget"></x-menu>';
+    (document.querySelector('#search-widget') as HTMLElement).attachShadow({ mode: 'open' });
+    (document.querySelector('#menu-widget') as HTMLElement).attachShadow({ mode: 'open' });
+
+    expect(() => queryShadowRoot(document, {
+      hostSelector: 'custom-element',
+      selector: 'button'
+    })).toThrow('Open shadow root not found for host: custom-element');
+  });
+
   it('queries elements inside a selected shadow root', () => {
     document.body.innerHTML = '<x-menu id="menu-widget"></x-menu>';
     const host = document.querySelector('#menu-widget') as HTMLElement;

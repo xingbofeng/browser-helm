@@ -290,7 +290,7 @@ describe('core ToolSelector', () => {
     });
     expect(downloadTask.hiddenTools).toContainEqual({
       tool: 'bh_clipboard_write_with_approval',
-      reason: 'Clipboard permission is unavailable'
+      reason: 'Clipboard capability is unavailable'
     });
   });
 
@@ -366,7 +366,7 @@ describe('core ToolSelector', () => {
     expect(result.visibleTools).toContain('bh_file_upload_with_approval');
     expect(result.hiddenTools).toContainEqual({
       tool: 'bh_download_list',
-      reason: 'Downloads permission is unavailable'
+      reason: 'Downloads capability is unavailable'
     });
   });
 });

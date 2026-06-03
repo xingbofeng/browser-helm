@@ -77,7 +77,10 @@ const SNAPSHOT_FIELDS = [
 describe('validateRuntimeToolDecision', () => {
   // ── FORM_FILL_FIELD validation ──
 
-  it('rejects FORM_FILL_FIELD with a non-existent field refId', () => {
+  it('delegates non-existent field refId to content-side stale-ref resolution', () => {
+    // When the ref is not in the current observation and cannot be uniquely resolved
+    // (multiple candidates exist), pre-validation skips and delegates to content-side
+    // which has full DOM access for resolveFreshFormFillRefId().
     const decision: AgentDecision = {
       type: 'tool_call', tool: 'bh_form_fill_field',
       args: { fieldRefId: 'non-existent', value: 'test' }, reason: 'testing'
@@ -85,9 +88,8 @@ describe('validateRuntimeToolDecision', () => {
     const rejection = validateRuntimeToolDecision(
       makeRecord('fill name with test'), makeSnapshot(SNAPSHOT_FIELDS), decision
     );
-    expect(rejection).toBeDefined();
-    expect(rejection!.code).toBeTruthy();
-    expect(rejection!.kind).toBe('blocked');
+    // Stale ref resolution is delegated to content-side when we can't uniquely match
+    expect(rejection).toBeUndefined();
   });
 
   it('rejects FORM_FILL_FIELD with a value not in user task', () => {
@@ -291,6 +293,105 @@ describe('validateModelDecision', () => {
     expect(rejection).toBeUndefined();
   });
 
+  it('rejects ask_user when the task explicitly requires direct finish', () => {
+    const decision: AgentDecision = {
+      type: 'ask_user',
+      question: '请提供完整任务。'
+    };
+
+    const record = makeRecord([
+      '第一步调用 bh_shadow_list。',
+      '第二步调用 bh_shadow_query。',
+      '第三步必须直接 finish。'
+    ].join('\n'));
+
+    const rejection = validateModelDecision(
+      decision,
+      toolContracts(),
+      makeSnapshot([]),
+      record
+    );
+
+    expect(rejection).toMatchObject({
+      kind: 'ask_user_prohibited',
+      code: 'TOOL_ARGS_INVALID'
+    });
+  });
+
+  it('rejects a model tool call that the user explicitly prohibited', () => {
+    const decision: AgentDecision = {
+      type: 'tool_call',
+      tool: TOOL_NAMES.TAB_FOCUS,
+      args: { tabId: 2 },
+      reason: 'focus tab'
+    };
+
+    const record = makeRecord([
+      '第一步调用 bh_tab_get_active。',
+      '第二步调用 bh_tab_list。',
+      '不要调用 bh_tab_focus，不要关闭 tab。'
+    ].join('\n'));
+
+    const rejection = validateModelDecision(
+      decision,
+      toolContracts(TOOL_NAMES.TAB_FOCUS),
+      makeSnapshot([]),
+      record
+    );
+
+    expect(rejection).toMatchObject({
+      kind: 'forbidden_tool',
+      code: 'TOOL_ARGS_INVALID'
+    });
+  });
+
+  it('does not reject a tool mentioned after an unrelated negated action in the same sentence', () => {
+    const decision: AgentDecision = {
+      type: 'tool_call',
+      tool: TOOL_NAMES.TAB_LIST,
+      args: {},
+      reason: 'list tabs'
+    };
+
+    const record = makeRecord([
+      '第二步调用 bh_tab_list，列出所有 tab。',
+      '第三步不要切换 tab，只根据 bh_tab_list 的结果总结。',
+      '不要调用 bh_tab_focus。'
+    ].join('\n'));
+
+    const rejection = validateModelDecision(
+      decision,
+      toolContracts(TOOL_NAMES.TAB_LIST),
+      makeSnapshot([]),
+      record
+    );
+
+    expect(rejection).toBeUndefined();
+  });
+
+  it('does not treat do-not-call-again wording as a first-call prohibition', () => {
+    const decision: AgentDecision = {
+      type: 'tool_call',
+      tool: TOOL_NAMES.PAGE_READ_ARTICLE,
+      args: { maxChars: 5000 },
+      reason: 'read article'
+    };
+
+    const record = makeRecord([
+      '第一步调用 bh_page_read_article 读取正文。',
+      '第三步滚动后必须调用 bh_page_read_visible_text；不要再次调用 bh_page_read_article。'
+    ].join('\n'));
+
+    const rejection = validateModelDecision(
+      decision,
+      toolContracts(TOOL_NAMES.PAGE_READ_ARTICLE),
+      makeSnapshot([]),
+      record
+    );
+
+    expect(rejection).toBeUndefined();
+  });
+
   it('rejects repeated page article reads without cursor progress after a successful read', () => {
     const decision: AgentDecision = {
       type: 'tool_call',
@@ -304,6 +405,38 @@ describe('validateModelDecision', () => {
       toolContracts(TOOL_NAMES.PAGE_READ_ARTICLE),
       snapshotWithPageRead({ hasMore: true, nextCursor: 5000 }),
       recordWithSuccessfulTool(TOOL_NAMES.PAGE_READ_ARTICLE, { maxChars: 5000 })
+    );
+
+    expect(rejection).toMatchObject({
+      kind: 'repeated_page_read'
+    });
+  });
+
+  it('rejects repeated document URL reads after a successful read', () => {
+    const decision: AgentDecision = {
+      type: 'tool_call',
+      tool: TOOL_NAMES.DOC_READ_URL,
+      args: {
+        url: 'http://127.0.0.1/manual.pdf',
+        pageStart: 1,
+        pageEnd: 1,
+        maxChars: 1200
+      },
+      reason: 'read again'
+    };
+
+    const rejection = validateModelDecision(
+      decision,
+      toolContracts(TOOL_NAMES.DOC_READ_URL),
+      snapshotWithToolResult(TOOL_NAMES.DOC_READ_URL, {
+        text: 'BrowserHelm PDF'
+      }),
+      recordWithSuccessfulTool(TOOL_NAMES.DOC_READ_URL, {
+        url: 'http://127.0.0.1/manual.pdf',
+        pageStart: 1,
+        pageEnd: 1,
+        maxChars: 1200
+      })
     );
 
     expect(rejection).toMatchObject({

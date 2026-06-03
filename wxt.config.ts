@@ -22,6 +22,16 @@ function stripInlineScripts(): Plugin {
   };
 }
 
+const optionalHighRiskPermissions = [
+  'downloads',
+  'offscreen',
+  'clipboardRead',
+  'clipboardWrite'
+] as const;
+
+const basePermissions = ['activeTab', 'storage', 'tabs', 'scripting', 'sidePanel', 'webNavigation', 'debugger'] as const;
+const e2eRequiredHighRiskPermissions = process.env.BROWSER_HELM_E2E_REQUIRED_PERMISSIONS === '1';
+
 export default defineConfig({
   srcDir: 'src',
   modules: ['@wxt-dev/module-react'],
@@ -56,17 +66,19 @@ export default defineConfig({
         description: 'Toggle BrowserHelm floating panel'
       }
     },
-    // BrowserHelm uses a minimal manifest permissions model for the Chrome Web Store.
-    // We declare zero host_permissions at install time so the extension does not
-    // request blanket page access by default. The runtime requests <all_urls>
-    // via optional_host_permissions, and Chrome prompts the user only when
-    // BrowserHelm first needs to read or act on a specific page.
-    //
-    // For a more locked-down distribution (e.g. enterprise), consider switching to
-    // the activeTab-only model and removing optional_host_permissions entirely.
-    permissions: ['activeTab', 'storage', 'tabs', 'scripting', 'sidePanel', 'webNavigation', 'debugger', 'downloads', 'offscreen', 'clipboardRead', 'clipboardWrite'],
+    // BrowserHelm keeps eligible high-risk capabilities optional. Chrome does
+    // not allow "debugger" as optional, so CDP capture declares it up front.
+    // Downloads, offscreen clipboard access, and host access are still
+    // requested only when a feature needs them and runtime authorization applies.
+    permissions: [
+      ...basePermissions,
+      ...(e2eRequiredHighRiskPermissions ? optionalHighRiskPermissions : [])
+    ] as chrome.runtime.ManifestPermissions[],
+    optional_permissions: e2eRequiredHighRiskPermissions
+      ? []
+      : [...optionalHighRiskPermissions] as chrome.runtime.ManifestOptionalPermission[],
     host_permissions: [],
-    optional_host_permissions: ['http://*/*', 'https://*/*', '<all_urls>'],
+    optional_host_permissions: ['http://*/*', 'https://*/*'],
     web_accessible_resources: [
       {
         resources: ['sidepanel.html', 'page-health-hook.js', 'icons/*'],

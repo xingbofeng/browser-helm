@@ -64,9 +64,7 @@ export class OpenAICompatibleClient implements ModelClient {
     });
 
     if (!response.ok) {
-      throw new ModelRequestFailedError(
-        `Model request failed with status ${response.status}`
-      );
+      throw await modelHttpError(response, 'Model request failed');
     }
 
     const data = (await response.json()) as OpenAICompletionResponse;
@@ -103,9 +101,7 @@ export class OpenAICompatibleClient implements ModelClient {
     });
 
     if (!response.ok) {
-      throw new ModelRequestFailedError(
-        `Vision model request failed with status ${response.status}`
-      );
+      throw await modelHttpError(response, 'Vision model request failed');
     }
 
     const data = (await response.json()) as OpenAICompletionResponse;
@@ -144,9 +140,7 @@ export class OpenAICompatibleClient implements ModelClient {
       });
 
       if (!response.ok) {
-        throw new ModelRequestFailedError(
-          `Model stream request failed with status ${response.status}`
-        );
+        throw await modelHttpError(response, 'Model stream request failed');
       }
       if (!response.body) {
         throw new ModelRequestFailedError('Model stream response missing body');
@@ -301,4 +295,45 @@ function normalizeModelError(error: unknown, fallback: string): ModelRequestFail
   }
   const message = error instanceof Error ? error.message : fallback;
   return new ModelRequestFailedError(maskProviderSecret(message));
+}
+
+async function modelHttpError(response: Response, prefix: string): Promise<ModelRequestFailedError> {
+  const detail = await providerErrorDetail(response);
+  return new ModelRequestFailedError(maskProviderSecret(
+    `${prefix} with status ${response.status}${detail ? `: ${detail}` : ''}`
+  ));
+}
+
+async function providerErrorDetail(response: Response): Promise<string> {
+  const text = await response.text().catch(() => '');
+  if (!text.trim()) {
+    return '';
+  }
+
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (typeof parsed === 'object' && parsed !== null && 'error' in parsed) {
+      const error = (parsed as { error?: unknown }).error;
+      if (typeof error === 'object' && error !== null) {
+        const record = error as Record<string, unknown>;
+        return [
+          stringField(record, 'message'),
+          stringField(record, 'code'),
+          stringField(record, 'type'),
+          stringField(record, 'request_id')
+        ].filter(Boolean).join(' | ').slice(0, 800);
+      }
+      if (typeof error === 'string') {
+        return error.slice(0, 800);
+      }
+    }
+    return text.slice(0, 800);
+  } catch {
+    return text.slice(0, 800);
+  }
+}
+
+function stringField(record: Record<string, unknown>, key: string): string {
+  const value = record[key];
+  return typeof value === 'string' ? value : '';
 }

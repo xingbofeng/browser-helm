@@ -276,6 +276,44 @@ describe('open-ai-compatible-client', () => {
     ).rejects.not.toThrow('sk-live-super-secret-token');
   });
 
+  it('includes sanitized provider error bodies for failed HTTP responses', async () => {
+    const client = new OpenAICompatibleClient({
+      apiKey: 'sk-live-super-secret-token',
+      baseUrl: 'https://example.com/v1',
+      model: 'gpt-5-mini',
+      fetchImpl: async () =>
+        new Response(JSON.stringify({
+          error: {
+            message: 'endpoint is inactive: FREE_QUOTA_EXHAUSTED sk-live-super-secret-token',
+            code: '401008',
+            type: 'gateway_error',
+            request_id: 'req_123'
+          }
+        }), {
+          status: 402,
+          statusText: 'Payment Required',
+          headers: {
+            'content-type': 'application/json'
+          }
+        })
+    });
+
+    await expect(
+      client.complete({
+        runId: 'run_1',
+        stepIndex: 0,
+        messages: []
+      })
+    ).rejects.toThrow(/402.*FREE_QUOTA_EXHAUSTED.*401008.*req_123/u);
+    await expect(
+      client.streamComplete({
+        runId: 'run_2',
+        stepIndex: 0,
+        messages: []
+      })
+    ).rejects.not.toThrow('sk-live-super-secret-token');
+  });
+
   it('tests provider connectivity without returning secrets', async () => {
     const client = new OpenAICompatibleClient({
       apiKey: 'sk-live-super-secret-token',

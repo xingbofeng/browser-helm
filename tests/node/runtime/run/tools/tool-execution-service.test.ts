@@ -26,7 +26,21 @@ function snapshotFromResult(tool: string, result: ToolResult) {
 
 function deps(overrides = {}) {
   return {
-    getSnapshot: vi.fn().mockReturnValue({ runId: 'run_1', mode: 'ask', status: 'observed' as const }),
+    getSnapshot: vi.fn().mockReturnValue({
+      runId: 'run_1',
+      mode: 'ask',
+      status: 'observed' as const,
+      capabilities: {
+        hasActiveTab: true,
+        hasDebuggerPermission: true,
+        hasClipboardPermission: true,
+        hasDownloadsPermission: true,
+        hasStorageInspection: true,
+        hostPermissions: ['http://127.0.0.1/*'],
+        shallowDebugAvailable: true,
+        cdp: 'available'
+      }
+    }),
     getRecord: vi.fn().mockReturnValue({ task: 'test', mode: 'ask' as RunMode, tabId: 42, trace: [] }),
     createToolRouter: vi.fn().mockReturnValue({ execute: vi.fn().mockResolvedValue({ ok: true, code: ERROR_CODES.OK, summary: 'ok', changedPage: false, requiresObserve: false }), getToolContract: vi.fn().mockReturnValue(null) }),
     createContentRpcClient: vi.fn(),
@@ -38,7 +52,14 @@ function deps(overrides = {}) {
     toolPolicy: { evaluate: vi.fn().mockReturnValue({ allow: true, requiresApproval: false, reason: '', risk: 'low' }) },
     approvalManager: { create: vi.fn().mockReturnValue({ id: 'req_1' }) },
     approvalRequestForTrace: vi.fn().mockImplementation((r: unknown) => r),
-    approvalRequiredResultFn: vi.fn().mockReturnValue({ ok: false, code: ERROR_CODES.APPROVAL_REQUIRED, summary: 'approval needed', changedPage: false, requiresObserve: false }),
+    approvalRequiredResultFn: vi.fn().mockReturnValue({
+      ok: false,
+      code: ERROR_CODES.APPROVAL_REQUIRED,
+      summary: 'approval needed',
+      changedPage: false,
+      requiresObserve: false,
+      requiresApproval: true
+    }),
     ...overrides
   };
 }
@@ -99,6 +120,50 @@ describe('ToolExecutionService', () => {
     const svc = new ToolExecutionService(d as unknown as ToolExecutionDeps);
     const result = await svc.execute(baseInput);
     expect(result.code).toBe(ERROR_CODES.APPROVAL_REQUIRED);
+    expect(execute).not.toHaveBeenCalled();
+  });
+  it('requires capability-bound tools even when snapshot capabilities are missing', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      ok: true,
+      code: ERROR_CODES.OK,
+      summary: 'ok',
+      changedPage: false,
+      requiresObserve: false
+    });
+    const authorize = vi.fn().mockReturnValue({
+      allow: false,
+      requiresApproval: false,
+      code: ERROR_CODES.CAPABILITY_UNAVAILABLE,
+      reason: 'Debugger capability unavailable',
+      risk: 'medium'
+    });
+    const d = deps({
+      getSnapshot: vi.fn().mockReturnValue({ runId: 'run_1', mode: 'debug', status: 'observed' as const }),
+      getRecord: vi.fn().mockReturnValue({ task: '检查 console', mode: 'debug' as RunMode, tabId: 42, trace: [] }),
+      authorizationService: { authorize },
+      createToolRouter: vi.fn().mockReturnValue({
+        execute,
+        getToolContract: vi.fn().mockReturnValue({
+          name: TOOL_NAMES.CDP_GET_CONSOLE_EVENTS,
+          title: 'Get Console Events',
+          risk: 'medium',
+          readOnly: true,
+          requiresApproval: false
+        })
+      })
+    });
+    const svc = new ToolExecutionService(d as unknown as ToolExecutionDeps);
+
+    const result = await svc.execute({
+      runId: 'run_1',
+      tool: TOOL_NAMES.CDP_GET_CONSOLE_EVENTS,
+      args: {}
+    });
+
+    expect(result.code).toBe(ERROR_CODES.CAPABILITY_UNAVAILABLE);
+    expect(authorize).toHaveBeenCalledWith(expect.objectContaining({
+      requiredCapability: 'debugger'
+    }));
     expect(execute).not.toHaveBeenCalled();
   });
   it('creates approval requests through the approval coordinator transaction', async () => {
@@ -485,6 +550,64 @@ describe('ToolExecutionService', () => {
     });
     expect(execute).toHaveBeenCalled();
   });
+
+  it('requires approval for public user-sourced first click actions', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      ok: true,
+      code: ERROR_CODES.OK,
+      summary: 'clicked',
+      changedPage: true,
+      requiresObserve: true
+    });
+    const d = deps({
+      getSnapshot: vi.fn().mockReturnValue({
+        runId: 'run_1',
+        mode: 'act',
+        status: 'observed' as const,
+        observation: { currentDomain: 'localhost' },
+        refs: [
+          {
+            refId: 'ref_1',
+            role: 'button',
+            name: '继续',
+            tagName: 'BUTTON',
+            visible: true
+          }
+        ]
+      }),
+      getRecord: vi.fn().mockReturnValue({
+        task: '总结这个页面，不要点击按钮。',
+        mode: 'act' as RunMode,
+        tabId: 42,
+        trace: []
+      }),
+      createToolRouter: vi.fn().mockReturnValue({
+        execute,
+        getToolContract: vi.fn().mockReturnValue({
+          name: TOOL_NAMES.ACTION_CLICK,
+          title: 'Click Action',
+          risk: 'medium',
+          readOnly: false,
+          requiresApproval: false
+        })
+      })
+    });
+    const svc = new ToolExecutionService(d as unknown as ToolExecutionDeps);
+    const result = await svc.execute({
+      runId: 'run_1',
+      tool: TOOL_NAMES.ACTION_CLICK,
+      args: { refId: 'ref_1' },
+      source: 'user'
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.APPROVAL_REQUIRED,
+      requiresApproval: true
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it('blocks direct form fill when the value is not explicit in the user task', async () => {
     const execute = vi.fn().mockResolvedValue({
       ok: true,
@@ -534,6 +657,54 @@ describe('ToolExecutionService', () => {
     });
     expect(execute).not.toHaveBeenCalled();
   });
+
+  it('blocks public user-sourced form fill when the value is not explicit in the user task', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      ok: true,
+      code: ERROR_CODES.OK,
+      summary: 'filled',
+      changedPage: true,
+      requiresObserve: true
+    });
+    const d = deps({
+      getSnapshot: vi.fn().mockReturnValue({
+        runId: 'run_1',
+        mode: 'form',
+        status: 'observed' as const,
+        observation: { currentDomain: 'localhost' }
+      }),
+      getRecord: vi.fn().mockReturnValue({
+        task: '总结这个页面，不要填写表单。',
+        mode: 'form' as RunMode,
+        tabId: 42,
+        trace: []
+      }),
+      createToolRouter: vi.fn().mockReturnValue({
+        execute,
+        getToolContract: vi.fn().mockReturnValue({
+          name: TOOL_NAMES.FORM_FILL_FIELD,
+          title: 'Fill Field',
+          risk: 'medium',
+          readOnly: false,
+          requiresApproval: false
+        })
+      })
+    });
+    const svc = new ToolExecutionService(d as unknown as ToolExecutionDeps);
+    const result = await svc.execute({
+      runId: 'run_1',
+      tool: TOOL_NAMES.FORM_FILL_FIELD,
+      args: { fieldRefId: 'email', value: 'attacker@example.com' },
+      source: 'user'
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.USER_INTENT_MISMATCH
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it('allows direct form fill when every value is explicit in the user task', async () => {
     const execute = vi.fn().mockResolvedValue({
       ok: true,
@@ -962,12 +1133,66 @@ describe('ToolExecutionService', () => {
     await svc.execute(baseInput);
     expect(d.appendTrace).toHaveBeenCalled();
   });
+  it('runs read-only form verification after successful form fill', async () => {
+    const execute = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        code: ERROR_CODES.OK,
+        summary: 'filled',
+        changedPage: true,
+        requiresObserve: false
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        code: ERROR_CODES.OK,
+        summary: 'Form verification passed',
+        changedPage: false,
+        requiresObserve: false,
+        data: {
+          status: 'pass',
+          allValid: true,
+          missingRequired: [],
+          invalidFields: [],
+          fieldResults: []
+        }
+      });
+    const d = deps({
+      getRecord: vi.fn().mockReturnValue({ task: '填写后必须调用 bh_form_verify 复查', mode: 'form' as RunMode, tabId: 42, trace: [] }),
+      createToolRouter: vi.fn().mockReturnValue({
+        execute,
+        getToolContract: vi.fn().mockReturnValue(null)
+      })
+    });
+    const svc = new ToolExecutionService(d as unknown as ToolExecutionDeps);
+
+    await svc.execute({
+      runId: 'run_1',
+      tool: TOOL_NAMES.FORM_FILL_MANY,
+      args: {
+        fields: [
+          { fieldRefId: 'ref_1', value: 'Ada' },
+          { fieldRefId: 'ref_2', value: 'true' }
+        ]
+      }
+    });
+
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenNthCalledWith(
+      2,
+      {
+        tool: TOOL_NAMES.FORM_VERIFY,
+        args: {
+          fieldRefIds: ['ref_1', 'ref_2']
+        }
+      },
+      expect.objectContaining({
+        stepId: `run_1:${TOOL_NAMES.FORM_VERIFY}:post_fill`
+      })
+    );
+  });
   it('does not parse form tool result shapes', async () => {
     const source = await import('../../../../../src/background/runtime/run/tools/tool-execution-service');
     const code = source.ToolExecutionService.toString();
-    expect(code).not.toContain('FORM_FILL_FIELD');
-    expect(code).not.toContain('FORM_FILL_MANY');
     expect(code).not.toContain('FORM_INFER_FILL_PLAN');
-    expect(code).not.toContain('FORM_VERIFY');
   });
 });

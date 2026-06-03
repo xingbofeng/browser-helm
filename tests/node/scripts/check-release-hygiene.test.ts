@@ -44,23 +44,51 @@ describe('check-release-hygiene script', () => {
     expect(result.stderr).toContain('Forbidden file in build output');
     expect(result.stderr).toContain('.reasonix');
   });
+
+  it('reports the controlled-beta release profile by default', () => {
+    const cwd = createReleaseFixture();
+    writeCompletionMatrix(cwd);
+
+    const result = runReleaseHygiene(cwd);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Release profile passed: controlled-beta');
+  });
+
+  it('rejects production profile without real-model verification evidence', () => {
+    const cwd = createReleaseFixture();
+    writeCompletionMatrix(cwd);
+
+    const result = runReleaseHygiene(cwd, {
+      BROWSER_HELM_RELEASE_PROFILE: 'production'
+    });
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('Production profile requires real-model E2E verification');
+  });
 });
 
-function runReleaseHygiene(cwd: string): { exitCode: number; stderr: string } {
+function runReleaseHygiene(
+  cwd: string,
+  env: Record<string, string> = {}
+): { exitCode: number; stdout: string; stderr: string } {
   let stderr = '';
+  let stdout: string;
   let exitCode = 0;
   try {
-    execFileSync(tsxBin, [scriptPath], {
+    stdout = execFileSync(tsxBin, [scriptPath], {
       cwd,
       encoding: 'utf8',
+      env: { ...process.env, ...env },
       stdio: ['ignore', 'pipe', 'pipe']
     });
   } catch (error) {
-    const childError = error as { status?: number; stderr?: string };
+    const childError = error as { status?: number; stdout?: string; stderr?: string };
     exitCode = childError.status ?? 1;
+    stdout = childError.stdout ?? '';
     stderr = childError.stderr ?? '';
   }
-  return { exitCode, stderr };
+  return { exitCode, stdout, stderr };
 }
 
 function createReleaseFixture(): string {

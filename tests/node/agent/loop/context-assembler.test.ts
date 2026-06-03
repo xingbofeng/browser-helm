@@ -29,6 +29,18 @@ const highRiskContract: ToolPromptContract = {
   contextVisibility: 'summary'
 };
 
+const cdpContract: ToolPromptContract = {
+  name: 'bh_cdp_get_console_events',
+  title: 'Get Console Events',
+  description: 'Reads console events',
+  modes: ['debug'],
+  risk: 'medium',
+  argsSchema: z.object({}),
+  readOnly: true,
+  requiresApproval: false,
+  contextVisibility: 'summary'
+};
+
 describe('ContextAssembler', () => {
   it('selects visible tools and builds model messages for the current turn', async () => {
     const record: RunRecord = {
@@ -65,5 +77,35 @@ describe('ContextAssembler', () => {
       toolNames: ['bh_page_observe']
     });
     expect(result.messages.length).toBeGreaterThan(0);
+  });
+
+  it('does not expose capability-bound tools when snapshot capabilities are missing', async () => {
+    const record: RunRecord = {
+      task: '检查 console 错误',
+      mode: 'debug',
+      trace: []
+    };
+    const snapshot = {
+      runId: 'run_1',
+      mode: 'debug',
+      status: 'thinking',
+      trace: [],
+      streaming: { enabled: false, active: false, chunkCount: 0, fallbackUsed: false }
+    } as RunSnapshot;
+
+    const result = await new ContextAssembler().assembleTurn({
+      record,
+      snapshot,
+      tabId: 1,
+      stepIndex: 0,
+      allToolsContracts: [pageObserveContract, cdpContract]
+    });
+
+    expect(result.toolsContracts.map((tool) => tool.name)).not.toContain('bh_cdp_get_console_events');
+    expect(result.selectionPayload.limitations).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Debugger')
+      ])
+    );
   });
 });

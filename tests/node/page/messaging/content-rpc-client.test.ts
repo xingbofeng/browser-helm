@@ -494,6 +494,85 @@ describe('content RPC frame aggregation', () => {
     );
   });
 
+  it('routes top-frame form authorization and fill messages explicitly to frame 0', async () => {
+    const sendMessage = vi.fn(async (_tabId: number, message: ContentRpcRequest) => {
+      if (message.type === CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE) {
+        return {
+          ok: true,
+          actionToken: 'top-token'
+        };
+      }
+      return {
+        ok: true,
+        fillFieldResult: {
+          fieldRefId: 'ref_101',
+          type: 'text',
+          status: 'filled',
+          requestedValue: 'Counter',
+          actualValuePreview: 'Counter',
+          changedPage: true
+        }
+      };
+    });
+    vi.stubGlobal('chrome', {
+      scripting: {
+        executeScript: vi.fn(async () => [])
+      },
+      tabs: {
+        sendMessage
+      },
+      webNavigation: {
+        getAllFrames: vi.fn(async () => [
+          {
+            frameId: 0,
+            url: 'https://www.youtube.com/'
+          },
+          {
+            frameId: 9,
+            url: 'https://www.youtube.com/embed/demo',
+            parentFrameId: 0
+          }
+        ])
+      }
+    });
+
+    const client = new ChromeContentRpcClient(42);
+    await client.request({
+      type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+      action: 'fill',
+      fieldRefIds: ['ref_101'],
+      runId: 'run_1',
+      stepId: 'step_1'
+    });
+    await client.request({
+      type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
+      fieldRefId: 'ref_101',
+      value: 'Counter',
+      actionToken: 'top-token',
+      runId: 'run_1',
+      stepId: 'step_1'
+    });
+
+    expect(sendMessage).toHaveBeenNthCalledWith(
+      1,
+      42,
+      expect.objectContaining({
+        type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+        frameId: 0
+      }),
+      { frameId: 0 }
+    );
+    expect(sendMessage).toHaveBeenNthCalledWith(
+      2,
+      42,
+      expect.objectContaining({
+        type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
+        frameId: 0
+      }),
+      { frameId: 0 }
+    );
+  });
+
   it('routes iframe enter-submit execute messages by form ref when no submit button ref exists', async () => {
     const sendMessage = vi.fn(async (_tabId: number, message: ContentRpcRequest) => {
       if (message.type === CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE) {

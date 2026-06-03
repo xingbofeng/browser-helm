@@ -390,18 +390,28 @@ export function validateRuntimeToolDecision(
     fields = rawFields;
   }
 
+  const candidates = runtimeFormCandidates(snapshot);
   const writableFields = new Map(
-    runtimeFormCandidates(snapshot).map((field) => [field.refId, field])
+    candidates.map((field) => [field.refId, field])
   );
+  const resolvedFields = new Set<string>();
   for (const field of fields) {
-    const candidate = writableFields.get(field.fieldRefId);
+    let candidate = writableFields.get(field.fieldRefId);
     if (!candidate) {
-      return {
-        code: ERROR_CODES.TOOL_ARGS_INVALID,
-        message: `Form fill rejected: field ${field.fieldRefId} is not in the current observation`,
-        kind: 'blocked'
-      };
+      // Stale ref: try to resolve by matching to an unmatched current candidate
+      candidate = resolveStaleFillCandidate(
+        field.fieldRefId,
+        fields,
+        resolvedFields,
+        candidates
+      );
+      // If still unresolved, skip pre-validation — content-side resolveFreshFormFillRefId
+      // will handle stale ref resolution at execution time with full DOM access
+      if (!candidate) {
+        continue;
+      }
     }
+    resolvedFields.add(candidate.refId);
     if (!isExplicitAllowedFieldValue(record.task, field.value, candidate)) {
       return {
         code: ERROR_CODES.TOOL_ARGS_INVALID,
@@ -445,6 +455,40 @@ export function validateRuntimeToolDecision(
         kind: 'blocked'
       };
     }
+  }
+  return undefined;
+}
+
+// ── Stale ref resolution ──
+
+/**
+ * Attempts to resolve a stale fill field ref to a current candidate.
+ *
+ * When a model decision references a ref that no longer exists in the snapshot
+ * (e.g. observation was refreshed and refs were reassigned), this function tries
+ * to match the stale ref to a currently-available form candidate that is not
+ * already claimed by another field in the same batch.
+ *
+ * If resolution fails, the caller should let the fill proceed to content-side
+ * execution where `resolveFreshFormFillRefId()` has full DOM access for matching.
+ */
+function resolveStaleFillCandidate(
+  staleRefId: string,
+  allFields: Array<{ fieldRefId: string; value: string }>,
+  alreadyResolved: Set<string>,
+  candidates: RuntimeFormCandidate[]
+): RuntimeFormCandidate | undefined {
+  const freshRefIds = new Set(candidates.map((c) => c.refId));
+  const claimedInBatch = new Set(
+    allFields
+      .filter((f) => f.fieldRefId !== staleRefId && freshRefIds.has(f.fieldRefId))
+      .map((f) => f.fieldRefId)
+  );
+  const available = candidates.filter(
+    (c) => !alreadyResolved.has(c.refId) && !claimedInBatch.has(c.refId)
+  );
+  if (available.length === 1) {
+    return available[0];
   }
   return undefined;
 }

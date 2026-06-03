@@ -36,7 +36,12 @@ export class SidePanelPage {
   }): Promise<void> {
     const page = this.pageObject;
     await page.evaluate(async (providerSettings) => {
-      await chrome.storage.local.set({ providerSettings });
+      await chrome.storage.local.set({
+        providerSettings: {
+          ...providerSettings,
+          apiKeyPersistence: 'local'
+        }
+      });
     }, settings);
     await page.reload();
   }

@@ -89,7 +89,10 @@ export class BackgroundRuntimeHost {
       case RUNTIME_MESSAGES.EXECUTE_TOOL:
         return {
           ok: true,
-          data: await this.runManager.executeTool(parsed.data.input)
+          data: await this.runManager.executeTool({
+            ...parsed.data.input,
+            source: 'user'
+          })
         };
       case RUNTIME_MESSAGES.DECIDE_APPROVAL:
         return {

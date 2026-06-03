@@ -53,7 +53,14 @@ export function runAdapterFixtureContract(input: AdapterFixtureContract): void {
         version: '1.0.0',
         lastVerifiedAt: '2026-06-03',
         driftStatus: {
-          status: 'not_checked',
+          status: 'ok',
+          checks: [
+            expect.objectContaining({
+              requiredSignal: 'url_domain_match',
+              status: 'pass'
+            })
+          ],
+          missingSignals: [],
           genericFallbackReason: 'Use generic browser tools if adapter hints fail drift checks.'
         }
       });

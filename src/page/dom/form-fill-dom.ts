@@ -104,12 +104,7 @@ function isAutocompletePopupField(element: HTMLElement): boolean {
   if (!(element instanceof HTMLInputElement)) {
     return false;
   }
-  const ariaAutocomplete = element.getAttribute('aria-autocomplete')?.toLowerCase();
-  const role = element.getAttribute('role')?.toLowerCase();
-  return element.hasAttribute('list') ||
-    ariaAutocomplete === 'list' ||
-    ariaAutocomplete === 'both' ||
-    role === 'combobox';
+  return element.hasAttribute('list');
 }
 
 function isRichEditorPluginSurface(element: HTMLElement): boolean {
