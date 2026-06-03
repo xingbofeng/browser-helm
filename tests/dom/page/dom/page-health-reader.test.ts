@@ -77,4 +77,55 @@ describe('page-health-reader', () => {
     expect(result.hasForm).toBe(false);
     expect(result.pageStateSummary).toContain('未发现明显页面异常');
   });
+
+  it('redacts raw page-health URL paths, query strings, fragments, and provider secrets', () => {
+    Object.assign(window, {
+      __browserHelmConsoleErrors: [
+        {
+          message: 'failed https://api.example.com/private/path?token=secret#frag sk-1234567890abcdef',
+          source: 'https://app.example.com/src/main.js?build=secret#L10'
+        }
+      ],
+      __browserHelmConsoleMessages: [
+        {
+          level: 'warn',
+          message: 'retry https://api.example.com/v1/users?api_key=secret',
+          source: 'console.warn'
+        }
+      ],
+      __browserHelmNetworkFailures: [
+        {
+          url: 'https://api.example.com/private/path?token=secret#frag',
+          method: 'POST',
+          errorText: 'failed with sk-1234567890abcdef'
+        }
+      ]
+    });
+    document.body.innerHTML = '<main>Hello</main>';
+
+    const result = readPageHealthSummary(document);
+
+    expect(result.consoleErrors).toEqual([
+      {
+        message: 'failed https://api.example.com/[REDACTED_PATH] [MASKED]',
+        source: 'https://app.example.com/[REDACTED_PATH]',
+        count: 1
+      }
+    ]);
+    expect(result.consoleMessages).toEqual([
+      {
+        level: 'warn',
+        message: 'retry https://api.example.com/[REDACTED_PATH]',
+        source: 'console.warn',
+        count: 1
+      }
+    ]);
+    expect(result.networkFailures).toEqual([
+      {
+        url: 'https://api.example.com/[REDACTED_PATH]',
+        method: 'POST',
+        errorText: 'failed with [MASKED]'
+      }
+    ]);
+  });
 });

@@ -19,6 +19,17 @@ describe('MemoryRepo', () => {
     expect(repo.lookup({ domain: 'app.example.com', query: 'invoice' })).toEqual([]);
   });
 
+  it('requires a non-empty domain scope for saving and lookup', () => {
+    const repo = new MemoryRepo();
+
+    expect(() => repo.save({
+      domain: '',
+      task: 'Open invoice report',
+      summary: 'Use Billing > Invoices'
+    })).toThrow('Memory domain is required');
+    expect(() => repo.lookup({ domain: '', query: 'invoice' })).toThrow('Memory domain is required');
+  });
+
   it('does not leak sensitive values into stored memory', () => {
     const repo = new MemoryRepo();
     const entry = repo.save({

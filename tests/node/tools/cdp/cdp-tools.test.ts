@@ -4,6 +4,7 @@ import {
   bhCdpAttach,
   bhCdpDetach,
   bhCdpGetEventListeners,
+  bhCdpGetNetworkEvents,
   bhCdpGetPerformanceMetrics,
   bhCdpGetRequestDetail,
   bhCdpGetResponseBody
@@ -13,6 +14,7 @@ import type { ContentRpcClient } from '../../../../src/page/messaging/content-rp
 import { ERROR_CODES } from '../../../../src/shared/constants/error-codes';
 
 afterEach(() => {
+  defaultDebuggerManager.resetForTesting();
   vi.unstubAllGlobals();
 });
 
@@ -69,6 +71,45 @@ describe('CDP tools', () => {
     expect(detachResult.ok).toBe(true);
   });
 
+  it('reports externally detached sessions to tool results instead of silently returning empty events', async () => {
+    let detachListener: ((source: chrome.debugger.Debuggee, reason?: string) => void) | undefined;
+    vi.stubGlobal('chrome', {
+      debugger: {
+        attach: vi.fn(async () => undefined),
+        detach: vi.fn(async () => undefined),
+        sendCommand: vi.fn(async () => ({})),
+        onEvent: { addListener: vi.fn() },
+        onDetach: {
+          addListener: vi.fn((listener: typeof detachListener) => {
+            detachListener = listener;
+          })
+        }
+      }
+    });
+
+    await bhCdpAttach(rpc()).execute(
+      { tabId: 48 },
+      { runId: 'run_1', stepId: 'step_1', runMode: 'debug' }
+    );
+    detachListener?.({ tabId: 48 }, 'target_closed');
+    const result = await bhCdpGetNetworkEvents(rpc()).execute(
+      { tabId: 48 },
+      { runId: 'run_1', stepId: 'step_2', runMode: 'debug' }
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.RUNTIME_UNAVAILABLE,
+      data: {
+        state: {
+          attached: false,
+          detachReason: 'target_closed'
+        }
+      }
+    });
+    expect(result.summary).toContain('target_closed');
+  });
+
   it('returns explicit response-body unavailable reason', async () => {
     vi.stubGlobal('chrome', {
       debugger: {
@@ -94,11 +135,11 @@ describe('CDP tools', () => {
     });
   });
 
-  it('redacts sensitive response body text before returning tool data', async () => {
+  it('returns non-sensitive response body text through tool data', async () => {
     vi.stubGlobal('chrome', {
       debugger: {
         sendCommand: vi.fn(async () => ({
-          body: '{"apiKey":"sk-1234567890abcdef"}',
+          body: '{"message":"hello","name":"Alice"}',
           base64Encoded: false
         }))
       }
@@ -117,12 +158,62 @@ describe('CDP tools', () => {
     });
     expect(typeof result.data === 'object' && result.data !== null && 'body' in result.data
       ? result.data.body
-      : undefined).toContain('[MASKED]');
+      : undefined).toContain('Alice');
+  });
+
+  it('blocks sensitive, binary, and large response bodies with explicit unavailable reasons', async () => {
+    const bodyByRequest = new Map<string, { body: string; base64Encoded?: boolean }>([
+      ['req_sensitive', { body: '{"token":"sk-1234567890abcdef"}', base64Encoded: false }],
+      ['req_binary', { body: 'iVBORw0KGgo=', base64Encoded: true }],
+      ['req_large', { body: 'x'.repeat(70_000), base64Encoded: false }]
+    ]);
+    vi.stubGlobal('chrome', {
+      debugger: {
+        sendCommand: vi.fn(async (_target, _method, params) => {
+          const record = typeof params === 'object' && params !== null
+            ? params as Record<string, unknown>
+            : {};
+          const requestId = typeof record.requestId === 'string'
+            ? record.requestId
+            : '';
+          return bodyByRequest.get(requestId) ?? { body: '', base64Encoded: false };
+        })
+      }
+    });
+
+    const sensitive = await bhCdpGetResponseBody(rpc()).execute(
+      { tabId: 45, requestId: 'req_sensitive' },
+      { runId: 'run_1', stepId: 'step_1', runMode: 'debug' }
+    );
+    const binary = await bhCdpGetResponseBody(rpc()).execute(
+      { tabId: 45, requestId: 'req_binary' },
+      { runId: 'run_1', stepId: 'step_2', runMode: 'debug' }
+    );
+    const large = await bhCdpGetResponseBody(rpc()).execute(
+      { tabId: 45, requestId: 'req_large' },
+      { runId: 'run_1', stepId: 'step_3', runMode: 'debug' }
+    );
+
+    expect(sensitive).toMatchObject({
+      ok: false,
+      data: { unavailableReason: 'sensitive_response_body' }
+    });
+    expect(binary).toMatchObject({
+      ok: false,
+      data: { unavailableReason: 'binary_response_body' }
+    });
+    expect(large).toMatchObject({
+      ok: false,
+      data: { unavailableReason: 'response_body_too_large' }
+    });
+    expect(JSON.stringify([sensitive.data, binary.data, large.data])).not.toContain('sk-1234567890abcdef');
   });
 
   it('returns request detail with sanitized headers and body previews', async () => {
     vi.stubGlobal('chrome', {
       debugger: {
+        attach: vi.fn(async () => undefined),
+        detach: vi.fn(async () => undefined),
         sendCommand: vi.fn(async (_target, method) => {
           if (method === 'Network.getResponseBody') {
             return {
@@ -193,15 +284,28 @@ describe('CDP tools', () => {
     expect(result).toMatchObject({
       ok: true,
       data: {
-        snapshot: {
-          tabId: 46,
-          metrics: [{ name: 'TaskDuration', value: 12.5 }]
-        }
-      }
-    });
+            snapshot: {
+              tabId: 46,
+              metrics: [{ name: 'TaskDuration', value: 12.5 }],
+              summary: {
+                metricCount: 1,
+                highlights: [{ name: 'TaskDuration', value: 12.5 }]
+              }
+            }
+          }
+        });
   });
 
   it('reads event listener metadata without source editing', async () => {
+    const listeners = Array.from({ length: 60 }, (_, index) => ({
+      type: index === 0 ? 'click' : 'input',
+      useCapture: false,
+      passive: true,
+      once: false,
+      scriptId: String(index),
+      lineNumber: index,
+      columnNumber: 2
+    }));
     vi.stubGlobal('chrome', {
       debugger: {
         sendCommand: vi.fn(async (_target, method) => {
@@ -209,17 +313,7 @@ describe('CDP tools', () => {
             return { result: { objectId: 'object_1' } };
           }
           if (method === 'DOMDebugger.getEventListeners') {
-            return {
-              listeners: [{
-                type: 'click',
-                useCapture: false,
-                passive: true,
-                once: false,
-                scriptId: '7',
-                lineNumber: 10,
-                columnNumber: 2
-              }]
-            };
+            return { listeners };
           }
           return {};
         })
@@ -235,9 +329,19 @@ describe('CDP tools', () => {
       ok: true,
       data: {
         tabId: 47,
-        listeners: [expect.objectContaining({ type: 'click', passive: true })]
+        summary: {
+          listenerCount: 60,
+          returnedCount: 50,
+          eventTypes: ['click', 'input']
+        }
       }
     });
+    expect((result.data as { listeners?: unknown[] }).listeners).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'click', passive: true })])
+    );
+    expect(Array.isArray((result.data as { listeners?: unknown[] }).listeners)
+      ? (result.data as { listeners?: unknown[] }).listeners?.length
+      : 0).toBe(50);
   });
 });
 

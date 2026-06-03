@@ -16,17 +16,12 @@ import { ApprovalManager } from '../../runtime/approval/approval-manager';
 import { ChromeSettingsStore } from '../../storage/chrome/chrome-settings-store';
 import type { SettingsStore } from '../../storage/interfaces/settings-store';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
-import { CONTENT_RPC_MESSAGES, TRACE_EVENT_NAMES } from '../../shared/constants/event-names';
+import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import type { AgentMessage } from '../../shared/schemas/agent-message.schema';
 import type { ToolResult } from '../../shared/schemas/tool-result.schema';
-import { buildRunSummary } from '../../agent/memory/run-summary-builder';
-import { buildWorkflowDraft } from '../../agent/memory/plan-to-workflow-draft';
-import { defaultMemoryRepo } from '../../storage/memory-repo';
-import { defaultWorkflowRepo } from '../../storage/workflow-repo';
 import { createToolRegistry } from '../../tools';
 import { ToolRouter } from '../../tools/core/tool-router';
-import { toolRequiresExplicitDomainConsent } from '../../tools/core/tool-selector';
 import { approvalRequiredResult } from '../../tools/core/tool-result-factory';
 import { RunLifecycleService } from './run/run-lifecycle-service';
 import {
@@ -57,31 +52,41 @@ import { ToolApprovalFlowRegistry } from './run/tools/approval/tool-approval-flo
 import { ApprovalService } from './run/tools/approval/approval-service';
 import type { Locale } from '../../i18n/types';
 import { t } from '../../i18n/t';
-import { createProviderClient } from './provider-client-factory';
-import { VisionClient } from '../../agent/model/vision-client';
-import {
-  evaluateBrowserHelmDomainOperationPolicy,
-  type BrowserHelmDomainPolicy
-} from '../../shared/domain-policy';
+import { ProviderService } from './provider-service';
+import { DomainPolicyService } from './domain-policy-service';
+import { MemoryWorkflowService } from './memory-workflow-service';
+import { ToolExecutionFacade } from './tool-execution-facade';
 
 export class RunManager {
   private readonly store: RunStore;
   private readonly settingsStore: SettingsStore;
   private readonly lifecycle: RunLifecycleService;
   private readonly tools: ToolExecutionService;
+  private readonly toolExecution: ToolExecutionFacade;
   private readonly approvals: ApprovalService;
-  private readonly hasDomainPolicyApi: boolean;
-  private domainPolicyCache: BrowserHelmDomainPolicy | undefined;
-  private domainPolicyCacheLoaded = false;
+  private readonly providers: ProviderService;
+  private readonly domainPolicy: DomainPolicyService;
+  private readonly memoryWorkflow: MemoryWorkflowService;
 
   constructor(private readonly deps: RunManagerDeps = {}) {
+    const runSessionPersistence = deps.runSessionPersistence ?? createDefaultRunSessionPersistence();
     this.store = new RunStore({
-      sessionPersistence: deps.runSessionPersistence ?? createDefaultRunSessionPersistence()
+      sessionPersistence: runSessionPersistence
     });
     this.settingsStore = deps.settingsStore ?? new ChromeSettingsStore();
-    this.hasDomainPolicyApi = typeof this.settingsStore.getDomainPolicy === 'function';
+    this.providers = new ProviderService({
+      settingsStore: this.settingsStore,
+      createProviderModelClient: deps.createProviderModelClient
+    });
+    this.domainPolicy = new DomainPolicyService({
+      settingsStore: this.settingsStore
+    });
+    this.memoryWorkflow = new MemoryWorkflowService();
 
-    const approvalManager = new ApprovalManager();
+    const approvalManager = new ApprovalManager({
+      approvalPersistence: runSessionPersistence,
+      getRunGenerationId: (runId) => this.store.getRunGenerationId(runId)
+    });
     const withRunMessages = (
       snapshot: RunSnapshot,
       record: { task: string; trace: RuntimeEvent[]; runKind?: RunRecord['runKind']; locale?: Locale }
@@ -111,6 +116,9 @@ export class RunManager {
       setSnapshot: (runId, snapshot) => this.store.setSnapshot(runId, snapshot),
       setPendingAction: (requestId, input) => this.store.setPendingApprovalAction(requestId, input),
       snapshotToolResult,
+      ...(this.domainPolicy.hasDomainPolicyApi()
+        ? { getDomainPolicy: async () => await this.domainPolicy.getDomainPolicy() }
+        : {}),
       adapters: [
         new FormToolRuntimeAdapter(),
         new DefaultToolRuntimeAdapter()
@@ -119,7 +127,12 @@ export class RunManager {
       approvalManager,
       approvalRequestForTrace,
       approvalRequiredResultFn: approvalRequiredResult,
-      createVisionClient: async () => await this.createVisionClient()
+      createVisionClient: async () => await this.providers.createVisionClient()
+    });
+    this.toolExecution = new ToolExecutionFacade({
+      settingsStore: this.settingsStore,
+      refreshDomainPolicy: async () => await this.domainPolicy.refresh(),
+      execute: async (input) => await this.tools.execute(input)
     });
     const flowRegistry = new ToolApprovalFlowRegistry({
       getRecord: (runId) => this.store.getRecord(runId),
@@ -139,13 +152,16 @@ export class RunManager {
       getSnapshot: (runId) => this.store.getSnapshot(runId),
       setSnapshot: (runId, snapshot) => this.store.setSnapshot(runId, snapshot),
       appendTrace: (record, event) => this.store.appendTrace(record, event),
+      getPendingAction: (requestId) => this.store.getPendingApprovalAction(requestId),
+      getPendingActionState: (requestId) => this.store.getPendingApprovalActionState(requestId),
+      getCurrentGenerationId: (runId) => this.store.getRunGenerationId(runId),
       deletePendingAction: (requestId) => this.store.deletePendingApprovalAction(requestId),
       flowRegistry
     });
   }
 
   async startRun(input: StartRunInput): Promise<{ runId: string }> {
-    await this.refreshDomainPolicyCache();
+    await this.domainPolicy.refresh();
     return this.lifecycle.startRun(input);
   }
 
@@ -156,11 +172,28 @@ export class RunManager {
   getSnapshot(runId: string): RunSnapshot {
     const snapshot = this.store.getSnapshot(runId);
     const record = this.store.getRecord(runId);
-    return enrichSnapshotWithMemoryReuse({
+    return this.memoryWorkflow.enrichSnapshot({
+      snapshot: {
       ...snapshot,
       ...(record?.tabId ? { targetTabId: record.tabId } : {}),
       ...(record?.taskState ? { taskState: record.taskState } : {})
-    }, record, this.canExposeMemoryReuse(snapshot.observation?.currentDomain));
+      },
+      record,
+      canExposeMemoryReuse: this.domainPolicy.canExposeMemoryReuse(snapshot.observation?.currentDomain)
+    });
+  }
+
+  recoverPendingApprovalSession(input: {
+    runId: string;
+    requestId: string;
+    currentTabId?: number | undefined;
+    currentDomain?: string | undefined;
+    currentFrameId?: number | string | undefined;
+    now?: number | undefined;
+  }): RunSnapshot {
+    this.store.recoverPendingApprovalSession(input);
+    this.store.notifySnapshotUpdated(input.runId);
+    return this.getSnapshot(input.runId);
   }
 
   cancelRun(runId: string): Promise<{ runId: string; status: 'cancelled' }> {
@@ -176,85 +209,7 @@ export class RunManager {
   }
 
   private async executeToolWithAdapterSettings(input: ExecuteToolInput): Promise<ToolResult> {
-    await this.settingsStore.getDomainAdapterSettings?.();
-    await this.refreshDomainPolicyCache();
-    const domainGateResult = await this.domainConsentGateResult(input);
-    if (domainGateResult) {
-      return domainGateResult;
-    }
-    return await this.tools.execute(input);
-  }
-
-  private async refreshDomainPolicyCache(): Promise<void> {
-    if (!this.hasDomainPolicyApi) {
-      return;
-    }
-    this.domainPolicyCache = await this.settingsStore.getDomainPolicy?.();
-    this.domainPolicyCacheLoaded = true;
-  }
-
-  private canExposeMemoryReuse(domain: string | undefined): boolean {
-    if (!domain) {
-      return false;
-    }
-    if (!this.hasDomainPolicyApi) {
-      return true;
-    }
-    if (!this.domainPolicyCacheLoaded) {
-      return false;
-    }
-    return evaluateDomainConsent(domain, this.domainPolicyCache).allowed;
-  }
-
-  private async domainConsentGateResult(input: ExecuteToolInput): Promise<ToolResult | undefined> {
-    if (typeof this.settingsStore.getDomainPolicy !== 'function') {
-      return undefined;
-    }
-    const record = this.store.getRecord(input.runId);
-    if (!record?.tabId) {
-      return undefined;
-    }
-    const contract = this.createToolRouter(record.tabId).getToolContract(input.tool, record.mode);
-    if (!contract || !toolRequiresExplicitDomainConsent(contract)) {
-      return undefined;
-    }
-    const snapshot = this.store.getSnapshot(input.runId);
-    const domain = snapshot.observation?.currentDomain;
-    const policy = await this.settingsStore.getDomainPolicy();
-    const decision = evaluateDomainConsent(domain, policy);
-    if (decision.allowed) {
-      return undefined;
-    }
-    const code = decision.reason ?? 'DOMAIN_NOT_ENABLED';
-    const result: ToolResult = {
-      ok: false,
-      code,
-      summary: `Domain ${domain ?? 'unknown'} is not enabled for mutating or diagnostic hook tools`,
-      changedPage: false,
-      requiresObserve: false,
-      error: {
-        message: `Enable ${domain ?? 'this domain'} before running ${input.tool}`
-      }
-    };
-    this.store.appendTrace(record, {
-      runId: input.runId,
-      type: TRACE_EVENT_NAMES.TOOL_RESULT,
-      payload: {
-        tool: input.tool,
-        ok: false,
-        code,
-        summary: result.summary,
-        changedPage: false,
-        requiresObserve: false
-      }
-    });
-    this.store.setSnapshot(input.runId, {
-      ...snapshot,
-      status: 'waiting_for_user',
-      toolResult: snapshotToolResult(input.tool, result),
-      trace: record.trace
-    });
-    return result;
+    return await this.toolExecution.execute(input);
   }
 
   async setDomainAdapterEnabled(input: SetDomainAdapterEnabledInput): Promise<RunSnapshot> {
@@ -324,13 +279,7 @@ export class RunManager {
   }
 
   testProviderSettings(input: TestProviderSettingsInput): Promise<RuntimeProviderTestResult> {
-    const client = createProviderClient({
-      baseUrl: input.baseUrl,
-      model: input.model,
-      apiKey: input.apiKey ?? '',
-      ...(input.allowLocalProviderEndpoints === undefined ? {} : { allowLocalProviderEndpoints: input.allowLocalProviderEndpoints })
-    });
-    return client.testConnection();
+    return this.providers.testProviderSettings(input);
   }
 
   private createToolRouter(tabId: number): ToolRouter {
@@ -339,26 +288,6 @@ export class RunManager {
 
   private createContentRpcClient(tabId: number): ContentRpcClient {
     return this.deps.createContentRpcClient?.(tabId) ?? new ChromeContentRpcClient(tabId);
-  }
-
-  private async createVisionClient(): Promise<VisionClient | undefined> {
-    const settings = await this.settingsStore.getProviderSettings();
-    if (!settings?.apiKey || !settings.model.trim()) {
-      return undefined;
-    }
-    const modelClient = this.deps.createProviderModelClient?.({
-      baseUrl: settings.baseUrl,
-      apiKey: settings.apiKey,
-      model: settings.model
-    }) ?? createProviderClient({
-      baseUrl: settings.baseUrl,
-      apiKey: settings.apiKey,
-      model: settings.model,
-      ...(settings.allowLocalProviderEndpoints === undefined ? {} : {
-        allowLocalProviderEndpoints: settings.allowLocalProviderEndpoints
-      })
-    });
-    return new VisionClient(modelClient);
   }
 
   private async getActiveTabId(): Promise<number | undefined> {
@@ -421,45 +350,6 @@ export class RunManager {
   }
 }
 
-function enrichSnapshotWithMemoryReuse(
-  snapshot: RunSnapshot,
-  record: RunRecord | undefined,
-  canExposeMemoryReuse: boolean
-): RunSnapshot {
-  const domain = snapshot.observation?.currentDomain;
-  if (!domain || !canExposeMemoryReuse) {
-    return snapshot;
-  }
-  const workflowPreviews = record
-    ? defaultWorkflowRepo.lookup({ domain, query: record.task, limit: 3 })
-      .flatMap((workflow) => {
-        const preview = defaultWorkflowRepo.preview(workflow.id);
-        return preview ? [preview] : [];
-      })
-    : [];
-  const workflowDraft = record && snapshot.status === 'finished'
-    ? buildWorkflowDraft({
-      domain,
-      runSummary: buildRunSummary({
-        runId: snapshot.runId,
-        task: record.task,
-        trace: record.trace,
-        snapshot
-      })
-    })
-    : undefined;
-
-  return {
-    ...snapshot,
-    memory: {
-      domain,
-      entries: defaultMemoryRepo.list(domain),
-      ...(workflowPreviews.length ? { workflowPreviews } : {})
-    },
-    ...(workflowDraft ? { workflowDraft } : {})
-  };
-}
-
 function upsertToolStatusMessage(messages: AgentMessage[], message: AgentMessage): void {
   const index = messages.findIndex((item) => item.id === message.id);
   if (index >= 0) {
@@ -501,30 +391,4 @@ function isCurrentRunReplyMessage(message: AgentMessage): boolean {
 function runIdFromMessageId(id: string): string {
   const index = id.indexOf(':');
   return index >= 0 ? id.slice(0, index) : id;
-}
-
-function evaluateDomainConsent(
-  domain: string | undefined,
-  policy: BrowserHelmDomainPolicy | undefined
-) {
-  if (domain && isLoopbackOrLocalhost(domain)) {
-    return { allowed: true, hostname: domain, restricted: false };
-  }
-  return evaluateBrowserHelmDomainOperationPolicy(domain, policy, 'advanced_action');
-}
-
-function isLoopbackOrLocalhost(domain: string): boolean {
-  const hostname = normalizeHostname(domain);
-  return hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname === '::1' ||
-    hostname.endsWith('.localhost');
-}
-
-function normalizeHostname(domain: string): string {
-  try {
-    return new URL(`http://${domain}`).hostname.toLowerCase();
-  } catch {
-    return domain.toLowerCase().replace(/^\.+|\.+$/gu, '').replace(/:\d+$/u, '');
-  }
 }

@@ -2,7 +2,6 @@ import type { RuntimeEvent, ExecuteToolInput, RunSnapshot } from '../../../../..
 import type { ToolResult } from '../../../../../../shared/schemas/tool-result.schema';
 import { ERROR_CODES } from '../../../../../../shared/constants/error-codes';
 import { TOOL_NAMES } from '../../../../../../shared/constants/tool-names';
-import { APPROVAL_EVENT_NAMES } from '../../../../../../shared/constants/event-names';
 import { snapshotToolResult } from '../../../run-snapshot-assembler';
 import type { ToolApprovalFlow } from './tool-approval-flow';
 import {
@@ -31,17 +30,6 @@ export class ClipboardApprovalFlow implements ToolApprovalFlow {
 
   async onApproved(input: { runId: string; requestId: string; tool: string }): Promise<ToolResult> {
     const record = this.deps.getRecord(input.runId);
-    if (record) {
-      this.deps.appendTrace(record, {
-        runId: input.runId,
-        type: APPROVAL_EVENT_NAMES.APPROVED,
-        payload: {
-          requestId: input.requestId,
-          reason: 'Clipboard approval granted',
-          code: ERROR_CODES.OK
-        }
-      });
-    }
 
     const pendingAction = this.deps.getPendingAction(input.requestId);
     this.deps.deletePendingAction(input.requestId);
@@ -101,6 +89,7 @@ export class ClipboardApprovalFlow implements ToolApprovalFlow {
       }
       if (tool === TOOL_NAMES.CLIPBOARD_READ_WITH_APPROVAL) {
         const read = await this.clipboardManager.readText();
+        const safeSummary = `Clipboard read completed after approval (${read.textLength} characters).`;
         return {
           ok: true,
           code: ERROR_CODES.OK,
@@ -114,7 +103,7 @@ export class ClipboardApprovalFlow implements ToolApprovalFlow {
           requiresObserve: false,
           context: {
             visibility: 'summary',
-            summary: read.text
+            summary: safeSummary
           }
         };
       }

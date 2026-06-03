@@ -15,6 +15,14 @@ describe('ScreenshotManager', () => {
           expect(options).toMatchObject({ format: 'png' });
           return 'data:image/png;base64,viewport';
         })
+      },
+      scripting: {
+        executeScript: vi.fn(async () => [{
+          result: {
+            width: 1280,
+            height: 720
+          }
+        }])
       }
     });
 
@@ -27,6 +35,11 @@ describe('ScreenshotManager', () => {
       mode: 'viewport',
       mimeType: 'image/png',
       dataUrl: 'data:image/png;base64,viewport',
+      width: 1280,
+      height: 720,
+      captureSource: 'tabs_capture_visible_tab',
+      truncated: false,
+      sensitivity: 'unknown',
       traceSafe: false
     });
   });
@@ -64,8 +77,13 @@ describe('ScreenshotManager', () => {
     expect(screenshot).toMatchObject({
       mode: 'element',
       bounds: { x: 10, y: 20, width: 200, height: 80 },
+      width: 200,
+      height: 80,
       selector: '#submit',
-      dataUrl: 'data:image/png;base64,element'
+      dataUrl: 'data:image/png;base64,element',
+      captureSource: 'tabs_capture_visible_tab',
+      truncated: false,
+      sensitivity: 'unknown'
     });
   });
 
@@ -73,6 +91,16 @@ describe('ScreenshotManager', () => {
     const attach = vi.fn(async () => undefined);
     const detach = vi.fn(async () => undefined);
     const sendCommand = vi.fn(async (_target: unknown, method: string) => {
+      if (method === 'Runtime.evaluate') {
+        return {
+          result: {
+            value: {
+              width: 1280,
+              height: 720
+            }
+          }
+        };
+      }
       expect(method).toBe('Page.captureScreenshot');
       return { data: 'cdpviewport' };
     });
@@ -95,6 +123,12 @@ describe('ScreenshotManager', () => {
     const screenshot = await manager.captureViewport({ tabId: 42 });
 
     expect(screenshot.dataUrl).toBe('data:image/png;base64,cdpviewport');
+    expect(screenshot).toMatchObject({
+      captureSource: 'cdp_capture_screenshot',
+      fallbackReason: 'tabs_capture_visible_tab_unavailable',
+      truncated: false,
+      sensitivity: 'unknown'
+    });
     expect(attach).toHaveBeenCalledWith({ tabId: 42 }, '1.3');
     expect(detach).toHaveBeenCalledWith({ tabId: 42 });
   });
@@ -151,6 +185,45 @@ describe('ScreenshotManager', () => {
       width: 1440,
       height: 2400,
       dataUrl: 'data:image/png;base64,fullpage'
+    });
+  });
+
+  it('falls back from full-page capture to viewport metadata with a truncation reason', async () => {
+    const captureVisibleTab = vi.fn(async () => 'data:image/png;base64,viewportfallback');
+    const sendCommand = vi.fn(async (_target: unknown, method: string) => {
+      if (method === 'Page.getLayoutMetrics') {
+        throw new Error('layout metrics unavailable');
+      }
+      return {};
+    });
+    vi.stubGlobal('chrome', {
+      tabs: { captureVisibleTab },
+      scripting: {
+        executeScript: vi.fn(async () => [{
+          result: { width: 1024, height: 768 }
+        }])
+      },
+      debugger: {
+        attach: vi.fn(async () => undefined),
+        detach: vi.fn(async () => undefined),
+        sendCommand,
+        onEvent: { addListener: vi.fn() },
+        onDetach: { addListener: vi.fn() }
+      }
+    });
+
+    const manager = new ScreenshotManager();
+    const screenshot = await manager.captureFullPage({ tabId: 42 });
+
+    expect(captureVisibleTab).toHaveBeenCalled();
+    expect(screenshot).toMatchObject({
+      mode: 'full_page',
+      width: 1024,
+      height: 768,
+      captureSource: 'tabs_capture_visible_tab',
+      fallbackReason: 'cdp_full_page_unavailable_viewport_fallback',
+      truncated: true,
+      sensitivity: 'unknown'
     });
   });
 

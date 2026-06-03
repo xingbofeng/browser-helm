@@ -60,8 +60,8 @@ BrowserHelm 的目标不是做一个普通聊天插件，而是做一个浏览�
 
 ### Storage：Dexie.js + chrome.storage
 
-- Dexie.js：IndexedDB，用于 trace、memory、workflow、large local state。
-- chrome.storage：settings、provider config、轻量状态。
+- Dexie.js：IndexedDB，用于 memory、workflow、scratchpad 等可复用本地知识和较大的结构化本地状态。
+- chrome.storage.local：provider settings、API key、run trace、agent messages、task state 和轻量偏好。
 - storage 对 agent 暴露接口，不暴露具体实现；v0.1 单测使用 in-memory 实现，extension runtime 再接 Dexie/chrome.storage。
 
 ### UI State：Zustand

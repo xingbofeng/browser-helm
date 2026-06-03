@@ -20,6 +20,7 @@ export class NetworkEventStore {
       method: stringField(request, 'method') ?? current?.method ?? 'GET',
       requestHeadersPreview: redactCdpHeaders(request.headers),
       responseHeadersPreview: current?.responseHeadersPreview,
+      initiator: parseInitiator(payload.initiator) ?? current?.initiator,
       failed: current?.failed ?? false,
       responseBodyAvailable: current?.responseBodyAvailable ?? false,
       timestamp
@@ -47,6 +48,8 @@ export class NetworkEventStore {
       mimeType: stringField(response, 'mimeType'),
       requestHeadersPreview: current?.requestHeadersPreview ?? {},
       responseHeadersPreview: redactCdpHeaders(response.headers),
+      initiator: current?.initiator,
+      timing: parseTiming(response.timing),
       failed: false,
       responseBodyAvailable: true,
       timestamp: current?.timestamp ?? Date.now()
@@ -71,6 +74,9 @@ export class NetworkEventStore {
       errorText: stringField(payload, 'errorText') ?? 'Network request failed',
       responseBodyAvailable: false,
       responseBodyUnavailableReason: 'request_failed',
+      responseBodyPreviewAvailable: false,
+      initiator: current?.initiator,
+      timing: current?.timing,
       timestamp: current?.timestamp ?? Date.now()
     }));
   }
@@ -101,9 +107,12 @@ export class NetworkEventStore {
       ...(responseBody
         ? {
             responseBodyPreview: redactCdpText(responseBody.body),
+            responseBodyPreviewAvailable: responseBody.body.length > 0,
             responseBase64Encoded: responseBody.base64Encoded === true
           }
-        : {})
+        : {
+            responseBodyPreviewAvailable: false
+          })
     });
   }
 }
@@ -123,4 +132,51 @@ function stringField(record: Record<string, unknown>, key: string): string | und
 function numberField(record: Record<string, unknown>, key: string): number | undefined {
   const value = record[key];
   return typeof value === 'number' ? value : undefined;
+}
+
+function parseTiming(value: unknown): NetworkRequestRecord['timing'] {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  return {
+    ...durationField(value, 'dnsStart', 'dnsEnd', 'dnsMs'),
+    ...durationField(value, 'connectStart', 'connectEnd', 'connectMs'),
+    ...durationField(value, 'sendStart', 'sendEnd', 'sendMs'),
+    ...(typeof value.receiveHeadersEnd === 'number' && value.receiveHeadersEnd >= 0
+      ? { receiveHeadersEndMs: value.receiveHeadersEnd }
+      : {})
+  };
+}
+
+function durationField(
+  record: Record<string, unknown>,
+  startKey: string,
+  endKey: string,
+  outputKey: 'dnsMs' | 'connectMs' | 'sendMs'
+): Partial<NonNullable<NetworkRequestRecord['timing']>> {
+  const start = record[startKey];
+  const end = record[endKey];
+  if (typeof start !== 'number' || typeof end !== 'number' || start < 0 || end < start) {
+    return {};
+  }
+  return { [outputKey]: end - start };
+}
+
+function parseInitiator(value: unknown): NetworkRequestRecord['initiator'] {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const type = stringField(value, 'type');
+  if (!type) {
+    return undefined;
+  }
+  return {
+    type,
+    ...(stringField(value, 'url') ? { url: redactCdpUrl(stringField(value, 'url')!) } : {}),
+    ...(numberField(value, 'lineNumber') === undefined ? {} : { lineNumber: numberField(value, 'lineNumber') })
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

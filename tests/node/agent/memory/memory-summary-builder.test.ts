@@ -7,6 +7,25 @@ import { WorkflowRepo } from '../../../../src/storage/workflow-repo';
 import { TOOL_NAMES } from '../../../../src/shared/constants/tool-names';
 
 describe('buildMemoryPromptContext', () => {
+  it('does not inject memory context without a domain scope', () => {
+    const memoryRepo = new MemoryRepo();
+    memoryRepo.save({
+      domain: 'app.example.com',
+      task: 'Open billing',
+      summary: 'Use Billing > Invoices'
+    });
+
+    const context = buildMemoryPromptContext({
+      task: 'Open billing',
+      runId: 'run_1',
+      memoryRepo,
+      workflowRepo: new WorkflowRepo(),
+      scratchpadRepo: new ScratchpadRepo()
+    });
+
+    expect(context).toBeUndefined();
+  });
+
   it('builds bounded memory, workflow, and scratchpad context for allowed domains', () => {
     const memoryRepo = new MemoryRepo();
     const workflowRepo = new WorkflowRepo();
@@ -65,4 +84,3 @@ describe('buildMemoryPromptContext', () => {
     });
   });
 });
-

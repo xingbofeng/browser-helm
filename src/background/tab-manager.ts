@@ -1,4 +1,5 @@
 import { browserTabSummarySchema, type BrowserTabSummary } from '../shared/schemas/tab';
+import { redactTextForModelContext } from '../shared/redaction';
 
 export class TabManager {
   async listTabs(): Promise<BrowserTabSummary[]> {
@@ -65,10 +66,10 @@ function sanitizeTabUrl(rawUrl: string | undefined): { url: string; origin: stri
   try {
     const parsed = new URL(rawUrl);
     return {
-      url: `${parsed.origin}${parsed.pathname}`,
+      url: redactTextForModelContext(`${parsed.origin}${parsed.pathname}`),
       origin: parsed.origin
     };
   } catch {
-    return { url: rawUrl.split(/[?#]/u)[0] ?? rawUrl, origin: '' };
+    return { url: redactTextForModelContext(rawUrl.split(/[?#]/u)[0] ?? rawUrl), origin: '' };
   }
 }

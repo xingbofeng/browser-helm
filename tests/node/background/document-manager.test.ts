@@ -57,6 +57,26 @@ startxref
 186
 %%EOF`;
 
+const filteredPdf = `%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 12 /Filter /FlateDecode >>
+stream
+x\x9c\x03\x00\x00\x00\x00\x01
+endstream
+endobj
+trailer
+<< /Size 5 /Root 1 0 R >>
+%%EOF`;
+
 const twoPagePdf = `%PDF-1.4
 1 0 obj
 << /Type /Catalog /Pages 2 0 R >>
@@ -175,5 +195,32 @@ describe('DocumentManager', () => {
       scanned: true,
       truncated: false
     });
+  });
+
+  it('documents unsupported complex PDF streams with an unavailable reason', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new TextEncoder().encode(filteredPdf), {
+      headers: { 'content-type': 'application/pdf' }
+    })));
+
+    const result = await new DocumentManager().readUrl({
+      url: 'https://example.com/manual.pdf?token=secret',
+      maxChars: 100
+    });
+
+    expect(result).toMatchObject({
+      sourceUrl: 'https://example.com/manual.pdf',
+      mimeType: 'application/pdf',
+      text: '',
+      pageStart: 1,
+      pageEnd: 1,
+      pageCount: 1,
+      scanned: true,
+      truncated: false,
+      unavailableReason: 'pdf_filter_unsupported',
+      parserLimitations: [
+        'Built-in PDF reader does not decompress filtered streams such as FlateDecode.'
+      ]
+    });
+    expect(JSON.stringify(result)).not.toContain('token=secret');
   });
 });

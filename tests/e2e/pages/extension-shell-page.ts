@@ -31,6 +31,36 @@ export class ExtensionShellPage {
     });
   }
 
+  async nativeSidePanelOptions(tabId: number): Promise<{
+    ok: boolean;
+    path?: string | undefined;
+    enabled?: boolean | undefined;
+    reason?: string | undefined;
+  }> {
+    const worker = await this.worker();
+    return await worker.evaluate(async (targetTabId) => {
+      const sidePanel = chrome.sidePanel as {
+        setOptions?: (options: { tabId: number; path: string; enabled: boolean }) => Promise<void>;
+        getOptions?: (options: { tabId: number }) => Promise<{ path?: string; enabled?: boolean }>;
+      } | undefined;
+      if (!sidePanel?.setOptions || !sidePanel.getOptions) {
+        return { ok: false, reason: 'side_panel_options_unavailable' };
+      }
+      const path = `sidepanel.html?target=active&tabId=${targetTabId}`;
+      await sidePanel.setOptions({
+        tabId: targetTabId,
+        path,
+        enabled: true
+      });
+      const options = await sidePanel.getOptions({ tabId: targetTabId });
+      return {
+        ok: true,
+        path: options.path,
+        enabled: options.enabled
+      };
+    }, tabId);
+  }
+
   async snapshotActiveTab(): Promise<unknown> {
     const worker = await this.worker();
     const result = await worker.evaluate<unknown, typeof CONTENT_RPC_MESSAGES>(async (messages) => {

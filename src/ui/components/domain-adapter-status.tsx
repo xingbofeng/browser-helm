@@ -44,6 +44,19 @@ export function DomainAdapterStatus({ adapter, onSetEnabled }: DomainAdapterStat
           {t('adapter.approvalEnforced')}
         </span>
       ) : null}
+      {state.enabled && state.driftStatus && state.driftStatus.status !== 'ok' ? (
+        <div className="bh-domainAdapterDrift">
+          <span>{t(`adapter.drift.${state.driftStatus.status}`)}</span>
+          <span>{state.driftStatus.genericFallbackReason}</span>
+        </div>
+      ) : null}
+      {state.enabled && state.lastFailure ? (
+        <div className="bh-domainAdapterFailure">
+          {t('adapter.lastFailure', { code: state.lastFailure.errorCode })}
+          {state.lastFailure.locatorId ? ` ${state.lastFailure.locatorId}` : ''}
+          {state.lastFailure.workflowId ? ` ${state.lastFailure.workflowId}` : ''}
+        </div>
+      ) : null}
       {toggleAdapter && onSetEnabled ? (
         <button
           type="button"

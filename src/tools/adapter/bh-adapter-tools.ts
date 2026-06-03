@@ -229,6 +229,8 @@ function recordLocatorFailure(
   const report = defaultAdapterFailureReporter.report({
     url,
     adapterId: adapter.id,
+    adapterVersion: adapter.version,
+    urlPattern: adapter.matchedUrlPattern,
     locatorId,
     errorCode: ERROR_CODES.ADAPTER_LOCATOR_FAILED,
     message
@@ -261,6 +263,8 @@ function recordWorkflowFailure(
   const report = defaultAdapterFailureReporter.report({
     url,
     adapterId: adapter.id,
+    adapterVersion: adapter.version,
+    urlPattern: adapter.matchedUrlPattern,
     workflowId,
     errorCode: ERROR_CODES.ADAPTER_WORKFLOW_FAILED,
     message

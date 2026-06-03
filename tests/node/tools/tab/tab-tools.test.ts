@@ -52,6 +52,42 @@ describe('tab tools', () => {
     expect(result.context?.summary).not.toContain('auth=secret');
   });
 
+  it('redacts sensitive URL path content from tab data, summaries, and model context', async () => {
+    vi.stubGlobal('chrome', {
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 24,
+          windowId: 1,
+          active: false,
+          title: 'Reset token',
+          url: 'https://accounts.example.com/users/alice@example.com/reset/sk-secretToken123456?token=raw-query-secret#fragment-secret',
+          status: 'complete'
+        }])
+      }
+    });
+
+    const result = await bhTabList().execute({}, {
+      runId: 'run_1',
+      stepId: 'step_1',
+      runMode: 'full'
+    });
+    const serialized = JSON.stringify({
+      data: result.data,
+      summary: result.summary,
+      context: result.context
+    });
+
+    expect(result.data).toMatchObject({
+      tabs: [expect.objectContaining({
+        url: 'https://accounts.example.com/users/[REDACTED_EMAIL]/reset/[MASKED]'
+      })]
+    });
+    expect(serialized).not.toContain('alice@example.com');
+    expect(serialized).not.toContain('sk-secretToken123456');
+    expect(serialized).not.toContain('raw-query-secret');
+    expect(serialized).not.toContain('fragment-secret');
+  });
+
   it('returns the active tab without changing browser state', async () => {
     vi.stubGlobal('chrome', {
       tabs: {

@@ -134,9 +134,21 @@ describe('content script config', () => {
   it('does not inject shallow page-health hooks by default', async () => {
     vi.stubGlobal('defineContentScript', (config: unknown) => config);
     const addListener = vi.fn();
-    const appendedScripts: Array<{ id?: string; src?: string; textContent?: string; remove: () => void }> = [];
+    const appendedScripts: Array<{
+      id?: string;
+      src?: string;
+      textContent?: string;
+      dataset?: Record<string, string>;
+      remove: () => void;
+    }> = [];
     const documentElement = {
-      appendChild: (node: { id?: string; src?: string; textContent?: string; remove: () => void }) => {
+      appendChild: (node: {
+        id?: string;
+        src?: string;
+        textContent?: string;
+        dataset?: Record<string, string>;
+        remove: () => void;
+      }) => {
         appendedScripts.push(node);
         return node;
       }
@@ -162,6 +174,7 @@ describe('content script config', () => {
         id: '',
         src: '',
         textContent: '',
+        dataset: {},
         remove: vi.fn()
       }))
     });
@@ -184,9 +197,21 @@ describe('content script config', () => {
       origin: string;
       data: unknown;
     }) => void> = [];
-    const appendedScripts: Array<{ id?: string; src?: string; textContent?: string; remove: () => void }> = [];
+    const appendedScripts: Array<{
+      id?: string;
+      src?: string;
+      textContent?: string;
+      dataset?: Record<string, string>;
+      remove: () => void;
+    }> = [];
     const documentElement = {
-      appendChild: (node: { id?: string; src?: string; textContent?: string; remove: () => void }) => {
+      appendChild: (node: {
+        id?: string;
+        src?: string;
+        textContent?: string;
+        dataset?: Record<string, string>;
+        remove: () => void;
+      }) => {
         appendedScripts.push(node);
         return node;
       }
@@ -219,6 +244,7 @@ describe('content script config', () => {
         id: '',
         src: '',
         textContent: '',
+        dataset: {},
         remove: vi.fn()
       }))
     });
@@ -230,6 +256,9 @@ describe('content script config', () => {
     expect(appendedScripts[0]?.id).toBe('browserhelm-page-health-hook');
     expect(appendedScripts[0]?.src).toBe('chrome-extension://browserhelm/page-health-hook.js');
     expect(appendedScripts[0]?.textContent).toBe('');
+    const nonce = appendedScripts[0]?.dataset?.browserhelmPageHealthNonce;
+    expect(typeof nonce).toBe('string');
+    expect(nonce).toHaveLength(36);
     expect(messageListeners).toHaveLength(1);
 
     messageListeners[0]?.({
@@ -237,6 +266,36 @@ describe('content script config', () => {
       origin: 'https://docs.example.com',
       data: {
         channel: 'BROWSER_HELM_PAGE_HEALTH_EVENT',
+        kind: 'network_failure',
+        url: 'https://api.example.com/private/path?token=secret#frag',
+        method: 'GET',
+        errorText: 'failed with sk-1234567890abcdef'
+      }
+    });
+
+    expect((globalThis as Record<string, unknown>).__browserHelmNetworkFailures).toEqual([]);
+
+    messageListeners[0]?.({
+      source: windowLike,
+      origin: 'https://docs.example.com',
+      data: {
+        channel: 'BROWSER_HELM_PAGE_HEALTH_EVENT',
+        nonce: 'wrong-nonce',
+        kind: 'network_failure',
+        url: 'https://api.example.com/private/path?token=secret#frag',
+        method: 'GET',
+        errorText: 'failed with sk-1234567890abcdef'
+      }
+    });
+
+    expect((globalThis as Record<string, unknown>).__browserHelmNetworkFailures).toEqual([]);
+
+    messageListeners[0]?.({
+      source: windowLike,
+      origin: 'https://docs.example.com',
+      data: {
+        channel: 'BROWSER_HELM_PAGE_HEALTH_EVENT',
+        nonce,
         kind: 'network_failure',
         url: 'https://api.example.com/private/path?token=secret#frag',
         method: 'GET',

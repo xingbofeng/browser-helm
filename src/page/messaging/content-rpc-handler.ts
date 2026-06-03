@@ -13,7 +13,9 @@ import {
   setFieldText,
   type FillFieldResult
 } from '../dom/form-fill-dom';
+import { readFormFields } from '../dom/form-reader';
 import { readPageMetadata } from '../observe/page-metadata';
+import type { FormFieldSnapshot } from '../../shared/schemas/structured-page-data.schema';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { CONTENT_RPC_MESSAGES } from '../../shared/constants/event-names';
 import {
@@ -69,6 +71,10 @@ type FormActionGrant = {
   fieldRefIds: Set<string>;
   formRefId?: string | undefined;
   submitTargetRefId?: string | undefined;
+  frameId: number;
+  origin: string;
+  documentId: string;
+  createdAt: number;
   expiresAt: number;
   runId: string;
   stepId: string;
@@ -302,6 +308,7 @@ export class ContentRpcHandler {
             message.fieldRefIds ?? [],
             message.formRefId,
             message.submitTargetRefId,
+            message.frameId ?? 0,
             message.runId,
             message.stepId
           )
@@ -535,6 +542,7 @@ export class ContentRpcHandler {
       [message.fieldRefId],
       undefined,
       undefined,
+      message.frameId ?? 0,
       message.runId,
       message.stepId
     )) {
@@ -595,6 +603,7 @@ export class ContentRpcHandler {
       message.targets.map((target) => target.fieldRefId),
       undefined,
       undefined,
+      message.frameId ?? 0,
       message.runId,
       message.stepId
     )) {
@@ -605,14 +614,20 @@ export class ContentRpcHandler {
       fieldRefId: this.resolveFreshFormFillRefId(target.fieldRefId),
       allowSingleFieldFallback: message.targets.length === 1
     }));
+    const refMap = this.ensureRefMap();
+    const fillManyResult = fillManyFields(
+      this.document,
+      refMap,
+      targets,
+      this.locale
+    );
     return {
       ok: true,
-      fillManyResult: fillManyFields(
-        this.document,
-        this.ensureRefMap(),
-        targets,
-        this.locale
-      )
+      fillManyResult: {
+        ...fillManyResult,
+        updatedFields: readFormFields(this.document, refMap, this.locale).fields
+          .map(redactUpdatedFormField)
+      }
     } satisfies FillManyResponse;
   }
 
@@ -639,6 +654,7 @@ export class ContentRpcHandler {
       [],
       message.formRefId,
       message.submitTargetRefId,
+      message.frameId ?? 0,
       message.runId,
       message.stepId
     );
@@ -788,20 +804,27 @@ export class ContentRpcHandler {
     fieldRefIds: string[],
     formRefId: string | undefined,
     submitTargetRefId: string | undefined,
+    frameId: number,
     runId: string,
     stepId: string
   ): string {
     this.pruneExpiredFormActionTokens();
+    const now = Date.now();
+    const metadata = readPageMetadata(this.document);
     const grant = {
       action,
       fieldRefIds: new Set(fieldRefIds),
       formRefId,
       submitTargetRefId,
-      expiresAt: Date.now() + FORM_ACTION_TOKEN_TTL_MS,
+      frameId,
+      origin: metadata.origin,
+      documentId: metadata.url,
+      createdAt: now,
+      expiresAt: now + FORM_ACTION_TOKEN_TTL_MS,
       runId,
       stepId
     };
-    const token = encodeFormActionToken(grant);
+    const token = encodeFormActionToken();
     this.formActionGrants.set(token, grant);
     return token;
   }
@@ -812,6 +835,7 @@ export class ContentRpcHandler {
     fieldRefIds: string[],
     formRefId: string | undefined,
     submitTargetRefId: string | undefined,
+    frameId: number,
     runId: string,
     stepId: string
   ): FormActionGrant | undefined {
@@ -824,7 +848,7 @@ export class ContentRpcHandler {
     if (this.consumedFormActionTokens.has(token)) {
       return undefined;
     }
-    const resolvedGrant = grant ?? decodeFormActionToken(token);
+    const resolvedGrant = grant;
     if (!resolvedGrant || resolvedGrant.action !== action || resolvedGrant.expiresAt <= Date.now()) {
       return undefined;
     }
@@ -832,6 +856,13 @@ export class ContentRpcHandler {
       return undefined;
     }
     if (resolvedGrant.stepId !== stepId) {
+      return undefined;
+    }
+    if (resolvedGrant.frameId !== frameId) {
+      return undefined;
+    }
+    const metadata = readPageMetadata(this.document);
+    if (resolvedGrant.origin !== metadata.origin || resolvedGrant.documentId !== metadata.url) {
       return undefined;
     }
     this.consumedFormActionTokens.add(token);
@@ -981,6 +1012,18 @@ function formFieldMatchesSummary(
     (fieldType === 'search' || fieldType === 'text');
 }
 
+function redactUpdatedFormField(field: FormFieldSnapshot): FormFieldSnapshot {
+  if (!field.writable) {
+    return field;
+  }
+  const writable = { ...field.writable };
+  delete writable.actualValue;
+  return {
+    ...field,
+    writable
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -1026,53 +1069,6 @@ function hasVisibleGeometry(element: HTMLElement): boolean {
   return rect.width > 0 && rect.height > 0;
 }
 
-function encodeFormActionToken(grant: FormActionGrant): string {
-  const payload = {
-    action: grant.action,
-    fieldRefIds: Array.from(grant.fieldRefIds),
-    formRefId: grant.formRefId,
-    submitTargetRefId: grant.submitTargetRefId,
-    expiresAt: grant.expiresAt,
-    runId: grant.runId,
-    stepId: grant.stepId
-  };
-  return `${createOpaqueToken('bh_form')}|${encodeURIComponent(JSON.stringify(payload))}`;
-}
-
-function decodeFormActionToken(token: string): FormActionGrant | undefined {
-  const separatorIndex = token.indexOf('|');
-  if (separatorIndex < 0) {
-    return undefined;
-  }
-  try {
-    const payload = JSON.parse(decodeURIComponent(token.slice(separatorIndex + 1))) as Partial<{
-      action: FormActionKind;
-      fieldRefIds: unknown;
-      formRefId: unknown;
-      submitTargetRefId: unknown;
-      expiresAt: unknown;
-      runId: unknown;
-      stepId: unknown;
-    }>;
-    if (
-      (payload.action !== 'fill' && payload.action !== 'submit') ||
-      !Array.isArray(payload.fieldRefIds) ||
-      typeof payload.expiresAt !== 'number' ||
-      typeof payload.runId !== 'string' ||
-      typeof payload.stepId !== 'string'
-    ) {
-      return undefined;
-    }
-    return {
-      action: payload.action,
-      fieldRefIds: new Set(payload.fieldRefIds.filter((value): value is string => typeof value === 'string')),
-      formRefId: typeof payload.formRefId === 'string' ? payload.formRefId : undefined,
-      submitTargetRefId: typeof payload.submitTargetRefId === 'string' ? payload.submitTargetRefId : undefined,
-      expiresAt: payload.expiresAt,
-      runId: payload.runId,
-      stepId: payload.stepId
-    };
-  } catch {
-    return undefined;
-  }
+function encodeFormActionToken(): string {
+  return createOpaqueToken('bh_form');
 }

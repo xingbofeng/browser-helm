@@ -13,6 +13,16 @@ import type { ToolSpec } from '../core/tool-spec';
 
 const argsSchema = z.object({});
 
+/**
+ * Agent 在 Debug run mode 中读取浅层页面健康摘要的只读诊断工具。
+ *
+ * 该工具不修改页面业务状态，风险等级为 safe，也不会直接触发 approval；它会先通过
+ * content RPC 按需启用临时 page-health hook，再重新 observe 当前页面，从 observation
+ * 中返回 console error、console message、network failure、表单存在性和浅层限制说明。
+ * page-health hook 只是 CDP deep debug 不可用或无需完整 DevTools 数据时的 fallback，
+ * 不是 DevTools/CDP 的完整替代。参数为空；典型使用时机是用户要求排查页面错误、
+ * 网络失败、表单卡住或 Debug 面板需要展示浅层健康信号。
+ */
 export function bhDebugCollectPageHealth(
   rpc: ContentRpcClient
 ): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {

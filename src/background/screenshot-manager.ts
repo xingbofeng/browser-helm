@@ -14,15 +14,35 @@ export type CaptureElementInput = CaptureViewportInput & {
   selector: string;
 };
 
+type ScreenshotDimensions = {
+  width: number;
+  height: number;
+};
+
+type CapturedImage = {
+  dataUrl: string;
+  captureSource: ScreenshotCapture['captureSource'];
+  fallbackReason?: string | undefined;
+  width?: number | undefined;
+  height?: number | undefined;
+};
+
 export class ScreenshotManager {
   async captureViewport(input: CaptureViewportInput): Promise<ScreenshotCapture> {
-    const dataUrl = await captureVisible(input);
+    const captured = await captureVisible(input);
+    const dimensions = dimensionsFromCapture(captured) ?? await readViewportDimensions(input.tabId);
     return screenshotCaptureSchema.parse({
       id: `shot_${input.tabId}_viewport`,
       tabId: input.tabId,
       mode: 'viewport',
-      mimeType: mimeTypeFromDataUrl(dataUrl),
-      dataUrl,
+      mimeType: mimeTypeFromDataUrl(captured.dataUrl),
+      dataUrl: captured.dataUrl,
+      width: dimensions.width,
+      height: dimensions.height,
+      captureSource: captured.captureSource,
+      ...(captured.fallbackReason ? { fallbackReason: captured.fallbackReason } : {}),
+      truncated: false,
+      sensitivity: 'unknown',
       capturedAt: Date.now(),
       traceSafe: false
     });
@@ -30,14 +50,19 @@ export class ScreenshotManager {
 
   async captureFullPage(input: CaptureViewportInput): Promise<ScreenshotCapture> {
     const captured = await captureFullPage(input);
+    const dimensions = dimensionsFromCapture(captured) ?? await readViewportDimensions(input.tabId);
     return screenshotCaptureSchema.parse({
       id: `shot_${input.tabId}_full_page`,
       tabId: input.tabId,
       mode: 'full_page',
       mimeType: mimeTypeFromDataUrl(captured.dataUrl),
       dataUrl: captured.dataUrl,
-      ...(captured.width ? { width: captured.width } : {}),
-      ...(captured.height ? { height: captured.height } : {}),
+      width: dimensions.width,
+      height: dimensions.height,
+      captureSource: captured.captureSource,
+      ...(captured.fallbackReason ? { fallbackReason: captured.fallbackReason } : {}),
+      truncated: captured.fallbackReason !== undefined,
+      sensitivity: 'unknown',
       capturedAt: Date.now(),
       traceSafe: false
     });
@@ -45,15 +70,21 @@ export class ScreenshotManager {
 
   async captureElement(input: CaptureElementInput): Promise<ScreenshotCapture> {
     const bounds = await readElementBounds(input.tabId, input.selector);
-    const dataUrl = await captureVisible(input);
+    const captured = await captureVisible(input);
     return screenshotCaptureSchema.parse({
       id: `shot_${input.tabId}_element`,
       tabId: input.tabId,
       mode: 'element',
-      mimeType: mimeTypeFromDataUrl(dataUrl),
-      dataUrl,
+      mimeType: mimeTypeFromDataUrl(captured.dataUrl),
+      dataUrl: captured.dataUrl,
       selector: input.selector,
       bounds,
+      width: Math.max(1, Math.round(bounds.width)),
+      height: Math.max(1, Math.round(bounds.height)),
+      captureSource: captured.captureSource,
+      ...(captured.fallbackReason ? { fallbackReason: captured.fallbackReason } : {}),
+      truncated: false,
+      sensitivity: 'unknown',
       capturedAt: Date.now(),
       traceSafe: false
     });
@@ -62,29 +93,39 @@ export class ScreenshotManager {
 
 export const defaultScreenshotManager = new ScreenshotManager();
 
-async function captureVisible(input: CaptureViewportInput): Promise<string> {
+async function captureVisible(input: CaptureViewportInput): Promise<CapturedImage> {
   if (!globalThis.chrome?.tabs?.captureVisibleTab) {
-    return (await defaultDebuggerManager.captureScreenshot(input.tabId)).dataUrl;
+    return {
+      ...await defaultDebuggerManager.captureScreenshot(input.tabId),
+      captureSource: 'cdp_capture_screenshot'
+    };
   }
   try {
-    return input.windowId === undefined
+    const dataUrl = input.windowId === undefined
       ? await chrome.tabs.captureVisibleTab({ format: 'png' })
       : await chrome.tabs.captureVisibleTab(input.windowId, { format: 'png' });
+    return {
+      dataUrl,
+      captureSource: 'tabs_capture_visible_tab'
+    };
   } catch (error) {
     if (canFallbackToDebugger(error)) {
-      return (await defaultDebuggerManager.captureScreenshot(input.tabId)).dataUrl;
+      return {
+        ...await defaultDebuggerManager.captureScreenshot(input.tabId),
+        captureSource: 'cdp_capture_screenshot',
+        fallbackReason: 'tabs_capture_visible_tab_unavailable'
+      };
     }
     throw error;
   }
 }
 
-async function captureFullPage(input: CaptureViewportInput): Promise<{
-  dataUrl: string;
-  width?: number | undefined;
-  height?: number | undefined;
-}> {
+async function captureFullPage(input: CaptureViewportInput): Promise<CapturedImage> {
   try {
-    return await defaultDebuggerManager.captureScreenshot(input.tabId, { fullPage: true });
+    return {
+      ...await defaultDebuggerManager.captureScreenshot(input.tabId, { fullPage: true }),
+      captureSource: 'cdp_capture_screenshot'
+    };
   } catch (error) {
     if (!globalThis.chrome?.tabs?.captureVisibleTab) {
       throw error;
@@ -92,8 +133,47 @@ async function captureFullPage(input: CaptureViewportInput): Promise<{
     const dataUrl = input.windowId === undefined
       ? await chrome.tabs.captureVisibleTab({ format: 'png' })
       : await chrome.tabs.captureVisibleTab(input.windowId, { format: 'png' });
-    return { dataUrl };
+    return {
+      dataUrl,
+      captureSource: 'tabs_capture_visible_tab',
+      fallbackReason: 'cdp_full_page_unavailable_viewport_fallback'
+    };
   }
+}
+
+async function readViewportDimensions(tabId: number): Promise<ScreenshotDimensions> {
+  const executeScript = globalThis.chrome?.scripting && 'executeScript' in globalThis.chrome.scripting
+    ? globalThis.chrome.scripting.executeScript
+    : undefined;
+  if (typeof executeScript === 'function') {
+    try {
+      const [result] = await executeScript({
+        target: { tabId },
+        func: () => ({
+          width: Math.max(1, Math.round((window.visualViewport?.width ?? window.innerWidth) * (window.devicePixelRatio || 1))),
+          height: Math.max(1, Math.round((window.visualViewport?.height ?? window.innerHeight) * (window.devicePixelRatio || 1)))
+        })
+      });
+      return parseDimensions(result?.result);
+    } catch (error) {
+      if (!canFallbackToDebugger(error)) {
+        throw error;
+      }
+    }
+  }
+  return readViewportDimensionsWithDebugger(tabId);
+}
+
+async function readViewportDimensionsWithDebugger(tabId: number): Promise<ScreenshotDimensions> {
+  const result = await defaultDebuggerManager.evaluate(tabId, `(() => ({
+    width: Math.max(1, Math.round((window.visualViewport?.width ?? window.innerWidth) * (window.devicePixelRatio || 1))),
+    height: Math.max(1, Math.round((window.visualViewport?.height ?? window.innerHeight) * (window.devicePixelRatio || 1)))
+  }))()`);
+  const remoteObject = result.result;
+  const value = typeof remoteObject === 'object' && remoteObject !== null
+    ? (remoteObject as Record<string, unknown>).value
+    : undefined;
+  return parseDimensions(value);
 }
 
 async function readElementBounds(tabId: number, selector: string): Promise<ScreenshotBounds> {
@@ -156,6 +236,22 @@ function parseBounds(value: unknown, selector: string): ScreenshotBounds {
   return value;
 }
 
+function parseDimensions(value: unknown): ScreenshotDimensions {
+  if (!isDimensions(value)) {
+    throw new Error('Viewport dimensions unavailable for screenshot metadata');
+  }
+  return {
+    width: Math.max(1, Math.round(value.width)),
+    height: Math.max(1, Math.round(value.height))
+  };
+}
+
+function dimensionsFromCapture(captured: CapturedImage): ScreenshotDimensions | undefined {
+  return typeof captured.width === 'number' && typeof captured.height === 'number'
+    ? parseDimensions(captured)
+    : undefined;
+}
+
 function canFallbackToDebugger(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /permission|Cannot access contents|activeTab|<all_urls>|unavailable/iu.test(message);
@@ -167,6 +263,14 @@ function isBounds(value: unknown): value is ScreenshotBounds {
     !Array.isArray(value) &&
     typeof (value as Record<string, unknown>).x === 'number' &&
     typeof (value as Record<string, unknown>).y === 'number' &&
+    typeof (value as Record<string, unknown>).width === 'number' &&
+    typeof (value as Record<string, unknown>).height === 'number';
+}
+
+function isDimensions(value: unknown): value is ScreenshotDimensions {
+  return typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
     typeof (value as Record<string, unknown>).width === 'number' &&
     typeof (value as Record<string, unknown>).height === 'number';
 }

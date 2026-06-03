@@ -13,6 +13,7 @@ import { TOOL_NAMES } from '../../../src/shared/constants/tool-names';
 import type { AgentMessage } from '../../../src/shared/schemas/agent-message.schema';
 import { defaultMemoryRepo } from '../../../src/storage/memory-repo';
 import { defaultWorkflowRepo } from '../../../src/storage/workflow-repo';
+import { InMemoryRunSessionPersistence } from '../../../src/background/runtime/run/session-persistence';
 
 describe('RunManager', () => {
   it('starts a run by observing the target tab through registered page tools', async () => {
@@ -1297,6 +1298,190 @@ describe('RunManager', () => {
     expect(completeCalls[1]).toContain('Do not call bh_form_fill_many again');
   });
 
+  it('blocks finish after a mutating tool reports no page change evidence', async () => {
+    const decisions = [
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.FORM_FILL_MANY,
+        args: {
+          fields: [{ fieldRefId: 'ref_q', value: '最近的 agent 文章' }]
+        },
+        reason: '用户明确提供了搜索词'
+      },
+      {
+        type: 'finish',
+        message: '已填写完成。'
+      }
+    ];
+    const providerClient: ModelClient = {
+      async complete() {
+        return {
+          text: decisionText(decisions.shift() ?? {
+            type: 'finish',
+            message: 'done'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.FORM_FILL_MANY) {
+          return {
+            ok: true,
+            fillManyResult: {
+              ok: true,
+              fields: message.targets.map((target) => ({
+                fieldRefId: target.fieldRefId,
+                type: 'search',
+                status: 'filled',
+                actualValuePreview: 'empty',
+                maskedActualValue: '[MASKED]'
+              })),
+              filledCount: message.targets.length,
+              skippedCount: 0,
+              failedCount: 0,
+              changedPage: false,
+              requiresObserve: false,
+              summary: '工具返回成功，但页面值没有变化'
+            }
+          };
+        }
+        return observationResponse({
+          title: 'Search',
+          currentDomain: 'example.com',
+          visibleTextSummary: 'Search',
+          formFields: {
+            status: 'ready',
+            fields: [
+              {
+                refId: 'ref_q',
+                label: '搜索',
+                name: 'q',
+                type: 'search',
+                required: false,
+                disabled: false,
+                sensitive: false,
+                valuePreview: 'empty',
+                validation: { valid: true, ariaInvalid: false },
+                warnings: []
+              }
+            ],
+            submit: {
+              disabled: false,
+              warnings: []
+            },
+            warnings: []
+          }
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '帮我搜索下“最近的 agent 文章”',
+      mode: 'act'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'waiting_for_user');
+
+    expect(snapshot.status).toBe('waiting_for_user');
+    expect(snapshot.trace?.some((event) => event.type === TRACE_EVENT_NAMES.RUN_FINISHED)).toBe(false);
+    expect(snapshot.messages?.some((message) =>
+      /缺少.*页面变更|missing.*page change/i.test(message.content)
+    )).toBe(true);
+  });
+
+  it('blocks finish after a page action that still needs follow-up observation evidence', async () => {
+    const decisions = [
+      {
+        type: 'tool_call',
+        tool: TOOL_NAMES.ACTION_CLICK,
+        args: {
+          refId: 'ref_continue',
+          source: 'agent'
+        },
+        reason: '用户明确要求点击继续'
+      },
+      {
+        type: 'finish',
+        message: '已点击继续。'
+      }
+    ];
+    const providerClient: ModelClient = {
+      async complete() {
+        return {
+          text: decisionText(decisions.shift() ?? {
+            type: 'finish',
+            message: 'done'
+          })
+        };
+      }
+    };
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        if (message.type === CONTENT_RPC_MESSAGES.A11Y_RESOLVE_REF) {
+          return {
+            ok: true,
+            ref: {
+              refId: 'ref_continue',
+              role: 'button',
+              name: '继续',
+              tagName: 'button',
+              visible: true,
+              disabled: false
+            }
+          };
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.IFRAME_ACTION_AUTHORIZE) {
+          return {
+            ok: true,
+            actionToken: 'click-token'
+          };
+        }
+        if (message.type === CONTENT_RPC_MESSAGES.IFRAME_CLICK) {
+          return {
+            ok: true,
+            changedPage: true,
+            ref: {
+              refId: 'ref_continue',
+              role: 'button',
+              name: '继续'
+            }
+          };
+        }
+        return observationResponse({
+          title: 'Continue',
+          currentDomain: 'example.com',
+          visibleTextSummary: '继续',
+          refSummary: [{
+            refId: 'ref_continue',
+            role: 'button',
+            name: '继续',
+            tagName: 'button',
+            visible: true,
+            disabled: false
+          }]
+        });
+      }),
+      settingsStore: providerSettings(),
+      createProviderModelClient: () => providerClient
+    });
+
+    const started = await manager.startRun({
+      task: '点击继续按钮',
+      mode: 'act'
+    });
+    const snapshot = await waitForSnapshot(manager, started.runId, 'waiting_for_user');
+
+    expect(snapshot.status).toBe('waiting_for_user');
+    expect(snapshot.trace?.some((event) => event.type === TRACE_EVENT_NAMES.RUN_FINISHED)).toBe(false);
+    expect(snapshot.messages?.some((message) =>
+      /重新观察|follow-up page observation|verify the page state/i.test(message.content)
+    )).toBe(true);
+  });
+
   it('guides the model to finish immediately after successful form verification', async () => {
     const completeCalls: string[] = [];
     const decisions = [
@@ -2106,7 +2291,7 @@ describe('RunManager', () => {
 
     expect(result).toMatchObject({
       ok: false,
-      code: 'DOMAIN_NOT_ENABLED',
+      code: ERROR_CODES.DOMAIN_CONSENT_REQUIRED,
       changedPage: false
     });
     expect(rpcMessages).toEqual([]);
@@ -2196,7 +2381,7 @@ describe('RunManager', () => {
 
     expect(approved).toMatchObject({
       ok: false,
-      code: 'DOMAIN_NOT_ENABLED',
+      code: ERROR_CODES.DOMAIN_CONSENT_REQUIRED,
       changedPage: false
     });
     expect(rpcMessages).toEqual([]);
@@ -2205,7 +2390,7 @@ describe('RunManager', () => {
       toolResult: {
         tool: TOOL_NAMES.ACTION_CLICK,
         ok: false,
-        code: 'DOMAIN_NOT_ENABLED'
+        code: ERROR_CODES.DOMAIN_CONSENT_REQUIRED
       }
     });
     defaultWorkflowRepo.delete(workflow.id);
@@ -2264,7 +2449,7 @@ describe('RunManager', () => {
 
     expect(result).toMatchObject({
       ok: false,
-      code: 'DOMAIN_NOT_ENABLED',
+      code: ERROR_CODES.DOMAIN_CONSENT_REQUIRED,
       changedPage: false
     });
     expect(manager.getSnapshot(started.runId).pendingApproval).toBeUndefined();
@@ -4387,6 +4572,76 @@ describe('RunManager', () => {
       ])
     );
     expect(JSON.stringify(snapshot.trace)).not.toContain('user@example.com');
+  });
+
+  it('recovers a persisted pending approval after worker restart only with matching page evidence', async () => {
+    const persistence = new InMemoryRunSessionPersistence();
+    const manager = new RunManager({
+      runSessionPersistence: persistence,
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse({
+        url: 'https://app.example.com/form',
+        currentDomain: 'app.example.com',
+        origin: 'https://app.example.com'
+      })),
+      settingsStore: {
+        async getProviderSettings() {
+          return undefined;
+        },
+        async setProviderSettings() {},
+        async getDomainPolicy() {
+          return { enabledDomains: ['app.example.com'], defaultEnabled: false };
+        }
+      }
+    });
+
+    const started = await manager.startRun({ task: '提交表单', mode: 'form' });
+    await waitForSnapshot(manager, started.runId, 'observed');
+    await manager.executeTool({
+      runId: started.runId,
+      tool: TOOL_NAMES.FORM_SUBMIT_WITH_APPROVAL,
+      args: {
+        formName: '注册表单',
+        submitMethod: 'button-click',
+        submitTargetRefId: 'ref_submit',
+        verifyStatus: 'pass',
+        verifyFailed: false,
+        fieldCount: 1,
+        filledCount: 1,
+        skippedCount: 0,
+        riskExplanation: '将提交注册表单',
+        fields: [
+          {
+            fieldRefId: 'ref_email',
+            label: 'Email',
+            type: 'email',
+            valuePreview: 'non-empty',
+            isSensitive: false
+          }
+        ],
+        warnings: []
+      }
+    });
+    const pending = manager.getSnapshot(started.runId).pendingApproval;
+    const restarted = new RunManager({ runSessionPersistence: persistence });
+
+    const recovered = restarted.recoverPendingApprovalSession({
+      runId: started.runId,
+      requestId: pending?.id ?? '',
+      currentTabId: 42,
+      currentDomain: 'app.example.com'
+    });
+    const failed = restarted.recoverPendingApprovalSession({
+      runId: started.runId,
+      requestId: pending?.id ?? '',
+      currentTabId: 99,
+      currentDomain: 'evil.example'
+    });
+
+    expect(recovered.status).toBe('recovering');
+    expect(recovered.pendingApproval?.id).toBe(pending?.id);
+    expect(failed.status).toBe('error');
+    expect(failed.error?.message).toContain('tab mismatch');
   });
 
   it('passes iframe formRefId through approved enter-submit without a submit button ref', async () => {

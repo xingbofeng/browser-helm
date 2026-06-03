@@ -62,3 +62,15 @@ HITL / 人在环规则：
 - v1.2 同时落地 per-domain permission/domain policy seed、MV3 session persistence，以及 Goal/SuccessCriteria 与 summary/workflow replay 的完成判断桥接。
 - v1.3+ / v2.0 加 eval、prompt injection eval、skill、MCP、tool sandbox、agent-as-tool。
 - v1.7 在 v1.2-v1.6 能力稳定后，集中做完整 Mode System / RuntimeStrategy 收敛，以及全面 tool summary/error/debug i18n hardening。
+
+## v1.6 Release Readiness
+
+v1.6 不能只因为版本号、工具常量、UI shell 或 roadmap 文档存在就标记为可发布。发布前必须同时满足：
+
+- P0 安全阻断全部关闭：full mode approval invariant、execution-layer authorization、page mutation grounding、form action nonce、verifier finish gate、transactional approval coordinator、tool manifest allowlist。
+- `docs/audits/v1-1-v1-6-completion-matrix.md` 存在，覆盖 v1.1-v1.6 每个 roadmap AC，并且没有 P0 open gate。
+- `npm run check:release` 通过，包含 tool docs、release hygiene、manifest permissions 和 completion matrix gate。
+- `npm run test:security` 通过，覆盖 P0 prompt injection、approval、token、redaction、page-health nonce、workflow precondition 和 adapter prompt exclusion 回归。
+- `npm run test:coverage` 通过；coverage 先保持温和全局阈值，并对 authorization、approval coordinator、form action token、tool registry、workflow replay 和 redaction 等安全关键模块设置文件级阈值，后续再逐步提高全局阈值。
+- `npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm test`、`npm run build`、`npm run test:e2e` 均通过。
+- real-model E2E 只在明确配置 provider credentials 时运行；未运行时必须在最终验证记录中说明。

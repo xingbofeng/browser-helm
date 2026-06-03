@@ -3,6 +3,7 @@ import { ToolExecutionService } from '../../../../../src/background/runtime/run/
 import type { ToolExecutionDeps } from '../../../../../src/background/runtime/run/tools/tool-execution-service';
 import type { ToolRuntimeAdapter } from '../../../../../src/background/runtime/run/tools/adapters/tool-runtime-adapter';
 import { ERROR_CODES } from '../../../../../src/shared/constants/error-codes';
+import { TOOL_NAMES } from '../../../../../src/shared/constants/tool-names';
 import type { RunMode } from '../../../../../src/shared/schemas/tool.schema';
 import type { ToolResult } from '../../../../../src/shared/schemas/tool-result.schema';
 
@@ -65,7 +66,519 @@ describe('ToolExecutionService', () => {
     const result = await svc.execute(baseInput);
     expect(result.code).toBe(ERROR_CODES.APPROVAL_REQUIRED);
   });
-  it('passes full mode into policy so high-risk tools can run without approval interception', async () => {
+  it('uses authorization service before executing a contracted tool', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      ok: true,
+      code: ERROR_CODES.OK,
+      summary: 'ok',
+      changedPage: false,
+      requiresObserve: false
+    });
+    const d = deps({
+      authorizationService: {
+        authorize: vi.fn().mockReturnValue({
+          allow: false,
+          requiresApproval: true,
+          reason: 'central authorization required approval',
+          risk: 'medium',
+          actionPreview: 'Test Tool (bh_test)'
+        })
+      },
+      toolPolicy: { evaluate: vi.fn().mockReturnValue({ allow: true, requiresApproval: false, reason: '', risk: 'medium' }) },
+      createToolRouter: vi.fn().mockReturnValue({
+        execute,
+        getToolContract: vi.fn().mockReturnValue({
+          name: 'bh_test',
+          title: 'Test Tool',
+          risk: 'medium',
+          readOnly: false,
+          requiresApproval: false
+        })
+      })
+    });
+    const svc = new ToolExecutionService(d as unknown as ToolExecutionDeps);
+    const result = await svc.execute(baseInput);
+    expect(result.code).toBe(ERROR_CODES.APPROVAL_REQUIRED);
+    expect(execute).not.toHaveBeenCalled();
+  });
+  it('creates approval requests through the approval coordinator transaction', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      ok: true,
+      code: ERROR_CODES.OK,
+      summary: 'ok',
+      changedPage: false,
+      requiresObserve: false
+    });
+    const input = { ...baseInput, tool: TOOL_NAMES.ACTION_CLICK, args: { refId: 'ref_1' } };
+    const approvalManager = { create: vi.fn() };
+    const setPendingAction = vi.fn();
+    const approvalCoordinator = {
+      createRequest: vi.fn().mockReturnValue({
+        request: {
+          id: 'coordinator_req_1',
+          runId: 'run_1',
+          stepId: 'run_1:bh_action_click',
+          tool: TOOL_NAMES.ACTION_CLICK,
+          argsPreview: { refId: 'ref_1' },
+          risk: 'medium',
+          reason: 'central authorization required approval',
+          status: 'pending',
+          createdAt: 1
+        }
+      })
+    };
+    const d = deps({
+      approvalManager,
+      setPendingAction,
+      approvalCoordinator,
+      authorizationService: {
+        authorize: vi.fn().mockReturnValue({
+          allow: false,
+          requiresApproval: true,
+          reason: 'central authorization required approval',
+          risk: 'medium',
+          actionPreview: 'Click Action (bh_action_click)'
+        })
+      },
+      createToolRouter: vi.fn().mockReturnValue({
+        execute,
+        getToolContract: vi.fn().mockReturnValue({
+          name: TOOL_NAMES.ACTION_CLICK,
+          title: 'Click Action',
+          risk: 'medium',
+          readOnly: false,
+          requiresApproval: false
+        })
+      })
+    });
+    const svc = new ToolExecutionService(d as unknown as ToolExecutionDeps);
+
+    const result = await svc.execute(input);
+
+    expect(result.code).toBe(ERROR_CODES.APPROVAL_REQUIRED);
+    expect(approvalCoordinator.createRequest).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run_1',
+      stepId: 'run_1:bh_action_click',
+      tool: TOOL_NAMES.ACTION_CLICK,
+      pendingAction: input
+    }));
+    expect(approvalManager.create).not.toHaveBeenCalled();
+    expect(setPendingAction).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
+  it('creates clipboard and storage approval previews without raw sensitive values', async () => {
+    const clipboardExecute = vi.fn().mockResolvedValue({
+      ok: false,
+      code: ERROR_CODES.APPROVAL_REQUIRED,
+      summary: 'Clipboard write requires approval',
+      changedPage: false,
+      requiresObserve: false,
+      requiresApproval: true,
+      approval: {
+        reason: 'Clipboard write requires explicit user approval.',
+        risk: 'high',
+        actionPreview: 'Write 21 characters to clipboard'
+      }
+    });
+    const storageExecute = vi.fn().mockResolvedValue({
+      ok: false,
+      code: ERROR_CODES.APPROVAL_REQUIRED,
+      summary: 'Storage set requires approval',
+      changedPage: false,
+      requiresObserve: false,
+      requiresApproval: true,
+      approval: {
+        reason: 'Changing localStorage.authToken requires explicit user approval.',
+        risk: 'high',
+        actionPreview: 'Set localStorage.authToken (23 characters)'
+      }
+    });
+    const approvalCoordinator = {
+      createRequest: vi.fn()
+        .mockReturnValueOnce({
+          request: {
+            id: 'clipboard_req_1',
+            runId: 'run_1',
+            stepId: `run_1:${TOOL_NAMES.CLIPBOARD_WRITE_WITH_APPROVAL}`,
+            tool: TOOL_NAMES.CLIPBOARD_WRITE_WITH_APPROVAL,
+            argsPreview: {},
+            risk: 'high',
+            reason: 'Clipboard write requires explicit user approval.',
+            actionPreview: 'Write 21 characters to clipboard',
+            status: 'pending',
+            createdAt: 1
+          }
+        })
+        .mockReturnValueOnce({
+          request: {
+            id: 'storage_req_1',
+            runId: 'run_1',
+            stepId: `run_1:${TOOL_NAMES.STORAGE_SET_WITH_APPROVAL}`,
+            tool: TOOL_NAMES.STORAGE_SET_WITH_APPROVAL,
+            argsPreview: {},
+            risk: 'high',
+            reason: 'Changing localStorage.authToken requires explicit user approval.',
+            actionPreview: 'Set localStorage.authToken (23 characters)',
+            status: 'pending',
+            createdAt: 1
+          }
+        })
+    };
+    const createToolRouter = vi.fn()
+      .mockReturnValueOnce({
+        execute: clipboardExecute,
+        getToolContract: vi.fn().mockReturnValue({
+          name: TOOL_NAMES.CLIPBOARD_WRITE_WITH_APPROVAL,
+          title: 'Write Clipboard With Approval',
+          risk: 'high',
+          readOnly: false,
+          requiresApproval: true
+        })
+      })
+      .mockReturnValueOnce({
+        execute: storageExecute,
+        getToolContract: vi.fn().mockReturnValue({
+          name: TOOL_NAMES.STORAGE_SET_WITH_APPROVAL,
+          title: 'Set Web Storage With Approval',
+          risk: 'high',
+          readOnly: false,
+          requiresApproval: true
+        })
+      });
+    const d = deps({
+      approvalCoordinator,
+      createToolRouter,
+      adapter: {
+        ...noopAdapter,
+        shouldBypassPolicyApproval: (tool: string) =>
+          tool === TOOL_NAMES.CLIPBOARD_WRITE_WITH_APPROVAL ||
+          tool === TOOL_NAMES.STORAGE_SET_WITH_APPROVAL
+      }
+    });
+    const svc = new ToolExecutionService(d as unknown as ToolExecutionDeps);
+
+    await svc.execute({
+      runId: 'run_1',
+      tool: TOOL_NAMES.CLIPBOARD_WRITE_WITH_APPROVAL,
+      args: { text: 'copy private password' }
+    });
+    await svc.execute({
+      runId: 'run_1',
+      tool: TOOL_NAMES.STORAGE_SET_WITH_APPROVAL,
+      args: { area: 'localStorage', key: 'authToken', value: 'storage private password' }
+    });
+
+    type ApprovalCreateRequestForTest = {
+      argsPreview: unknown;
+      actionPreview?: string | undefined;
+      reason: string;
+    };
+    const visibleRequests = approvalCoordinator.createRequest.mock.calls.map(([request]) => {
+      const visibleRequest = request as ApprovalCreateRequestForTest;
+      return {
+        argsPreview: visibleRequest.argsPreview,
+        actionPreview: visibleRequest.actionPreview,
+        reason: visibleRequest.reason
+      };
+    });
+    expect(JSON.stringify(visibleRequests)).not.toContain('copy private password');
+    expect(JSON.stringify(visibleRequests)).not.toContain('storage private password');
+    expect(approvalCoordinator.createRequest).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      argsPreview: {
+        valuePreview: {
+          masked: true,
+          preview: '[MASKED]',
+          reason: 'redacted'
+        }
+      },
+      actionPreview: 'Write 21 characters to clipboard'
+    }));
+    expect(approvalCoordinator.createRequest).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      argsPreview: {
+        area: 'localStorage',
+        key: 'authToken',
+        valuePreview: {
+          masked: true,
+          preview: '[MASKED]',
+          reason: 'redacted'
+        }
+      },
+      actionPreview: 'Set localStorage.authToken (23 characters)'
+    }));
+    expect(clipboardExecute).toHaveBeenCalledTimes(1);
+    expect(storageExecute).toHaveBeenCalledTimes(1);
+  });
+  it('returns waiting_for_user when authorization blocks without approval', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      ok: true,
+      code: ERROR_CODES.OK,
+      summary: 'ok',
+      changedPage: false,
+      requiresObserve: false
+    });
+    const setSnapshot = vi.fn();
+    const d = deps({
+      setSnapshot,
+      authorizationService: {
+        authorize: vi.fn().mockReturnValue({
+          allow: false,
+          requiresApproval: false,
+          code: ERROR_CODES.USER_INTENT_MISMATCH,
+          reason: 'Target is not grounded in the user task',
+          risk: 'medium'
+        })
+      },
+      createToolRouter: vi.fn().mockReturnValue({
+        execute,
+        getToolContract: vi.fn().mockReturnValue({
+          name: 'bh_test',
+          title: 'Test Tool',
+          risk: 'medium',
+          readOnly: false,
+          requiresApproval: false
+        })
+      })
+    });
+    const svc = new ToolExecutionService(d as unknown as ToolExecutionDeps);
+    const result = await svc.execute(baseInput);
+    expect(result).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.USER_INTENT_MISMATCH,
+      summary: 'Target is not grounded in the user task',
+      changedPage: false,
+      requiresObserve: false
+    });
+    expect(execute).not.toHaveBeenCalled();
+    expect(setSnapshot).toHaveBeenCalledWith(
+      'run_1',
+      expect.objectContaining({
+        status: 'waiting_for_user'
+      })
+    );
+  });
+  it('uses execution-layer domain consent for mutating tools', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      ok: true,
+      code: ERROR_CODES.OK,
+      summary: 'ok',
+      changedPage: false,
+      requiresObserve: false
+    });
+    const d = deps({
+      getSnapshot: vi.fn().mockReturnValue({
+        runId: 'run_1',
+        mode: 'form',
+        status: 'observed' as const,
+        observation: { currentDomain: 'docs.example.com' }
+      }),
+      getRecord: vi.fn().mockReturnValue({ task: '填写表单', mode: 'form' as RunMode, tabId: 42, trace: [] }),
+      getDomainPolicy: vi.fn().mockReturnValue({ defaultEnabled: false, enabledDomains: [] }),
+      createToolRouter: vi.fn().mockReturnValue({
+        execute,
+        getToolContract: vi.fn().mockReturnValue({
+          name: TOOL_NAMES.FORM_FILL_MANY,
+          title: 'Batch Fill Many Fields',
+          risk: 'medium',
+          readOnly: false,
+          requiresApproval: false
+        })
+      })
+    });
+    const svc = new ToolExecutionService(d as unknown as ToolExecutionDeps);
+    const result = await svc.execute({
+      runId: 'run_1',
+      tool: TOOL_NAMES.FORM_FILL_MANY,
+      args: {}
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.DOMAIN_CONSENT_REQUIRED
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+  it('requires approval before executing public click actions', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      ok: true,
+      code: ERROR_CODES.OK,
+      summary: 'ok',
+      changedPage: true,
+      requiresObserve: true
+    });
+    const d = deps({
+      getSnapshot: vi.fn().mockReturnValue({
+        runId: 'run_1',
+        mode: 'act',
+        status: 'observed' as const,
+        observation: { currentDomain: 'localhost' }
+      }),
+      getRecord: vi.fn().mockReturnValue({ task: 'Click Continue', mode: 'act' as RunMode, tabId: 42, trace: [] }),
+      createToolRouter: vi.fn().mockReturnValue({
+        execute,
+        getToolContract: vi.fn().mockReturnValue({
+          name: TOOL_NAMES.ACTION_CLICK,
+          title: 'Click Action',
+          risk: 'medium',
+          readOnly: false,
+          requiresApproval: false
+        })
+      })
+    });
+    const svc = new ToolExecutionService(d as unknown as ToolExecutionDeps);
+    const result = await svc.execute({
+      runId: 'run_1',
+      tool: TOOL_NAMES.ACTION_CLICK,
+      args: { refId: 'ref_1' },
+      source: 'agent'
+    });
+    expect(result.code).toBe(ERROR_CODES.APPROVAL_REQUIRED);
+    expect(execute).not.toHaveBeenCalled();
+  });
+  it('executes public click actions when the target name is explicit in the user task', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      ok: true,
+      code: ERROR_CODES.OK,
+      summary: 'clicked',
+      changedPage: true,
+      requiresObserve: true
+    });
+    const d = deps({
+      getSnapshot: vi.fn().mockReturnValue({
+        runId: 'run_1',
+        mode: 'act',
+        status: 'observed' as const,
+        observation: { currentDomain: 'localhost' },
+        refs: [
+          {
+            refId: 'ref_1',
+            role: 'button',
+            name: '展开详情',
+            tagName: 'BUTTON',
+            visible: true
+          }
+        ]
+      }),
+      getRecord: vi.fn().mockReturnValue({ task: '点击展开详情按钮', mode: 'act' as RunMode, tabId: 42, trace: [] }),
+      createToolRouter: vi.fn().mockReturnValue({
+        execute,
+        getToolContract: vi.fn().mockReturnValue({
+          name: TOOL_NAMES.ACTION_CLICK,
+          title: 'Click Action',
+          risk: 'medium',
+          readOnly: false,
+          requiresApproval: false
+        })
+      })
+    });
+    const svc = new ToolExecutionService(d as unknown as ToolExecutionDeps);
+    const result = await svc.execute({
+      runId: 'run_1',
+      tool: TOOL_NAMES.ACTION_CLICK,
+      args: { refId: 'ref_1' },
+      source: 'agent'
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      code: ERROR_CODES.OK,
+      changedPage: true,
+      requiresObserve: true
+    });
+    expect(execute).toHaveBeenCalled();
+  });
+  it('blocks direct form fill when the value is not explicit in the user task', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      ok: true,
+      code: ERROR_CODES.OK,
+      summary: 'filled',
+      changedPage: true,
+      requiresObserve: false
+    });
+    const d = deps({
+      getSnapshot: vi.fn().mockReturnValue({
+        runId: 'run_1',
+        mode: 'form',
+        status: 'observed' as const,
+        observation: { currentDomain: 'localhost' }
+      }),
+      getRecord: vi.fn().mockReturnValue({
+        task: 'Fill the name field with John.',
+        mode: 'form' as RunMode,
+        tabId: 42,
+        trace: []
+      }),
+      createToolRouter: vi.fn().mockReturnValue({
+        execute,
+        getToolContract: vi.fn().mockReturnValue({
+          name: TOOL_NAMES.FORM_FILL_FIELD,
+          title: 'Fill Single Field',
+          risk: 'medium',
+          readOnly: false,
+          requiresApproval: false
+        })
+      })
+    });
+    const svc = new ToolExecutionService(d as unknown as ToolExecutionDeps);
+
+    const result = await svc.execute({
+      runId: 'run_1',
+      tool: TOOL_NAMES.FORM_FILL_FIELD,
+      args: { fieldRefId: 'field_1', value: 'Mallory' },
+      source: 'agent'
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.USER_INTENT_MISMATCH,
+      changedPage: false,
+      requiresObserve: false
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+  it('allows direct form fill when every value is explicit in the user task', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      ok: true,
+      code: ERROR_CODES.OK,
+      summary: 'filled',
+      changedPage: true,
+      requiresObserve: false
+    });
+    const d = deps({
+      getSnapshot: vi.fn().mockReturnValue({
+        runId: 'run_1',
+        mode: 'form',
+        status: 'observed' as const,
+        observation: { currentDomain: 'localhost' }
+      }),
+      getRecord: vi.fn().mockReturnValue({
+        task: 'Fill the name field with John.',
+        mode: 'form' as RunMode,
+        tabId: 42,
+        trace: []
+      }),
+      createToolRouter: vi.fn().mockReturnValue({
+        execute,
+        getToolContract: vi.fn().mockReturnValue({
+          name: TOOL_NAMES.FORM_FILL_FIELD,
+          title: 'Fill Single Field',
+          risk: 'medium',
+          readOnly: false,
+          requiresApproval: false
+        })
+      })
+    });
+    const svc = new ToolExecutionService(d as unknown as ToolExecutionDeps);
+
+    const result = await svc.execute({
+      runId: 'run_1',
+      tool: TOOL_NAMES.FORM_FILL_FIELD,
+      args: { fieldRefId: 'field_1', value: 'John' },
+      source: 'agent'
+    });
+
+    expect(result.ok).toBe(true);
+    expect(execute).toHaveBeenCalled();
+  });
+  it('passes full mode into policy before executing high-risk tools', async () => {
     const execute = vi.fn().mockResolvedValue({ ok: true, code: ERROR_CODES.OK, summary: 'ok', changedPage: false, requiresObserve: false });
     const evaluate = vi.fn().mockReturnValue({ allow: true, requiresApproval: false, reason: '', risk: 'high' });
     const d = deps({

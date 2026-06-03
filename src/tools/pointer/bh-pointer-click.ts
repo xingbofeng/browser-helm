@@ -11,7 +11,13 @@ import { classifyCoordinateRisk } from './coordinate-risk';
 const argsSchema = z.object({
   x: z.number().nonnegative(),
   y: z.number().nonnegative(),
-  reason: z.string().min(10)
+  reason: z.string().min(10),
+  visionGrounding: z.object({
+    allowed: z.boolean(),
+    targetConfidence: z.enum(['low', 'medium', 'high']).optional(),
+    domRefUnavailable: z.boolean().optional(),
+    reason: z.string().min(1).optional()
+  }).optional()
 }).strict();
 
 /**
@@ -20,7 +26,7 @@ const argsSchema = z.object({
  * Agent 语义：Vision/Full fallback 工具，仅当 DOM/a11y ref 路径不可用且视觉检查给出
  * 明确原因时使用。会修改页面状态，风险 medium；如果 reason 命中提交、支付、删除、
  * 上传、密码等敏感场景，工具不会点击并返回 approval required。主要参数为 viewport
- * 坐标 x/y 和视觉 fallback reason；返回命中的元素 tag 摘要。
+ * 坐标 x/y、视觉 fallback reason 和 visionGrounding 证据；返回命中的元素 tag 摘要。
  */
 export function bhPointerClick(): ToolSpec<z.infer<typeof argsSchema>, ToolResult> {
   return {
@@ -57,6 +63,12 @@ export function bhPointerClick(): ToolSpec<z.infer<typeof argsSchema>, ToolResul
           }
         };
       }
+      if (!isHighConfidenceVisionFallback(args.visionGrounding)) {
+        return failure(
+          ERROR_CODES.POINTER_ACTION_FAILED,
+          'Pointer fallback requires high-confidence vision grounding and proof that DOM/a11y ref path is unavailable'
+        );
+      }
       if (!ctx.tabId) {
         return failure(ERROR_CODES.RUNTIME_UNAVAILABLE, 'No active tab is available for pointer click');
       }
@@ -85,6 +97,14 @@ export function bhPointerClick(): ToolSpec<z.infer<typeof argsSchema>, ToolResul
       };
     }
   };
+}
+
+function isHighConfidenceVisionFallback(
+  grounding: z.infer<typeof argsSchema>['visionGrounding']
+): boolean {
+  return grounding?.allowed === true &&
+    grounding.targetConfidence === 'high' &&
+    grounding.domRefUnavailable === true;
 }
 
 async function clickCoordinates(

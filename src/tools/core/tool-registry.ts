@@ -4,6 +4,9 @@ export class ToolRegistry {
   private readonly tools = new Map<string, ToolSpec<unknown, unknown>>();
 
   register<TArgs, TResult>(tool: ToolSpec<TArgs, TResult>): void {
+    if (this.tools.has(tool.name)) {
+      throw new Error(`Duplicate tool registration: ${tool.name}`);
+    }
     this.tools.set(tool.name, tool);
   }
 

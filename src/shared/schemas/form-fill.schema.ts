@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { toolRiskSchema } from './tool-result.schema';
 import {
   disabledSubmitReasonSchema,
+  formFieldSnapshotSchema,
   structuredPageWarningSchema,
 } from './structured-page-data.schema';
 
@@ -87,6 +88,7 @@ export const fillManyResultSchema = z.object({
   failedCount: z.number().int().nonnegative(),
   changedPage: z.boolean(),
   requiresObserve: z.boolean(),
+  updatedFields: z.array(formFieldSnapshotSchema).optional(),
   retried: z.boolean().optional(),
   fallbackAvailable: z.boolean().optional(),
   summary: z.string().min(1),
@@ -102,6 +104,7 @@ export const fieldVerifyResultSchema = z.object({
   fieldRefId: z.string().min(1),
   label: z.string().optional(),
   name: z.string().optional(),
+  type: z.string().optional(),
   valid: z.boolean(),
   required: z.boolean(),
   filled: z.boolean(),
@@ -116,6 +119,7 @@ export const formVerifyResultSchema = z.object({
   formRefId: z.string().min(1).optional(),
   formAction: z.string().optional(),
   formMethod: z.string().optional(),
+  submitTargetRefId: z.string().min(1).optional(),
   allValid: z.boolean(),
   missingRequired: z.array(fieldVerifyResultSchema),
   invalidFields: z.array(fieldVerifyResultSchema),
@@ -151,6 +155,7 @@ export const submitApprovalPayloadSchema = z.object({
   fieldCount: z.number().int().nonnegative(),
   filledCount: z.number().int().nonnegative(),
   skippedCount: z.number().int().nonnegative(),
+  skippedFields: z.array(maskedFieldValueSchema),
   verifyStatus: verifyStatusSchema,
   verifyFailed: z.boolean(),
   risk: toolRiskSchema,

@@ -1,4 +1,5 @@
 import type { DownloadSummary, DownloadedFileReadLimitation } from '../shared/schemas/file';
+import { redactTextForModelContext } from '../shared/redaction';
 
 export type DownloadListOptions = {
   limit?: number;
@@ -100,7 +101,7 @@ function sanitizeUrl(value: string | undefined): string | undefined {
     const url = new URL(value);
     url.search = '';
     url.hash = '';
-    return url.toString();
+    return redactTextForModelContext(url.toString());
   } catch {
     return undefined;
   }
@@ -116,9 +117,10 @@ function basename(value: string | undefined): string | undefined {
 function displayFileName(item: ChromeDownloadItem): string | undefined {
   const localName = basename(item.filename);
   const urlName = basenameFromUrl(item.finalUrl) ?? basenameFromUrl(item.url);
-  return localName && readExtension(localName).fileExtension
+  const fileName = localName && readExtension(localName).fileExtension
     ? localName
     : urlName ?? localName;
+  return fileName ? redactTextForModelContext(fileName) : undefined;
 }
 
 function basenameFromUrl(value: string | undefined): string | undefined {

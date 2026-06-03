@@ -127,6 +127,17 @@ describe('setFieldText', () => {
     expect(events).toContain('blur');
   });
 
+  it('notifies controlled-style input listeners with the updated value', () => {
+    setupPage('<input type="text">');
+    const el = document.querySelector('input')!;
+    const observedValues: string[] = [];
+    el.addEventListener('input', () => observedValues.push(el.value));
+
+    setFieldText(el, 'controlled value');
+
+    expect(observedValues).toEqual(['controlled value']);
+  });
+
   it('sets textarea value', () => {
     setupPage('<textarea></textarea>');
     const el = document.querySelector('textarea')!;
@@ -239,6 +250,30 @@ describe('fillSingleField', () => {
     const r = fillSingleField(document, refMap, { fieldRefId: refId, value: 'f' });
     expect(r.status).toBe('skipped');
     expect(r.skipReason).toContain('\u6587\u4EF6\u4E0A\u4F20');
+  });
+
+  it('skips native picker inputs instead of pretending to drive the picker UI', () => {
+    setupPage('<input type="date" name="birthday">');
+    const refId = reg(document.querySelector('input')!, { name: 'birthday' });
+    const r = fillSingleField(document, refMap, { fieldRefId: refId, value: '2026-06-02' });
+    expect(r.status).toBe('skipped');
+    expect((document.querySelector('input') as HTMLInputElement).value).toBe('');
+  });
+
+  it('skips autocomplete popup fields that require explicit option selection', () => {
+    setupPage('<input name="city" list="cities"><datalist id="cities"><option value="上海"></datalist>');
+    const refId = reg(document.querySelector('input')!, { name: 'city' });
+    const r = fillSingleField(document, refMap, { fieldRefId: refId, value: '上海' });
+    expect(r.status).toBe('skipped');
+    expect((document.querySelector('input') as HTMLInputElement).value).toBe('');
+  });
+
+  it('skips rich editor plugin surfaces while still allowing plain contenteditable fields', () => {
+    setupPage('<div contenteditable="true" class="ProseMirror"></div>');
+    const refId = reg(document.querySelector('div')!, { name: 'editor' });
+    const r = fillSingleField(document, refMap, { fieldRefId: refId, value: 'Hello' });
+    expect(r.status).toBe('skipped');
+    expect(document.querySelector('div')!.textContent).toBe('');
   });
 
   it('stale ref returns failed', () => {

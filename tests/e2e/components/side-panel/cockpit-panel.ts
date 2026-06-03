@@ -117,6 +117,20 @@ export class CockpitPanel {
     await expect(this.page.getByText('sk-e2e-secret')).toHaveCount(0);
   }
 
+  async captureViewportFromHeader(): Promise<void> {
+    await this.page.getByRole('button', { name: '截取当前视口' })
+      .or(this.page.getByRole('button', { name: 'Capture current viewport' }))
+      .first()
+      .click();
+    const image = this.page.getByRole('img', { name: '当前页面视口截图' })
+      .or(this.page.getByRole('img', { name: 'Current page viewport screenshot' }))
+      .first();
+    await expect(image).toBeVisible();
+    const src = await image.getAttribute('src');
+    expect(src?.startsWith('data:image/')).toBe(true);
+    await expect(this.page.getByText('Captured viewport screenshot').first()).toBeVisible();
+  }
+
   async saveProviderSettings(settings: {
     baseUrl: string;
     model: string;

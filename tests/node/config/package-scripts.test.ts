@@ -12,4 +12,8 @@ describe('package scripts', () => {
   it('provides an opt-in pre-push hook installer for local preflight', () => {
     expect(packageJson.scripts?.['setup:pre-push']).toBe('tsx scripts/setup-pre-push-hook.ts');
   });
+
+  it('includes release hygiene in the release check gate', () => {
+    expect(packageJson.scripts?.['check:release']).toContain('npm run check:release-hygiene');
+  });
 });

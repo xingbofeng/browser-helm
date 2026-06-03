@@ -502,6 +502,47 @@ describe('bhFormSubmitWithApproval', () => {
     expect(r.summary).toContain('Awaiting approval');
   });
 
+  it('includes complete masked submit approval payload context', async () => {
+    const r = await bhFormSubmitWithApproval(noRpc()).execute({
+      formRefId: 'form_1',
+      formName: 'Registration',
+      submitMethod: 'button-click',
+      submitTargetRefId: 'submit_1',
+      verifyStatus: 'warn',
+      verifyFailed: false,
+      fieldCount: 2,
+      filledCount: 1,
+      skippedCount: 1,
+      riskExplanation: 'Submit registration form',
+      formAction: '/register',
+      formMethod: 'post',
+      fields: [
+        { fieldRefId: 'email_1', label: 'Email', name: 'email', type: 'email', valuePreview: 'non-empty', isSensitive: false },
+        { fieldRefId: 'token_1', label: 'Token', name: 'token', type: 'text', valuePreview: '[MASKED]', isSensitive: true, skipped: true }
+      ],
+      warnings: ['Token field skipped']
+    }, ctx);
+
+    expect(r.data).toMatchObject({
+      runId: 'test',
+      stepId: 'step-1',
+      formRefId: 'form_1',
+      formName: 'Registration',
+      formAction: '/register',
+      formMethod: 'post',
+      submitTargetRefId: 'submit_1',
+      verifyStatus: 'warn',
+      fields: [
+        expect.objectContaining({ fieldRefId: 'email_1', label: 'Email', type: 'email', valuePreview: 'non-empty' }),
+        expect.objectContaining({ fieldRefId: 'token_1', label: 'Token', type: 'text', valuePreview: '[MASKED]', skipped: true })
+      ],
+      skippedFields: [
+        expect.objectContaining({ fieldRefId: 'token_1', label: 'Token', type: 'text', valuePreview: '[MASKED]' })
+      ]
+    });
+    expect(JSON.stringify(r.data)).not.toContain('secret');
+  });
+
   it('shows high risk when verify failed', async () => {
     const r = await bhFormSubmitWithApproval(noRpc()).execute({ formName: 'pay', submitMethod: 'button-click', verifyStatus: 'fail', verifyFailed: true, fieldCount: 1, filledCount: 0, skippedCount: 1, riskExplanation: 'missing', fields: [], warnings: [] }, ctx);
     expect(r.summary).toContain('High-risk');

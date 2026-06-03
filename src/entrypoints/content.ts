@@ -11,6 +11,7 @@ import { t } from '../i18n/t';
 
 const CONTENT_SCRIPT_INSTALLED_MARKER = '__BROWSER_HELM_CONTENT_RPC_INSTALLED__';
 const PAGE_HEALTH_BRIDGE_MARKER = '__BROWSER_HELM_PAGE_HEALTH_BRIDGE__';
+const PAGE_HEALTH_NONCE_KEY = '__BROWSER_HELM_PAGE_HEALTH_NONCE__';
 const PAGE_HEALTH_EVENT = 'BROWSER_HELM_PAGE_HEALTH_EVENT';
 const PAGE_HEALTH_HOOK_ID = 'browserhelm-page-health-hook';
 const PAGE_HEALTH_HOOK_PATH = 'page-health-hook.js';
@@ -106,13 +107,15 @@ function installPageHealthBridge(globalScope: Record<string, unknown>): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return;
   }
-  installPageHealthPageHooks();
+  const nonce = createPageHealthNonce();
+  globalScope[PAGE_HEALTH_NONCE_KEY] = nonce;
+  installPageHealthPageHooks(nonce);
 
   window.addEventListener('message', (event) => {
     if (
       event.source !== window ||
       event.origin !== window.location.origin ||
-      !isPageHealthEvent(event.data)
+      !isPageHealthEvent(event.data, nonce)
     ) {
       return;
     }
@@ -150,7 +153,7 @@ export function enablePageHealthBridgeForDebug(): void {
   installPageHealthBridge(globalThis);
 }
 
-function installPageHealthPageHooks(): void {
+function installPageHealthPageHooks(nonce: string): void {
   if (
     typeof document === 'undefined' ||
     typeof document.createElement !== 'function' ||
@@ -171,9 +174,26 @@ function installPageHealthPageHooks(): void {
   const script = document.createElement('script');
   script.id = PAGE_HEALTH_HOOK_ID;
   script.src = hookUrl;
+  script.dataset.browserhelmPageHealthNonce = nonce;
   script.onload = () => script.remove();
   script.onerror = () => script.remove();
   parent.appendChild(script);
+}
+
+function createPageHealthNonce(): string {
+  const cryptoLike = globalThis.crypto;
+  if (typeof cryptoLike?.randomUUID === 'function') {
+    return cryptoLike.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  if (typeof cryptoLike?.getRandomValues === 'function') {
+    cryptoLike.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function isPromise<T>(value: T | Promise<T>): value is Promise<T> {
@@ -512,8 +532,9 @@ function readGlobalArray(scope: Record<string, unknown>, key: string): unknown[]
   return Array.isArray(value) ? value : [];
 }
 
-function isPageHealthEvent(value: unknown): value is {
+function isPageHealthEvent(value: unknown, nonce: string): value is {
   channel: typeof PAGE_HEALTH_EVENT;
+  nonce: string;
   kind: 'console_error' | 'console_message' | 'network_failure';
   level?: 'debug' | 'info' | 'log' | 'warn';
   message?: string;
@@ -528,6 +549,7 @@ function isPageHealthEvent(value: unknown): value is {
   }
   const record = value as Record<string, unknown>;
   return record.channel === PAGE_HEALTH_EVENT &&
+    record.nonce === nonce &&
     (record.kind === 'console_error' ||
       record.kind === 'console_message' ||
       record.kind === 'network_failure');

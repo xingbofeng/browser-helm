@@ -13,6 +13,8 @@ const queryArgsSchema = z.object({
   hostSelector: z.string().min(1),
   selector: z.string().min(1)
 }).strict();
+const MAX_SHADOW_QUERY_ELEMENTS = 50;
+const MAX_SHADOW_TEXT_CHARS = 80;
 
 /**
  * 列出页面中的 open shadow roots。
@@ -81,7 +83,8 @@ export function bhShadowQuery(
       if (!('shadowQuery' in response)) {
         return failure('Shadow query response is unavailable');
       }
-      return ok(summarizeShadowQuery(response.shadowQuery), { shadowQuery: response.shadowQuery });
+      const shadowQuery = compactShadowQuery(response.shadowQuery);
+      return ok(summarizeShadowQuery(shadowQuery), { shadowQuery });
     }
   };
 }
@@ -105,8 +108,9 @@ function summarizeShadowRoots(roots: ShadowRootSummary[]): string {
 
 function summarizeShadowQuery(result: ShadowQueryResult): string {
   const preview = result.elements.slice(0, 20).map(formatShadowElement).join('; ');
+  const omitted = readOmittedCount(result);
   return preview
-    ? `Found ${result.elements.length} shadow DOM elements in ${result.hostSelector}: ${preview}`
+    ? `Found ${result.elements.length} shadow DOM elements in ${result.hostSelector}${omitted > 0 ? ` (omitted=${omitted})` : ''}: ${preview}`
     : `Found 0 shadow DOM elements in ${result.hostSelector}.`;
 }
 
@@ -126,6 +130,25 @@ function formatShadowElement(element: ShadowElementSummary): string {
 
 function truncate(value: string, maxLength: number): string {
   return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
+}
+
+function compactShadowQuery(result: ShadowQueryResult): ShadowQueryResult & { omittedCount?: number } {
+  const elements = result.elements.slice(0, MAX_SHADOW_QUERY_ELEMENTS).map((element) => ({
+    ...element,
+    ...(element.text ? { text: truncate(element.text, MAX_SHADOW_TEXT_CHARS) } : {})
+  }));
+  return {
+    ...result,
+    elements,
+    ...(result.elements.length > MAX_SHADOW_QUERY_ELEMENTS
+      ? { omittedCount: result.elements.length - MAX_SHADOW_QUERY_ELEMENTS }
+      : {})
+  };
+}
+
+function readOmittedCount(result: ShadowQueryResult): number {
+  const count = (result as { omittedCount?: unknown }).omittedCount;
+  return typeof count === 'number' && Number.isFinite(count) ? count : 0;
 }
 
 function ok(summary: string, data: unknown): ToolResult {

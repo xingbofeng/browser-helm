@@ -84,7 +84,8 @@ export class VisionScreenshotFlow {
       tool: TOOL_NAMES.POINTER_CLICK,
       args: {
         ...point,
-        reason: 'Visual fallback click on the dismiss overlay control after DOM ref was unavailable.'
+        reason: 'Visual fallback click on the dismiss overlay control after DOM ref was unavailable.',
+        visionGrounding: highConfidenceVisionFallback()
       }
     }));
     expect(click.ok, JSON.stringify(click)).toBe(true);
@@ -107,7 +108,8 @@ export class VisionScreenshotFlow {
       tool: TOOL_NAMES.POINTER_CLICK,
       args: {
         ...sensitivePoint,
-        reason: 'Click Pay now button to submit payment from the visual fallback path.'
+        reason: 'Click Pay now button to submit payment from the visual fallback path.',
+        visionGrounding: highConfidenceVisionFallback()
       }
     }));
     expect(approval.ok).toBe(false);
@@ -122,6 +124,15 @@ export class VisionScreenshotFlow {
   async close(): Promise<void> {
     await this.flowContext.close();
   }
+}
+
+function highConfidenceVisionFallback() {
+  return {
+    allowed: true,
+    targetConfidence: 'high',
+    domRefUnavailable: true,
+    reason: 'Vision grounding marked this coordinate as a high-confidence fallback target.'
+  };
 }
 
 async function executeToolResult(

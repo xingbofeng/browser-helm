@@ -4,7 +4,7 @@ import { useT } from '../../i18n/context';
 type RequestInspectorProps = {
   requests?: NetworkRequestRecord[] | undefined;
   detail?: RequestDetail | undefined;
-  status?: 'detached' | 'attached' | 'error' | undefined;
+  status?: 'detached' | 'attaching' | 'attached' | 'error' | 'externally_detached' | undefined;
   reason?: string | undefined;
 };
 
@@ -53,7 +53,7 @@ function RequestDetailView({ detail }: { detail: RequestDetail | NetworkRequestR
       <code className="bh-requestUrl">{detail.url}</code>
       <HeaderBlock title={t('debug.cdp.requestInspector.requestHeaders')} headers={detail.requestHeadersPreview} />
       <HeaderBlock title={t('debug.cdp.requestInspector.responseHeaders')} headers={detail.responseHeadersPreview ?? {}} />
-      {'responseBodyPreview' in detail && detail.responseBodyPreview ? (
+      {'responseBodyPreview' in detail && detail.responseBodyPreview && detail.responseBodyAvailable ? (
         <pre className="bh-cdpBodyPreview">{detail.responseBodyPreview}</pre>
       ) : (
         <p className="bh-emptyState">{detail.responseBodyUnavailableReason ?? t('debug.cdp.requestInspector.bodyUnavailable')}</p>
@@ -86,6 +86,12 @@ function HeaderBlock({ title, headers }: { title: string; headers: Record<string
 
 function statusText(t: ReturnType<typeof useT>, status: string, reason: string | undefined): string {
   if (status === 'attached') return t('debug.cdp.requestInspector.attached');
+  if (status === 'attaching') return t('debug.cdp.requestInspector.attaching');
+  if (status === 'externally_detached') {
+    return t('debug.cdp.requestInspector.externallyDetached', {
+      reason: reason ?? t('debug.cdp.requestInspector.unknownReason')
+    });
+  }
   if (status === 'error') return reason ?? t('debug.cdp.requestInspector.attachFailed');
   return t('debug.cdp.requestInspector.detached');
 }

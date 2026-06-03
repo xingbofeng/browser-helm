@@ -2,10 +2,16 @@ import type { RuntimeEvent, ExecuteToolInput, RunSnapshot } from '../../../../..
 import type { ToolResult } from '../../../../../../shared/schemas/tool-result.schema';
 import type { ToolRouter } from '../../../../../../tools/core/tool-router';
 import type { RunMode } from '../../../../../../shared/schemas/tool.schema';
-import { APPROVAL_EVENT_NAMES } from '../../../../../../shared/constants/event-names';
+import { TRACE_EVENT_NAMES } from '../../../../../../shared/constants/event-names';
 import { ERROR_CODES } from '../../../../../../shared/constants/error-codes';
 import { TOOL_NAMES } from '../../../../../../shared/constants/tool-names';
-import { defaultWorkflowRepo } from '../../../../../../storage/workflow-repo';
+import { TOOL_MANIFEST_MODULES_HASH } from '../../../../../../tools/tool-manifest';
+import {
+  defaultWorkflowRepo,
+  evaluateWorkflowCompletionEvidence,
+  evaluateWorkflowPreconditions,
+  type WorkflowPreviewContext
+} from '../../../../../../storage/workflow-repo';
 import { snapshotToolResult } from '../../../run-snapshot-assembler';
 import type { ToolApprovalFlow } from './tool-approval-flow';
 
@@ -29,13 +35,6 @@ export class WorkflowReplayApprovalFlow implements ToolApprovalFlow {
     const record = this.deps.getRecord(input.runId);
     const pendingAction = this.deps.getPendingAction(input.requestId);
     this.deps.deletePendingAction(input.requestId);
-    if (record) {
-      this.deps.appendTrace(record, {
-        runId: input.runId,
-        type: APPROVAL_EVENT_NAMES.APPROVED,
-        payload: { requestId: input.requestId, reason: 'Workflow replay approval granted', code: ERROR_CODES.OK }
-      });
-    }
     if (!record?.tabId) {
       return this.finish(input, unavailableResult('Run is not available for workflow replay'), record);
     }
@@ -49,15 +48,31 @@ export class WorkflowReplayApprovalFlow implements ToolApprovalFlow {
       return this.finish(input, unavailableResult('Workflow not found for replay'), record);
     }
 
+    const preconditionFailures = evaluateWorkflowPreconditions(
+      workflow,
+      workflowContextFromSnapshot(this.deps.getSnapshot(input.runId))
+    );
+    if (preconditionFailures.length > 0) {
+      defaultWorkflowRepo.score(workflow.id, 'failed');
+      return this.finish(
+        input,
+        failedResult(
+          ERROR_CODES.WORKFLOW_PRECONDITION_FAILED,
+          `Workflow replay preconditions failed: ${preconditionFailures.join(', ')}`
+        ),
+        record
+      );
+    }
+
     const router = this.deps.createToolRouter(record.tabId);
     for (const [index, step] of workflow.steps.entries()) {
       if (isReplayControlTool(step.tool)) {
-        return this.finish(input, failedResult(`Workflow replay step ${index + 1} cannot execute replay control tool ${step.tool}`), record);
+        return this.finish(input, failedResult(ERROR_CODES.TOOL_EXECUTION_FAILED, `Workflow replay step ${index + 1} cannot execute replay control tool ${step.tool}`), record);
       }
       const args = replayArgs(step.args ?? step.argsPreview);
       const contract = router.getToolContract(step.tool, record.mode);
       if (!contract) {
-        return this.finish(input, failedResult(`Workflow replay step ${index + 1} is not available in ${record.mode} mode: ${step.tool}`), record);
+        return this.finish(input, failedResult(ERROR_CODES.TOOL_EXECUTION_FAILED, `Workflow replay step ${index + 1} is not available in ${record.mode} mode: ${step.tool}`), record);
       }
       const result = await this.deps.executeTool({
         runId: input.runId,
@@ -73,7 +88,37 @@ export class WorkflowReplayApprovalFlow implements ToolApprovalFlow {
       }
     }
 
+    const missingEvidence = evaluateWorkflowCompletionEvidence(
+      workflow,
+      workflowContextFromSnapshot(this.deps.getSnapshot(input.runId))
+    );
+    if (missingEvidence.length > 0) {
+      defaultWorkflowRepo.score(workflow.id, 'failed');
+      return this.finish(
+        input,
+        failedResult(
+          ERROR_CODES.WORKFLOW_POSTCONDITION_FAILED,
+          `Workflow replay postconditions failed: ${missingEvidence.join(', ')}`
+        ),
+        record
+      );
+    }
+
     defaultWorkflowRepo.score(workflow.id, 'success');
+    if (record) {
+      this.deps.appendTrace(record, {
+        runId: input.runId,
+        type: TRACE_EVENT_NAMES.TOOL_RESULT,
+        payload: {
+          tool: TOOL_NAMES.FLOW_SCORE,
+          ok: true,
+          code: ERROR_CODES.OK,
+          summary: `Workflow replay scored success: ${workflow.intent}`,
+          changedPage: false,
+          requiresObserve: false
+        }
+      });
+    }
     return this.finish(input, {
       ok: true,
       code: ERROR_CODES.OK,
@@ -151,13 +196,40 @@ function unavailableResult(message: string): ToolResult {
   };
 }
 
-function failedResult(message: string): ToolResult {
+function failedResult(code: string, message: string): ToolResult {
   return {
     ok: false,
-    code: ERROR_CODES.TOOL_EXECUTION_FAILED,
+    code,
     summary: message,
     changedPage: false,
     requiresObserve: false,
     error: { message }
+  };
+}
+
+function workflowContextFromSnapshot(snapshot: RunSnapshot): WorkflowPreviewContext {
+  const observation = snapshot.observation;
+  const structuredObservation = snapshot.structuredPageData?.observation.items[0];
+  const refs = snapshot.refs ?? snapshot.structuredPageData?.refs.items ?? [];
+  return {
+    domain: observation?.currentDomain ?? structuredObservation?.currentDomain,
+    origin: observation?.origin ?? structuredObservation?.origin,
+    url: observation?.url ?? structuredObservation?.url,
+    title: observation?.title ?? structuredObservation?.title,
+    visibleTextSummary: observation?.visibleTextSummary ?? structuredObservation?.visibleTextSummary,
+    pageStateSummary: observation?.pageStateSummary ?? structuredObservation?.pageStateSummary,
+    refs: refs.map((ref) => ({
+      refId: ref.refId,
+      role: ref.role,
+      name: ref.name,
+      tagName: ref.tagName
+    })),
+    toolManifestHash: TOOL_MANIFEST_MODULES_HASH,
+    adapter: snapshot.domainAdapter?.enabled
+      ? {
+          id: snapshot.domainAdapter.id,
+          ...(snapshot.domainAdapter.version ? { version: snapshot.domainAdapter.version } : {})
+        }
+      : undefined
   };
 }

@@ -16,7 +16,7 @@ const visionTool: ToolPromptContract = {
 };
 
 describe('vision tool selection policy', () => {
-  it('hides vision tools for ordinary DOM/a11y tasks', () => {
+  it('exposes vision tools in debug mode without task text regex matching', () => {
     const result = selectToolsForRun({
       mode: 'debug',
       task: '读取页面表单字段',
@@ -24,22 +24,22 @@ describe('vision tool selection policy', () => {
       capabilities: capabilities()
     });
 
-    expect(result.visibleTools).toEqual([]);
-    expect(result.hiddenTools).toContainEqual({
-      tool: 'bh_vision_describe_viewport',
-      reason: 'Vision tools are reserved for visual ambiguity or DOM/a11y fallback'
-    });
+    expect(result.visibleTools).toEqual(['bh_vision_describe_viewport']);
   });
 
-  it('exposes vision tools when the task asks about visual obstruction', () => {
+  it('still hides vision tools outside their run mode', () => {
     const result = selectToolsForRun({
-      mode: 'debug',
+      mode: 'ask',
       task: '按钮是不是被遮挡了，截图看一下',
       tools: [visionTool],
       capabilities: capabilities()
     });
 
-    expect(result.visibleTools).toEqual(['bh_vision_describe_viewport']);
+    expect(result.visibleTools).toEqual([]);
+    expect(result.hiddenTools).toContainEqual({
+      tool: 'bh_vision_describe_viewport',
+      reason: 'Tool is not available in ask mode'
+    });
   });
 });
 

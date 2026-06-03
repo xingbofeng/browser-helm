@@ -4,12 +4,10 @@ import type { RunSnapshot } from '../../runtime/runtime-messages';
 import type { RunRecord } from './types';
 import type { ToolPromptContract } from '../../tools/core/tool-router';
 import { redactTextForModelContext } from '../../shared/redaction';
-import { truncateJson } from '../../shared/truncate-json';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { isFormFillTool } from './form-fill-augmenter';
 import { buildRecentToolActions } from './recent-tool-actions';
 import { compactTaskState, createInitialTaskState } from './runtime-task-state';
-import { buildStablePolicyPrefix } from '../prompts/safety-policy-prompt';
 import type { Locale } from '../../i18n/types';
 import { buildMemoryPromptContext } from '../memory/memory-summary-builder';
 import type { BrowserHelmDomainPolicy } from '../../shared/domain-policy';
@@ -18,6 +16,8 @@ import { defaultScratchpadRepo } from '../../storage/scratchpad-repo';
 import { defaultWorkflowRepo } from '../../storage/workflow-repo';
 import { buildSessionSummary } from '../memory/session-summary-builder';
 import { defaultDomainAdapterRegistry } from '../../adapters/registry';
+import { SystemPolicyBuilder } from './prompt/system-policy-builder';
+import { DynamicContextBuilder } from './prompt/dynamic-context-builder';
 
 // ── Context budget limits ──
 const MAX_OBSERVATION_CHARS = 8000;
@@ -27,13 +27,13 @@ const MAX_TOOL_RESULT_CHARS = 4000;
 const MAX_PAGE_READ_TEXT_CHARS = 12_000;
 const MAX_PAGE_READ_HEADINGS = 20;
 const MAX_PAGE_READ_LINKS = 20;
-const MAX_TOTAL_PROMPT_CHARS = 32000;
-const MAX_USER_PROMPT_CHARS = 16000;
+const MAX_VISION_LIST_ITEMS = 8;
+const MAX_VISION_GROUNDING_ITEMS = 6;
+const MAX_VISION_EVIDENCE_ITEMS = 4;
 const MAX_CONVERSATION_HISTORY_CHARS = 3000;
 const MAX_HISTORY_LINE_CHARS = 1200;
 const MAX_PREVIOUS_TRACE_HISTORY_EVENTS = 12;
 const MAX_TRACE_HISTORY_SUMMARY_CHARS = 80;
-const PROMPT_BUDGET_MARGIN_CHARS = 1000;
 
 // ── Types ──
 
@@ -78,19 +78,15 @@ export function buildMessages(input: BuildMessagesInput): ModelMessage[] {
   const redactedTask = redactTextForModelContext(record.task);
 
   // ── Stable prefix: system policy + tool manifest ──
-  const stablePrefix = buildStablePolicyPrefix({
+  const systemMessage = new SystemPolicyBuilder().build({
     mode: record.mode,
     toolsContracts,
     locale
   });
 
-  const systemMessage: ModelMessage = {
-    role: 'system',
-    content: stablePrefix
-  };
-
   // ── Dynamic suffix: user task, page context, history, trace ──
   const lastToolResult = snapshot.toolResult ? compactToolResult(snapshot.toolResult) : undefined;
+  const visionEvidence = snapshot.toolResult ? compactVisionEvidence(snapshot.toolResult) : undefined;
   const priorityPageReadText = snapshot.toolResult ? pageReadTextFromToolResult(snapshot.toolResult) : undefined;
   const hasPageReadText = Boolean(priorityPageReadText);
   const observation = compactObservation(
@@ -127,6 +123,7 @@ export function buildMessages(input: BuildMessagesInput): ModelMessage[] {
     locale,
     taskState,
     ...(lastToolResult ? { lastToolResult } : {}),
+    ...(visionEvidence ? { visionEvidence } : {}),
     ...(priorityPageReadText ? { priorityPageReadText: redactTextForModelContext(priorityPageReadText) } : {}),
     ...(loopGuard ? { loopGuard } : {}),
     ...(recentActions.length ? { recentActions } : {}),
@@ -139,25 +136,16 @@ export function buildMessages(input: BuildMessagesInput): ModelMessage[] {
 
   const historyMessages = buildConversationHistoryMessages(record, MAX_CONVERSATION_HISTORY_CHARS);
 
-  // Calculate budget: fixed overhead (system + history) vs variable (userJson)
-  const baseOverhead = JSON.stringify([systemMessage, ...historyMessages]).length;
-  const availableUserBudget = MAX_TOTAL_PROMPT_CHARS - baseOverhead - PROMPT_BUDGET_MARGIN_CHARS;
-  const userBudget = Math.max(
-    100,
-    Math.min(MAX_USER_PROMPT_CHARS, availableUserBudget)
-  );
-  const userJson = truncateJson(userContent, userBudget);
-  const userPrompt = decisionGuidance
-    ? `RUNTIME_DECISION_GUIDANCE: ${decisionGuidance}\n${userJson}`
-    : userJson;
+  const baseMessages = [systemMessage, ...historyMessages];
+  const userMessage = new DynamicContextBuilder().buildUserMessage({
+    baseMessages,
+    userContent,
+    decisionGuidance
+  });
 
   const messages: ModelMessage[] = [
-    systemMessage,
-    ...historyMessages,
-    {
-      role: 'user',
-      content: userPrompt
-    }
+    ...baseMessages,
+    userMessage
   ];
 
   return messages;
@@ -379,6 +367,111 @@ function compactToolResult(result: NonNullable<RunSnapshot['toolResult']>): unkn
   };
 }
 
+function compactVisionEvidence(result: NonNullable<RunSnapshot['toolResult']>): unknown {
+  if (!isVisionTool(result.tool)) {
+    return undefined;
+  }
+  const data = toolResultData(result);
+  const observation = isRecord(data?.observation) ? data.observation : undefined;
+  if (!observation) {
+    return undefined;
+  }
+  const summary = stringField(observation, 'summary');
+  if (!summary) {
+    return undefined;
+  }
+  const screenshot = compactVisionScreenshot(data?.screenshot);
+  const grounding = Array.isArray(observation.grounding)
+    ? observation.grounding
+        .map(compactVisionGrounding)
+        .filter(Boolean)
+        .slice(0, MAX_VISION_GROUNDING_ITEMS)
+    : undefined;
+  return {
+    tool: result.tool,
+    summary: truncateStr(redactTextForModelContext(summary), MAX_TOOL_RESULT_CHARS),
+    fallback: stringField(observation, 'fallback'),
+    fallbackReason: stringField(observation, 'fallbackReason'),
+    confidence: numberField(observation, 'confidence'),
+    visibleText: compactStringArray(observation.visibleText, MAX_VISION_LIST_ITEMS),
+    blockers: compactStringArray(observation.blockers, MAX_VISION_LIST_ITEMS),
+    layoutIssues: compactStringArray(observation.layoutIssues, MAX_VISION_LIST_ITEMS),
+    ...(screenshot ? { screenshot } : {}),
+    ...(grounding?.length ? { grounding } : {}),
+    ...(isRecord(observation.pointerFallback) ? {
+      pointerFallback: {
+        allowed: observation.pointerFallback.allowed === true,
+        targetConfidence: stringField(observation.pointerFallback, 'targetConfidence'),
+        domRefUnavailable: observation.pointerFallback.domRefUnavailable === true,
+        reason: stringField(observation.pointerFallback, 'reason')
+      }
+    } : {})
+  };
+}
+
+function compactVisionScreenshot(value: unknown): unknown {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  return {
+    mode: stringField(value, 'mode'),
+    mimeType: stringField(value, 'mimeType'),
+    width: numberField(value, 'width'),
+    height: numberField(value, 'height'),
+    captureSource: stringField(value, 'captureSource'),
+    fallbackReason: stringField(value, 'fallbackReason'),
+    truncated: value.truncated === true,
+    sensitivity: stringField(value, 'sensitivity')
+  };
+}
+
+function compactVisionGrounding(value: unknown): unknown {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const claim = stringField(value, 'claim');
+  if (!claim) {
+    return undefined;
+  }
+  const evidence = Array.isArray(value.evidence)
+    ? value.evidence
+        .map(compactVisionGroundingEvidence)
+        .filter(Boolean)
+        .slice(0, MAX_VISION_EVIDENCE_ITEMS)
+    : [];
+  return {
+    claim: truncateStr(redactTextForModelContext(claim), MAX_TOOL_RESULT_CHARS),
+    source: stringField(value, 'source'),
+    confidence: stringField(value, 'confidence'),
+    evidence,
+    reason: stringField(value, 'reason')
+  };
+}
+
+function compactVisionGroundingEvidence(value: unknown): unknown {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  return {
+    kind: stringField(value, 'kind'),
+    text: stringField(value, 'text'),
+    refId: stringField(value, 'refId'),
+    label: stringField(value, 'label')
+  };
+}
+
+function compactStringArray(value: unknown, maxItems: number): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const items = value
+    .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    .map((item) => truncateStr(redactTextForModelContext(item), MAX_TOOL_RESULT_CHARS) ?? '')
+    .filter(Boolean)
+    .slice(0, maxItems);
+  return items.length ? items : undefined;
+}
+
 function compactToolResultDetails(result: NonNullable<RunSnapshot['toolResult']>): Record<string, unknown> {
   if (result.tool === TOOL_NAMES.ACTION_CHECK_READINESS) {
     return compactActionReadinessToolResultDetails(result);
@@ -586,6 +679,10 @@ function repeatedReadLoop(actions: ReturnType<typeof buildRecentToolActions>):
 
 function isPageContentReadTool(tool: string): boolean {
   return tool === TOOL_NAMES.PAGE_READ_ARTICLE || tool === TOOL_NAMES.PAGE_READ_VISIBLE_TEXT;
+}
+
+function isVisionTool(tool: string): boolean {
+  return tool.startsWith('bh_vision_');
 }
 
 function pageReadTextFromToolResult(result: NonNullable<RunSnapshot['toolResult']>): string | undefined {

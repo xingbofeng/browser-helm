@@ -95,7 +95,7 @@
 
 ### 🏠 本地优先
 
-Agent 核心循环、trace 和配置基于 chrome.storage.local 在浏览器本地运行。不依赖 BrowserHelm 自有后端服务器，不需要注册 BrowserHelm 服务账号。使用云端模型时，裁剪/脱敏后的页面上下文会发送到你配置的 provider 端点。
+Agent 核心循环、trace、消息和 provider 配置基于 `chrome.storage.local` 在浏览器本地运行；domain memory、workflow 和 scratchpad 使用 IndexedDB（Dexie）保存。不依赖 BrowserHelm 自有后端服务器，不需要注册 BrowserHelm 服务账号。使用云端模型时，裁剪/脱敏后的页面上下文会发送到你配置的 provider 端点。
 
 ---
 
@@ -168,7 +168,7 @@ BrowserHelm 不内置模型，使用你自己的 API Key：
 | 前端 | React + [Animal Island UI](https://github.com/guokaigdg/animal-island-ui) |
 | 语言 | TypeScript (strict) |
 | 数据校验 | Zod |
-| 本地存储 | chrome.storage.local |
+| 本地存储 | chrome.storage.local + IndexedDB (Dexie) |
 | 状态管理 | Zustand |
 | 模型层 | 自研 OpenAI 兼容 REST Client |
 | 测试 | Vitest + Playwright |

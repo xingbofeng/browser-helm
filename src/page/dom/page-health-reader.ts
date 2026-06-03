@@ -68,11 +68,12 @@ function summarizeConsoleErrors(rawErrors: unknown[]): ConsoleErrorSummary[] {
     if (typeof error.message !== 'string' || error.message.length === 0) {
       continue;
     }
-    const source = typeof error.source === 'string' ? error.source : undefined;
-    const key = `${error.message}\u0000${source ?? ''}`;
+    const message = redactPageHealthText(error.message);
+    const source = typeof error.source === 'string' ? redactPageHealthText(error.source) : undefined;
+    const key = `${message}\u0000${source ?? ''}`;
     const current = counts.get(key);
     counts.set(key, {
-      message: error.message,
+      message,
       ...(source ? { source } : {}),
       count: (current?.count ?? 0) + 1
     });
@@ -91,12 +92,13 @@ function summarizeConsoleMessages(rawMessages: unknown[]): ConsoleMessageSummary
     ) {
       continue;
     }
-    const source = typeof message.source === 'string' ? message.source : undefined;
-    const key = `${message.level}\u0000${message.message}\u0000${source ?? ''}`;
+    const redactedMessage = redactPageHealthText(message.message);
+    const source = typeof message.source === 'string' ? redactPageHealthText(message.source) : undefined;
+    const key = `${message.level}\u0000${redactedMessage}\u0000${source ?? ''}`;
     const current = counts.get(key);
     counts.set(key, {
       level: message.level,
-      message: message.message,
+      message: redactedMessage,
       ...(source ? { source } : {}),
       count: (current?.count ?? 0) + 1
     });
@@ -120,11 +122,31 @@ function summarizeNetworkFailures(rawFailures: unknown[]): NetworkFailureSummary
     }
     return [
       {
-        url: failure.url,
+        url: redactPageHealthUrl(failure.url),
         method: failure.method,
-        errorText: failure.errorText,
+        errorText: redactPageHealthText(failure.errorText),
         ...(typeof failure.status === 'number' ? { status: failure.status } : {})
       }
     ];
   });
+}
+
+function redactPageHealthText(value: string): string {
+  return value
+    .replace(/https?:\/\/[^\s"'<>]+/giu, redactPageHealthUrl)
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}/gu, '[MASKED]');
+}
+
+function redactPageHealthUrl(raw: string): string {
+  try {
+    const parsed = new URL(raw);
+    parsed.search = '';
+    parsed.hash = '';
+    if (parsed.pathname.length > 1) {
+      parsed.pathname = '/[REDACTED_PATH]';
+    }
+    return parsed.toString();
+  } catch {
+    return raw.replace(/[?#].*$/u, '');
+  }
 }

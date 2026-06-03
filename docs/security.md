@@ -35,7 +35,9 @@ BrowserHelm no longer injects the shallow monitoring script by default. In Debug
 This hook:
 - Does NOT read cookies, password fields, form inputs, or localStorage.
 - Does NOT send data anywhere; collected errors are only accessible via `bh_debug_collect_page_health` in Debug run mode.
-- Redacts URL query, path, fragment, and obvious provider secrets before data crosses `postMessage`.
+- Requires a per-install session nonce on page-to-content messages so page-authored forged events are ignored.
+- Redacts URL query, path, fragment, and obvious provider secrets before data enters model context.
+- Is a shallow fallback when CDP is unavailable or unnecessary; it is not a complete DevTools replacement.
 
 ## DevTools / CDP Debugging
 
@@ -110,3 +112,13 @@ Redaction is best-effort and should not be treated as cryptographic anonymizatio
 ## Reporting
 
 Report security issues via GitHub Issues. Do not include API keys, passwords, or full traces.
+
+## Release Security Gate
+
+v1.6 release readiness 必须把安全边界视为发布阻断，而不是文档 TODO：
+
+- P0 安全项必须在 `docs/audits/v1-1-v1-6-completion-matrix.md` 中标记为 closed。
+- 任何 mutating tool、debugger/CDP、clipboard、download/file、storage、workflow replay、iframe/pointer action 都必须经过 execution-layer authorization。
+- Approval 请求、pending action、TTL、generation、恢复、拒绝、过期和 runtime audit 必须由 transactional approval coordinator 统一处理。
+- 发布前必须运行 `npm run check:release`；该命令会检查 completion matrix 是否存在且没有 P0 open marker。
+- 如果 `npm run test:e2e:real` 因 provider credentials 未配置而未运行，最终 release note 必须明确区分未验证项，不得宣称真实模型 E2E 已覆盖。

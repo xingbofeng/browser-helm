@@ -468,6 +468,7 @@ describe('content RPC frame aggregation', () => {
         fieldRefIds: ['ref_101'],
         formRefId: undefined,
         submitTargetRefId: undefined,
+        frameId: 7,
         runId: 'run_1',
         stepId: 'step_1'
       },
@@ -485,6 +486,7 @@ describe('content RPC frame aggregation', () => {
           }
         ],
         actionToken: 'frame-token',
+        frameId: 7,
         runId: 'run_1',
         stepId: 'step_1'
       },
@@ -557,6 +559,7 @@ describe('content RPC frame aggregation', () => {
         fieldRefIds: ['ref_101'],
         formRefId: 'form_1',
         submitTargetRefId: undefined,
+        frameId: 7,
         runId: 'run_1',
         stepId: 'step_1'
       },
@@ -570,6 +573,7 @@ describe('content RPC frame aggregation', () => {
         formRefId: 'form_1',
         submitTargetRefId: undefined,
         actionToken: 'submit-token',
+        frameId: 7,
         runId: 'run_1',
         stepId: 'step_1'
       },

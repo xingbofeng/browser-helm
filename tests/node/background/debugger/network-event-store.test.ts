@@ -80,6 +80,67 @@ describe('CDP network event store', () => {
       responseBodyUnavailableReason: 'request_failed'
     });
   });
+
+  it('returns bounded request detail with timing, initiator, failure reason, and body preview availability', () => {
+    const store = new NetworkEventStore();
+
+    store.requestWillBeSent({
+      requestId: 'req_detail',
+      initiator: {
+        type: 'script',
+        url: 'https://app.example.com/app.js?token=secret',
+        lineNumber: 12
+      },
+      request: {
+        url: 'https://api.example.com/detail?token=secret#frag',
+        method: 'POST',
+        headers: { Authorization: 'Bearer secret-token' },
+        postData: 'name=Alice'
+      }
+    }, 200);
+    store.responseReceived({
+      requestId: 'req_detail',
+      response: {
+        url: 'https://api.example.com/detail?token=secret#frag',
+        status: 201,
+        mimeType: 'application/json',
+        headers: { 'Content-Type': 'application/json' },
+        timing: {
+          dnsStart: 1,
+          dnsEnd: 2,
+          connectStart: 3,
+          connectEnd: 5,
+          sendStart: 6,
+          sendEnd: 7,
+          receiveHeadersEnd: 20
+        }
+      }
+    });
+
+    const detail = store.detail('req_detail', {
+      body: '{"ok":true}'
+    });
+
+    expect(detail).toMatchObject({
+      requestId: 'req_detail',
+      method: 'POST',
+      url: 'https://api.example.com/detail?token=%5BREDACTED%5D',
+      status: 201,
+      responseBodyAvailable: true,
+      responseBodyPreviewAvailable: true,
+      timing: {
+        dnsMs: 1,
+        connectMs: 2,
+        sendMs: 1,
+        receiveHeadersEndMs: 20
+      },
+      initiator: {
+        type: 'script',
+        url: 'https://app.example.com/app.js?token=%5BREDACTED%5D',
+        lineNumber: 12
+      }
+    });
+  });
 });
 
 describe('CDP redaction helpers', () => {

@@ -31,6 +31,60 @@ describe('iframe tools', () => {
     });
   });
 
+  it('returns a frame tree with origin and cross-origin limitations', async () => {
+    const tool = bhIframeList(rpcClient(async () => ({
+      ok: true,
+      frames: [
+        { frameId: 0, url: 'https://host.example/page', isTop: true },
+        { frameId: 7, url: 'https://widgets.example/frame?token=secret', parentFrameId: 0, isTop: false },
+        { frameId: 8, url: 'https://host.example/local-frame', parentFrameId: 0, isTop: false }
+      ]
+    })));
+
+    const result = await tool.execute({}, { runId: 'run_1', stepId: 'step_1', runMode: 'ask' });
+
+    const data = result.data as {
+      frameTree: {
+        topFrameId: number;
+        frames: Array<Record<string, unknown>>;
+      };
+      iframes: Array<Record<string, unknown>>;
+    };
+
+    expect(data.frameTree.topFrameId).toBe(0);
+    expect(data.frameTree.frames).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        frameId: 0,
+        origin: 'https://host.example',
+        isTop: true,
+        children: [7, 8]
+      }),
+      expect.objectContaining({
+        frameId: 7,
+        parentFrameId: 0,
+        origin: 'https://widgets.example',
+        parentOrigin: 'https://host.example',
+        crossOrigin: true,
+        readable: 'unknown',
+        limitation: 'cross_origin_read_requires_targeted_iframe_read'
+      })
+    ]));
+    expect(data.iframes).toEqual([
+      expect.objectContaining({
+        iframeId: 'frame_7',
+        url: 'https://widgets.example/frame',
+        crossOrigin: true,
+        limitation: 'cross_origin_read_requires_targeted_iframe_read'
+      }),
+      expect.objectContaining({
+        iframeId: 'frame_8',
+        crossOrigin: false
+      })
+    ]);
+    expect(JSON.stringify(data)).not.toContain('token=secret');
+    expect(result.context?.summary).toContain('cross_origin_read_requires_targeted_iframe_read');
+  });
+
   it('reads iframe target refs and exposes iframe reading in ask/debug/act modes', async () => {
     const rpc = rpcClient(async (message) => {
       expect(message).toMatchObject({

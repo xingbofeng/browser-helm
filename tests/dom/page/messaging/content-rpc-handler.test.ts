@@ -220,7 +220,88 @@ describe('content-rpc-handler iframe actions', () => {
     });
   });
 
-  it('keeps form action grants valid if a dynamic page recreates the content handler before fill', () => {
+  it('returns an updated form snapshot after batch fill', () => {
+    document.body.innerHTML = `
+      <form>
+        <label for="name">Name</label>
+        <input id="name" name="name" type="text" />
+        <label for="city">City</label>
+        <input id="city" name="city" type="text" />
+      </form>
+    `;
+    const handler = new ContentRpcHandler(document);
+    const snapshot = handler.handle({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
+    if (!snapshot.ok || !('snapshot' in snapshot)) {
+      throw new Error('expected snapshot');
+    }
+    const refs = snapshot.snapshot.elements.filter((element) => element.tagName === 'input');
+    const targets = [
+      { fieldRefId: refs[0]?.refId ?? '', value: 'Alice' },
+      { fieldRefId: refs[1]?.refId ?? '', value: 'Shanghai' }
+    ];
+    const grant = handler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+      action: 'fill',
+      fieldRefIds: targets.map((target) => target.fieldRefId),
+      runId: 'run_1',
+      stepId: 'run_1:fill_many'
+    });
+    if (!grant.ok || !('actionToken' in grant)) {
+      throw new Error('expected form action token');
+    }
+
+    const response = handler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_FILL_MANY,
+      targets,
+      actionToken: grant.actionToken,
+      runId: 'run_1',
+      stepId: 'run_1:fill_many'
+    });
+
+    if (!response.ok || !('fillManyResult' in response)) {
+      throw new Error('expected fill many result');
+    }
+    expect(response.fillManyResult.filledCount).toBe(2);
+    const updatedByName = new Map(
+      response.fillManyResult.updatedFields?.map((field) => [field.name, field])
+    );
+    expect(updatedByName.get('name')).toMatchObject({ valuePreview: 'non-empty' });
+    expect(updatedByName.get('city')).toMatchObject({ valuePreview: 'non-empty' });
+  });
+
+  it('rejects forged form action tokens that were never granted by this handler', () => {
+    document.body.innerHTML = '<input id="name" name="name" type="text" />';
+    const handler = new ContentRpcHandler(document);
+    const snapshot = handler.handle({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
+    if (!snapshot.ok || !('snapshot' in snapshot)) {
+      throw new Error('expected snapshot');
+    }
+    const fieldRefId = snapshot.snapshot.elements.find(
+      (element) => element.tagName === 'input'
+    )?.refId ?? '';
+    const forgedToken = `bh_form_forged|${encodeURIComponent(JSON.stringify({
+      action: 'fill',
+      fieldRefIds: [fieldRefId],
+      expiresAt: Date.now() + 30_000,
+      runId: 'run_1',
+      stepId: 'run_1:fill'
+    }))}`;
+
+    expect(handler.handle({
+      type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
+      fieldRefId,
+      value: 'Mallory',
+      actionToken: forgedToken,
+      runId: 'run_1',
+      stepId: 'run_1:fill'
+    })).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED
+    });
+    expect((document.getElementById('name') as HTMLInputElement).value).toBe('');
+  });
+
+  it('rejects form action tokens after the content handler grant map is recreated', () => {
     document.body.innerHTML = '<input id="name" name="name" type="text" />';
     const authorizingHandler = new ContentRpcHandler(document);
     const snapshot = authorizingHandler.handle({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
@@ -250,20 +331,165 @@ describe('content-rpc-handler iframe actions', () => {
       runId: 'run_1',
       stepId: 'run_1:fill'
     })).toMatchObject({
-      ok: true
-    });
-    expect((document.getElementById('name') as HTMLInputElement).value).toBe('Alice');
-    expect(recreatedHandler.handle({
-      type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
-      fieldRefId,
-      value: 'Bob',
-      actionToken: grant.actionToken,
-      runId: 'run_1',
-      stepId: 'run_1:fill'
-    })).toMatchObject({
       ok: false,
       code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED
     });
+    expect((document.getElementById('name') as HTMLInputElement).value).toBe('');
+  });
+
+  it('rejects form action tokens after the page origin changes', () => {
+    const happyDOM = (window as unknown as { happyDOM: { setURL(url: string): void } }).happyDOM;
+    const originalUrl = window.location.href;
+    try {
+      happyDOM.setURL('https://docs.example.com/form');
+      document.body.innerHTML = '<input id="name" name="name" type="text" />';
+      const handler = new ContentRpcHandler(document);
+      const snapshot = handler.handle({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
+      if (!snapshot.ok || !('snapshot' in snapshot)) {
+        throw new Error('expected snapshot');
+      }
+      const fieldRefId = snapshot.snapshot.elements.find(
+        (element) => element.tagName === 'input'
+      )?.refId ?? '';
+      const grant = handler.handle({
+        type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+        action: 'fill',
+        fieldRefIds: [fieldRefId],
+        runId: 'run_1',
+        stepId: 'run_1:fill'
+      });
+      if (!grant.ok || !('actionToken' in grant)) {
+        throw new Error('expected form action token');
+      }
+
+      happyDOM.setURL('https://evil.example/form');
+
+      expect(handler.handle({
+        type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
+        fieldRefId,
+        value: 'Alice',
+        actionToken: grant.actionToken,
+        runId: 'run_1',
+        stepId: 'run_1:fill'
+      })).toMatchObject({
+        ok: false,
+        code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED
+      });
+      expect((document.getElementById('name') as HTMLInputElement).value).toBe('');
+    } finally {
+      happyDOM.setURL(originalUrl);
+    }
+  });
+
+  it('rejects form action tokens for wrong frame, run, step, ref, or expiry', () => {
+    vi.useFakeTimers();
+    const happyDOM = (window as unknown as { happyDOM: { setURL(url: string): void } }).happyDOM;
+    const originalUrl = window.location.href;
+    try {
+      happyDOM.setURL('https://docs.example.com/form');
+      document.body.innerHTML = `
+        <input id="name" name="name" type="text" />
+        <input id="email" name="email" type="email" />
+      `;
+      const handler = new ContentRpcHandler(document);
+      const snapshot = handler.handle({ type: CONTENT_RPC_MESSAGES.A11Y_SNAPSHOT });
+      if (!snapshot.ok || !('snapshot' in snapshot)) {
+        throw new Error('expected snapshot');
+      }
+      const inputRefs = snapshot.snapshot.elements.filter(
+        (element) => element.tagName === 'input'
+      ).map((element) => element.refId);
+      const [nameRefId, emailRefId] = inputRefs;
+      if (!nameRefId || !emailRefId) {
+        throw new Error('expected input refs');
+      }
+      const authorize = () => {
+        const grant = handler.handle({
+          type: CONTENT_RPC_MESSAGES.FORM_ACTION_AUTHORIZE,
+          action: 'fill',
+          fieldRefIds: [nameRefId],
+          frameId: 7,
+          runId: 'run_1',
+          stepId: 'run_1:fill'
+        });
+        if (!grant.ok || !('actionToken' in grant)) {
+          throw new Error('expected form action token');
+        }
+        return grant.actionToken;
+      };
+
+      expect(handler.handle({
+        type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
+        fieldRefId: nameRefId,
+        value: 'Alice',
+        actionToken: authorize(),
+        frameId: 8,
+        runId: 'run_1',
+        stepId: 'run_1:fill'
+      })).toMatchObject({
+        ok: false,
+        code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED
+      });
+
+      expect(handler.handle({
+        type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
+        fieldRefId: nameRefId,
+        value: 'Alice',
+        actionToken: authorize(),
+        frameId: 7,
+        runId: 'run_2',
+        stepId: 'run_1:fill'
+      })).toMatchObject({
+        ok: false,
+        code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED
+      });
+
+      expect(handler.handle({
+        type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
+        fieldRefId: nameRefId,
+        value: 'Alice',
+        actionToken: authorize(),
+        frameId: 7,
+        runId: 'run_1',
+        stepId: 'run_1:other'
+      })).toMatchObject({
+        ok: false,
+        code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED
+      });
+
+      expect(handler.handle({
+        type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
+        fieldRefId: emailRefId,
+        value: 'alice@example.com',
+        actionToken: authorize(),
+        frameId: 7,
+        runId: 'run_1',
+        stepId: 'run_1:fill'
+      })).toMatchObject({
+        ok: false,
+        code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED
+      });
+
+      const expiredToken = authorize();
+      vi.advanceTimersByTime(30_001);
+      expect(handler.handle({
+        type: CONTENT_RPC_MESSAGES.FORM_FILL_FIELD,
+        fieldRefId: nameRefId,
+        value: 'Alice',
+        actionToken: expiredToken,
+        frameId: 7,
+        runId: 'run_1',
+        stepId: 'run_1:fill'
+      })).toMatchObject({
+        ok: false,
+        code: ERROR_CODES.FORM_ACTION_UNAUTHORIZED
+      });
+      expect((document.getElementById('name') as HTMLInputElement).value).toBe('');
+      expect((document.getElementById('email') as HTMLInputElement).value).toBe('');
+    } finally {
+      vi.useRealTimers();
+      happyDOM.setURL(originalUrl);
+    }
   });
 
   it('returns REF_STALE when an authorized form fill target is removed before mutation', () => {

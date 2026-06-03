@@ -309,12 +309,14 @@ function stripFormMessageFrameRefs(message: ContentRpcRequest): ContentRpcReques
         formRefId: message.formRefId ? stripFramePrefix(message.formRefId) : undefined,
         submitTargetRefId: message.submitTargetRefId
           ? stripFramePrefix(message.submitTargetRefId)
-          : undefined
+          : undefined,
+        frameId: formMessageFrameId(message)
       };
     case CONTENT_RPC_MESSAGES.FORM_FILL_FIELD:
       return {
         ...message,
-        fieldRefId: stripFramePrefix(message.fieldRefId)
+        fieldRefId: stripFramePrefix(message.fieldRefId),
+        frameId: parseFrameRefId(message.fieldRefId).frameId ?? 0
       };
     case CONTENT_RPC_MESSAGES.FORM_FILL_MANY:
       return {
@@ -322,7 +324,8 @@ function stripFormMessageFrameRefs(message: ContentRpcRequest): ContentRpcReques
         targets: message.targets.map((target) => ({
           ...target,
           fieldRefId: stripFramePrefix(target.fieldRefId)
-        }))
+        })),
+        frameId: formMessageFrameId(message)
       };
     case CONTENT_RPC_MESSAGES.FORM_VERIFY:
       return {
@@ -338,7 +341,8 @@ function stripFormMessageFrameRefs(message: ContentRpcRequest): ContentRpcReques
         formRefId: message.formRefId ? stripFramePrefix(message.formRefId) : undefined,
         submitTargetRefId: message.submitTargetRefId
           ? stripFramePrefix(message.submitTargetRefId)
-          : undefined
+          : undefined,
+        frameId: formMessageFrameId(message)
       };
     default:
       return message;
@@ -347,6 +351,11 @@ function stripFormMessageFrameRefs(message: ContentRpcRequest): ContentRpcReques
 
 function stripFramePrefix(refId: string): string {
   return parseFrameRefId(refId).refId;
+}
+
+function formMessageFrameId(message: ContentRpcRequest): number | undefined {
+  const target = resolveFormMessageFrame(message);
+  return target.ok ? target.frameId : undefined;
 }
 
 function prefixFormResponseFrameRefs(
@@ -372,6 +381,9 @@ function prefixFormResponseFrameRefs(
           : undefined,
         fields: response.fillManyResult.fields.map((field) =>
           prefixFieldRefResult(field, frameId)
+        ),
+        updatedFields: response.fillManyResult.updatedFields?.map((field) =>
+          prefixFormField(field, frameId)
         )
       }
     };

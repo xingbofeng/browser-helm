@@ -62,7 +62,7 @@ describe('CockpitApp', () => {
     await act(async () => {
       root.render(
         <I18nProvider initialLocale="zh">
-          <CockpitApp runtime={runtime} initialRunId="seed" />
+          <CockpitApp runtime={runtime} initialRunId="seed" targetTabId={42} />
         </I18nProvider>
       );
     });
@@ -86,7 +86,39 @@ describe('CockpitApp', () => {
       intent: '打开账单报表'
     });
     expect(runtime.executed[1]?.args).toEqual({ id: 'flow_saved_1' });
-    root.unmount();
+    await unmountRoot(root);
+    container.remove();
+  });
+
+  it('captures the current viewport from the panel header without requiring a typed task', async () => {
+    const runtime = new ScreenshotRuntimePort();
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <I18nProvider initialLocale="zh">
+          <CockpitApp runtime={runtime} initialRunId="seed" />
+        </I18nProvider>
+      );
+      await Promise.resolve();
+    });
+
+    const captureButton = [...container.querySelectorAll('button')]
+      .find((button) => button.getAttribute('aria-label') === '截取当前视口');
+    expect(captureButton).toBeInstanceOf(HTMLButtonElement);
+    await act(async () => {
+      captureButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(runtime.executed.map((input) => input.tool)).toEqual([
+      TOOL_NAMES.VISION_CAPTURE_VIEWPORT
+    ]);
+    expect(container.querySelector('img[alt="当前页面视口截图"]')?.getAttribute('src')).toBe('data:image/png;base64,panel');
+    expect(container.textContent).toContain('Captured viewport screenshot shot_panel.');
+    await unmountRoot(root);
     container.remove();
   });
 });
@@ -151,4 +183,55 @@ class DraftRuntimePort extends FakeRuntimePort {
     }
     return super.executeTool(input);
   }
+}
+
+class ScreenshotRuntimePort extends FakeRuntimePort {
+  readonly executed: ExecuteToolInput[] = [];
+
+  constructor() {
+    super({
+      snapshots: [{
+        runId: 'seed',
+        targetTabId: 42,
+        mode: 'ask',
+        status: 'observed',
+        refs: [],
+        trace: []
+      }]
+    });
+  }
+
+  override executeTool(input: ExecuteToolInput): Promise<RuntimeToolExecutionResult> {
+    this.executed.push(input);
+    return Promise.resolve({
+      ok: true,
+      code: 'OK',
+      summary: 'Captured viewport screenshot shot_panel.',
+      data: {
+        screenshot: {
+          id: 'shot_panel',
+          tabId: 42,
+          mode: 'viewport',
+          mimeType: 'image/png',
+          width: 1024,
+          height: 768,
+          captureSource: 'tabs_capture_visible_tab',
+          truncated: false,
+          sensitivity: 'unknown',
+          dataUrl: 'data:image/png;base64,panel',
+          capturedAt: 1,
+          traceSafe: false
+        }
+      },
+      changedPage: false,
+      requiresObserve: false
+    });
+  }
+}
+
+async function unmountRoot(root: ReturnType<typeof createRoot>): Promise<void> {
+  await act(async () => {
+    root.unmount();
+    await Promise.resolve();
+  });
 }

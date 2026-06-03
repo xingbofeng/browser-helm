@@ -1,6 +1,6 @@
 import type { ContentRpcClient } from '../../../../../../page/messaging/content-rpc-client';
 import type { ExecuteToolInput, RuntimeEvent, RunSnapshot } from '../../../../../../runtime/runtime-messages';
-import { APPROVAL_EVENT_NAMES, CONTENT_RPC_MESSAGES } from '../../../../../../shared/constants/event-names';
+import { CONTENT_RPC_MESSAGES } from '../../../../../../shared/constants/event-names';
 import { ERROR_CODES } from '../../../../../../shared/constants/error-codes';
 import { TOOL_NAMES } from '../../../../../../shared/constants/tool-names';
 import type { StorageArea, StorageMutationResult } from '../../../../../../shared/schemas/storage';
@@ -31,17 +31,6 @@ export class StorageApprovalFlow implements ToolApprovalFlow {
 
   async onApproved(input: { runId: string; requestId: string; tool: string }): Promise<ToolResult> {
     const record = this.deps.getRecord(input.runId);
-    if (record) {
-      this.deps.appendTrace(record, {
-        runId: input.runId,
-        type: APPROVAL_EVENT_NAMES.APPROVED,
-        payload: {
-          requestId: input.requestId,
-          reason: 'Storage mutation approval granted',
-          code: ERROR_CODES.OK
-        }
-      });
-    }
 
     const pendingAction = this.deps.getPendingAction(input.requestId);
     this.deps.deletePendingAction(input.requestId);

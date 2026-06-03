@@ -8,7 +8,7 @@ import type { RunSnapshot, RuntimeEvent } from '../../runtime/runtime-messages';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { cdpAttachStateSchema, cdpConsoleEventSchema, cdpPerformanceSnapshotSchema } from '../../shared/schemas/cdp-event';
 import { networkRequestRecordSchema, requestDetailSchema } from '../../shared/schemas/network-request';
-import { screenshotCaptureSchema, visionObservationSchema } from '../../shared/schemas/vision';
+import { screenshotCaptureSchema, visionObservationSchema, type ScreenshotCapture } from '../../shared/schemas/vision';
 import type { StructuredPageData } from '../../shared/schemas/structured-page-data.schema';
 import { jsonPreview } from '../lib/format-tool';
 import {
@@ -26,9 +26,27 @@ type AdvancedDebugDrawerProps = {
   snapshot?: RunSnapshot | undefined;
   structuredPageData: StructuredPageData;
   onInspectElement?: ((refId: string) => void) | undefined;
+  visionPreview?: VisionPreview | undefined;
+  visionBusy?: boolean | undefined;
+  visionMessage?: string | undefined;
+  visionError?: string | undefined;
+  onCaptureViewport?: (() => void) | undefined;
+  onDetectOverlay?: (() => void) | undefined;
 };
 
 type FilterChipKey = 'all' | 'formField' | 'button' | 'error' | 'disabled';
+export type VisionPreview = {
+  mode?: ScreenshotCapture['mode'] | undefined;
+  mimeType?: string | undefined;
+  width?: number | undefined;
+  height?: number | undefined;
+  bounds?: ScreenshotCapture['bounds'] | undefined;
+  captureSource?: ScreenshotCapture['captureSource'] | undefined;
+  fallbackReason?: string | undefined;
+  truncated?: boolean | undefined;
+  sensitivity?: ScreenshotCapture['sensitivity'] | undefined;
+  dataUrl?: string | undefined;
+};
 
 function filterChips(t: ReturnType<typeof useT>) {
   return [
@@ -56,7 +74,13 @@ type DebugTabKey = ReturnType<typeof debugTabs>[number]['key'];
 export function AdvancedDebugDrawer({
   snapshot,
   structuredPageData,
-  onInspectElement
+  onInspectElement,
+  visionPreview,
+  visionBusy,
+  visionMessage,
+  visionError,
+  onCaptureViewport,
+  onDetectOverlay
 }: AdvancedDebugDrawerProps) {
   const t = useT();
   const [open, setOpen] = useState(() =>
@@ -91,6 +115,12 @@ export function AdvancedDebugDrawer({
           activeTab={activeTab}
           onTabChange={setActiveTab}
           onInspectElement={onInspectElement}
+          visionPreview={visionPreview}
+          visionBusy={visionBusy}
+          visionMessage={visionMessage}
+          visionError={visionError}
+          onCaptureViewport={onCaptureViewport}
+          onDetectOverlay={onDetectOverlay}
         />
       ) : null}
     </section>
@@ -102,7 +132,13 @@ export function AdvancedDebugPanel({
   structuredPageData,
   activeTab,
   onTabChange,
-  onInspectElement
+  onInspectElement,
+  visionPreview,
+  visionBusy,
+  visionMessage,
+  visionError,
+  onCaptureViewport,
+  onDetectOverlay
 }: AdvancedDebugDrawerProps & {
   activeTab: DebugTabKey;
   onTabChange: (tab: DebugTabKey) => void;
@@ -141,7 +177,17 @@ export function AdvancedDebugPanel({
       {activeTab === 'streaming' ? <StreamingTab snapshot={snapshot} /> : null}
       {activeTab === 'form' ? <FormExecutionTab snapshot={snapshot} /> : null}
       {activeTab === 'deep' ? <DeepInspectTab snapshot={snapshot} /> : null}
-      {activeTab === 'vision' ? <VisionTab snapshot={snapshot} /> : null}
+      {activeTab === 'vision' ? (
+        <VisionTab
+          snapshot={snapshot}
+          visionPreview={visionPreview}
+          visionBusy={visionBusy}
+          visionMessage={visionMessage}
+          visionError={visionError}
+          onCaptureViewport={onCaptureViewport}
+          onDetectOverlay={onDetectOverlay}
+        />
+      ) : null}
     </div>
   );
 }
@@ -177,7 +223,7 @@ function DebugSummary(props: {
 
 function DeepInspectTab({ snapshot }: { snapshot?: RunSnapshot | undefined }) {
   const t = useT();
-  const view = readCdpView(snapshot?.toolResult);
+  const view = readCdpView(snapshot);
   return (
     <div className="bh-debugTab">
       <div className="bh-debugTabHeader">
@@ -196,11 +242,36 @@ function DeepInspectTab({ snapshot }: { snapshot?: RunSnapshot | undefined }) {
   );
 }
 
-function VisionTab({ snapshot }: { snapshot?: RunSnapshot | undefined }) {
+function VisionTab({
+  snapshot,
+  visionPreview,
+  visionBusy,
+  visionMessage,
+  visionError,
+  onCaptureViewport,
+  onDetectOverlay
+}: {
+  snapshot?: RunSnapshot | undefined;
+  visionPreview?: VisionPreview | undefined;
+  visionBusy?: boolean | undefined;
+  visionMessage?: string | undefined;
+  visionError?: string | undefined;
+  onCaptureViewport?: (() => void) | undefined;
+  onDetectOverlay?: (() => void) | undefined;
+}) {
   const view = readVisionView(snapshot?.toolResult);
+  const screenshot = visionPreview ?? view.screenshot;
   return (
     <div className="bh-debugTab">
-      <VisionPanel observation={view.observation} screenshot={view.screenshot} />
+      <VisionPanel
+        observation={view.observation}
+        screenshot={screenshot}
+        busy={visionBusy}
+        message={visionMessage}
+        error={visionError}
+        onCaptureViewport={onCaptureViewport}
+        onDetectOverlay={onDetectOverlay}
+      />
     </div>
   );
 }
@@ -479,7 +550,7 @@ function FormExecutionTab({ snapshot }: { snapshot?: RunSnapshot | undefined }) 
 }
 
 type CdpView = {
-  status: 'detached' | 'attached' | 'error';
+  status: 'detached' | 'attaching' | 'attached' | 'error' | 'externally_detached';
   reason?: string | undefined;
   requests: Array<ReturnType<typeof networkRequestRecordSchema.parse>>;
   detail?: ReturnType<typeof requestDetailSchema.parse> | undefined;
@@ -487,14 +558,17 @@ type CdpView = {
   consoleEvents: Array<ReturnType<typeof cdpConsoleEventSchema.parse>>;
 };
 
-function readCdpView(toolResult: RunSnapshot['toolResult']): CdpView {
+function readCdpView(snapshot: RunSnapshot | undefined): CdpView {
+  const toolResult = snapshot?.toolResult;
   const data = readToolData(toolResult);
   const view: CdpView = {
     status: 'detached',
     requests: [],
     consoleEvents: []
   };
-  if (!toolResult) return view;
+  if (!toolResult) {
+    return isCdpAttachInProgress(snapshot) ? { ...view, status: 'attaching' } : view;
+  }
   if (toolResult.tool === TOOL_NAMES.CDP_ATTACH) {
     const parsed = cdpAttachStateSchema.safeParse(data.state);
     return parsed.success
@@ -510,6 +584,16 @@ function readCdpView(toolResult: RunSnapshot['toolResult']): CdpView {
         return parsed.success ? [parsed.data] : [];
       })
     };
+  }
+  if (toolResult.tool === TOOL_NAMES.CDP_GET_NETWORK_EVENTS) {
+    const parsed = cdpAttachStateSchema.safeParse(data.state);
+    if (parsed.success && !parsed.data.attached && parsed.data.detachReason) {
+      return {
+        ...view,
+        status: 'externally_detached',
+        reason: parsed.data.detachReason
+      };
+    }
   }
   if (toolResult.tool === TOOL_NAMES.CDP_GET_REQUEST_DETAIL) {
     const parsed = requestDetailSchema.safeParse(data.detail);
@@ -532,6 +616,19 @@ function readCdpView(toolResult: RunSnapshot['toolResult']): CdpView {
     };
   }
   return toolResult.tool === TOOL_NAMES.CDP_DETACH ? { ...view, status: 'detached' } : view;
+}
+
+function isCdpAttachInProgress(snapshot: RunSnapshot | undefined): boolean {
+  if (!snapshot || snapshot.status !== 'executing_tool') return false;
+  const lastCdpEvent = [...(snapshot.trace ?? [])].reverse().find((event) => {
+    if (event.type !== 'tool_started' && event.type !== 'tool_result') return false;
+    const payload = event.payload;
+    return typeof payload === 'object' &&
+      payload !== null &&
+      !Array.isArray(payload) &&
+      payload.tool === TOOL_NAMES.CDP_ATTACH;
+  });
+  return lastCdpEvent?.type === 'tool_started';
 }
 
 function readToolData(toolResult: RunSnapshot['toolResult']): Record<string, unknown> {
@@ -564,7 +661,11 @@ function readVisionScreenshot(value: unknown) {
     mimeType: record.mimeType,
     width: record.width,
     height: record.height,
-    bounds: record.bounds
+    bounds: record.bounds,
+    captureSource: record.captureSource,
+    fallbackReason: record.fallbackReason,
+    truncated: record.truncated,
+    sensitivity: record.sensitivity
   });
   return parsed.success ? parsed.data : undefined;
 }

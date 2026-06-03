@@ -3,13 +3,27 @@ import { runtimeEventSchema } from '../../../runtime/runtime-messages';
 import type { ExecuteToolInput } from '../../../runtime/runtime-messages';
 import type { RunRecord, TraceRecord } from './runtime-service-types';
 import {
+  recoverPersistedRunSession,
+  SESSION_RECOVERY_UNSAFE
+} from './session-recovery';
+import {
   RUN_SESSION_PENDING_TTL_MS,
+  type PersistedPendingAction,
   type RunSessionPersistence
 } from './session-persistence';
 
 type RunStoreOptions = {
   traceConsole?: ((event: RuntimeEvent) => void) | undefined;
   sessionPersistence?: RunSessionPersistence | undefined;
+};
+
+type RecoverPendingApprovalSessionInput = {
+  runId: string;
+  requestId: string;
+  currentTabId?: number | undefined;
+  currentDomain?: string | undefined;
+  currentFrameId?: number | string | undefined;
+  now?: number | undefined;
 };
 
 /**
@@ -21,7 +35,7 @@ export class RunStore {
   private readonly records = new Map<string, RunRecord>();
   private readonly snapshots = new Map<string, RunSnapshot>();
   private readonly listeners = new Map<string, Set<(event: RuntimeEvent) => void>>();
-  private readonly pendingApprovalActions = new Map<string, ExecuteToolInput>();
+  private readonly pendingApprovalActions = new Map<string, PersistedPendingAction>();
   private readonly runGenerations = new Map<string, string>();
 
   constructor(private readonly options: RunStoreOptions = {}) {}
@@ -45,13 +59,17 @@ export class RunStore {
 
   setSnapshot(runId: string, snapshot: RunSnapshot): void {
     this.snapshots.set(runId, snapshot);
+    const targetTabId = snapshot.targetTabId ?? this.records.get(runId)?.tabId;
     this.options.sessionPersistence?.persistSnapshotSummary({
       runId,
       generationId: this.generationIdFor(runId),
       status: snapshot.status,
       mode: snapshot.mode,
+      ...(targetTabId === undefined ? {} : { targetTabId }),
       ...(snapshot.observation?.currentDomain ? { domain: snapshot.observation.currentDomain } : {}),
       ...(snapshot.pendingApproval?.id ? { pendingApprovalId: snapshot.pendingApproval.id } : {}),
+      ...(snapshot.pendingApproval?.tool ? { pendingApprovalTool: snapshot.pendingApproval.tool } : {}),
+      ...(snapshot.pendingApproval?.reason ? { pendingApprovalSummary: snapshot.pendingApproval.reason } : {}),
       ...(snapshot.toolResult?.tool ? { tool: snapshot.toolResult.tool } : {}),
       ...(snapshot.toolResult?.summary ? { toolSummary: snapshot.toolResult.summary } : {}),
       updatedAt: Date.now()
@@ -132,39 +150,75 @@ export class RunStore {
   }
 
   setPendingApprovalAction(requestId: string, action: ExecuteToolInput): void {
-    this.pendingApprovalActions.set(requestId, action);
     const now = Date.now();
-    this.options.sessionPersistence?.persistPendingAction({
+    const pendingAction: PersistedPendingAction = {
       requestId,
       runId: action.runId,
       generationId: this.generationIdFor(action.runId),
       action,
       createdAt: now,
       expiresAt: now + RUN_SESSION_PENDING_TTL_MS
-    });
+    };
+    this.pendingApprovalActions.set(requestId, pendingAction);
+    this.options.sessionPersistence?.persistPendingAction(pendingAction);
   }
 
   getPendingApprovalAction(requestId: string): ExecuteToolInput | undefined {
+    return this.getPendingApprovalActionState(requestId)?.action;
+  }
+
+  getPendingApprovalActionState(requestId: string): PersistedPendingAction | undefined {
+    const now = Date.now();
     const memoryAction = this.pendingApprovalActions.get(requestId);
     if (memoryAction) {
-      return memoryAction;
+      return this.validPendingApprovalAction(requestId, memoryAction, now);
     }
-    const persisted = this.options.sessionPersistence?.readPendingAction(requestId, Date.now());
+    const persisted = this.options.sessionPersistence?.readPendingAction(requestId, now);
     if (!persisted) {
       return undefined;
     }
-    const existingGeneration = this.runGenerations.get(persisted.runId);
-    if (existingGeneration && persisted.generationId !== existingGeneration) {
+    const validPersisted = this.validPendingApprovalAction(requestId, persisted, now);
+    if (!validPersisted) {
       return undefined;
     }
-    this.runGenerations.set(persisted.runId, persisted.generationId);
-    this.pendingApprovalActions.set(requestId, persisted.action);
-    return persisted.action;
+    this.pendingApprovalActions.set(requestId, validPersisted);
+    return validPersisted;
+  }
+
+  recoverPendingApprovalSession(input: RecoverPendingApprovalSessionInput): RunSnapshot {
+    const persistence = this.options.sessionPersistence;
+    if (!persistence) {
+      const snapshot = unsafeRecoverySnapshot(input.runId, 'session persistence unavailable');
+      this.setSnapshot(input.runId, snapshot);
+      return snapshot;
+    }
+    const now = input.now ?? Date.now();
+    const persistedAction = persistence.readPendingAction(input.requestId, now);
+    const currentGenerationId = this.runGenerations.get(input.runId);
+    if (persistedAction && !currentGenerationId) {
+      this.runGenerations.set(input.runId, persistedAction.generationId);
+    }
+    const snapshot = recoverPersistedRunSession({
+      persistence,
+      runId: input.runId,
+      requestId: input.requestId,
+      now,
+      currentGenerationId: currentGenerationId ?? persistedAction?.generationId,
+      currentTabId: input.currentTabId,
+      currentDomain: input.currentDomain,
+      currentFrameId: input.currentFrameId
+    });
+    this.setSnapshot(input.runId, snapshot);
+    return snapshot;
   }
 
   deletePendingApprovalAction(requestId: string): void {
     this.pendingApprovalActions.delete(requestId);
     this.options.sessionPersistence?.deletePendingAction(requestId);
+  }
+
+  getRunGenerationId(runId: string): string | undefined {
+    return this.runGenerations.get(runId);
   }
 
   private printTrace(event: RuntimeEvent): void {
@@ -189,6 +243,26 @@ export class RunStore {
     return next;
   }
 
+  private validPendingApprovalAction(
+    requestId: string,
+    pendingAction: PersistedPendingAction,
+    now: number
+  ): PersistedPendingAction | undefined {
+    if (pendingAction.expiresAt <= now) {
+      this.deletePendingApprovalAction(requestId);
+      return undefined;
+    }
+    const existingGeneration = this.runGenerations.get(pendingAction.runId);
+    if (existingGeneration && pendingAction.generationId !== existingGeneration) {
+      this.deletePendingApprovalAction(requestId);
+      return undefined;
+    }
+    if (!existingGeneration) {
+      this.runGenerations.set(pendingAction.runId, pendingAction.generationId);
+    }
+    return pendingAction;
+  }
+
   private persistAuditEvent(event: RuntimeEvent): void {
     this.options.sessionPersistence?.persistAuditEvent({
       runId: event.runId,
@@ -203,4 +277,26 @@ export class RunStore {
 
 function createGenerationId(runId: string): string {
   return `${runId}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function unsafeRecoverySnapshot(runId: string, reason: string): RunSnapshot {
+  const message = `Session recovery unsafe: ${reason}`;
+  return {
+    runId,
+    mode: 'ask',
+    status: 'error',
+    error: {
+      code: SESSION_RECOVERY_UNSAFE,
+      message
+    },
+    recovery: {
+      action: {
+        type: 'fail',
+        reason: message
+      },
+      attempts: 0,
+      budgetRemaining: 0,
+      limitation: message
+    }
+  };
 }

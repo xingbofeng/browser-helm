@@ -1,5 +1,12 @@
 import { defineConfig } from 'vitest/config';
 
+const securityCriticalThresholds = {
+  statements: 35,
+  branches: 20,
+  functions: 25,
+  lines: 35
+};
+
 export default defineConfig({
   assetsInclude: ['**/*.png'],
   test: {
@@ -22,7 +29,13 @@ export default defineConfig({
         statements: 30,
         branches: 20,
         functions: 25,
-        lines: 30
+        lines: 30,
+        'src/background/runtime/run/security/authorization-service.ts': securityCriticalThresholds,
+        'src/background/runtime/run/approval/approval-coordinator.ts': securityCriticalThresholds,
+        'src/page/messaging/content-rpc-handler.ts': securityCriticalThresholds,
+        'src/tools/core/tool-registry.ts': securityCriticalThresholds,
+        'src/background/runtime/run/tools/approval/flows/workflow-replay-approval-flow.ts': securityCriticalThresholds,
+        'src/shared/redaction.ts': securityCriticalThresholds
       }
     }
   }

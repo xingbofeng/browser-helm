@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateA
 import { useLocale, useT } from '../../i18n/context';
 
 import type { RunSnapshot } from '../../runtime/runtime-messages';
+import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import type { AgentMessage } from '../../shared/schemas/agent-message.schema';
 import type { DebugReport } from '../../shared/schemas/diagnosis.schema';
 import {
@@ -250,6 +251,7 @@ function PageObservationCard({
   const linkCount = countLinks(snapshot);
   const formCount = snapshot?.structuredPageData?.forms.count ?? 0;
   const updatedAt = message.updatedAt || snapshot?.structuredPageData?.observation.updatedAt;
+  const stateSignals = buildPageAcceptanceSignals(snapshot, t);
   return (
     <section className="bh-qaCard bh-pageObservationCard">
       <header className="bh-qaCardHeader">
@@ -271,9 +273,80 @@ function PageObservationCard({
         <li><FileText size={15} />{t('page.observation.textCount', { count: String(textCount) })}</li>
         <li><Link size={15} />{t('page.observation.linkCount', { count: String(linkCount) })}</li>
         <li><FileText size={15} />{t('page.observation.formCount', { count: String(formCount) })}</li>
+        {stateSignals.map((signal) => (
+          <li key={signal.key} className={`bh-pageObservationSignal bh-pageObservationSignal-${signal.tone}`}>
+            {signal.tone === 'ok' ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
+            {signal.label}
+          </li>
+        ))}
       </ul>
     </section>
   );
+}
+
+function buildPageAcceptanceSignals(
+  snapshot: RunSnapshot | undefined,
+  t: ReturnType<typeof useT>
+): Array<{ key: string; label: string; tone: 'ok' | 'warn' }> {
+  const signals: Array<{ key: string; label: string; tone: 'ok' | 'warn' }> = [];
+  const fields = snapshot?.structuredPageData?.forms.items ?? [];
+  if (snapshot?.structuredPageData) {
+    const invalidCount = fields.filter((field) => field.validation?.valid === false).length;
+    const hasDisabledSubmit = fields.some((field) => field.submit?.disabled);
+    if (fields.length === 0) {
+      signals.push({ key: 'no-form', label: t('page.state.noForm'), tone: 'ok' });
+    } else if (invalidCount === 0 && !hasDisabledSubmit) {
+      signals.push({ key: 'valid-form', label: t('page.state.validForm'), tone: 'ok' });
+    } else {
+      if (invalidCount > 0) {
+        signals.push({
+          key: 'invalid-form',
+          label: t('page.state.invalidForm', { count: String(invalidCount) }),
+          tone: 'warn'
+        });
+      }
+      if (hasDisabledSubmit) {
+        signals.push({ key: 'disabled-submit', label: t('page.state.disabledSubmit'), tone: 'warn' });
+      }
+    }
+  }
+
+  const pageHealth = readPageHealthToolData(snapshot);
+  const consoleErrors = readArrayCount(pageHealth, 'consoleErrors');
+  const networkFailures = readArrayCount(pageHealth, 'networkFailures');
+  if (consoleErrors > 0) {
+    signals.push({
+      key: 'console-errors',
+      label: t('page.state.consoleErrors', { count: String(consoleErrors) }),
+      tone: 'warn'
+    });
+  }
+  if (networkFailures > 0) {
+    signals.push({
+      key: 'network-failures',
+      label: t('page.state.networkFailures', { count: String(networkFailures) }),
+      tone: 'warn'
+    });
+  }
+  return signals;
+}
+
+function readPageHealthToolData(snapshot: RunSnapshot | undefined): Record<string, unknown> | undefined {
+  const toolResult = snapshot?.toolResult;
+  if (toolResult?.tool !== TOOL_NAMES.DEBUG_COLLECT_PAGE_HEALTH) {
+    return undefined;
+  }
+  const detail = toolResult.detail;
+  if (typeof detail !== 'object' || detail === null || !('data' in detail)) {
+    return undefined;
+  }
+  const data = (detail as { data?: unknown }).data;
+  return typeof data === 'object' && data !== null ? data as Record<string, unknown> : undefined;
+}
+
+function readArrayCount(record: Record<string, unknown> | undefined, key: string): number {
+  const value = record?.[key];
+  return Array.isArray(value) ? value.length : 0;
 }
 
 function useNowTick(enabled: boolean): number {

@@ -212,6 +212,132 @@ describe('runtime prompt builder', () => {
     expect(prompt).not.toContain('loopGuard');
   });
 
+  it('adds bounded vision evidence only after an explicit vision tool result', () => {
+    const messages = buildMessages({
+      record: recordWithTrace([]),
+      snapshot: {
+        ...snapshotWithLastToolResult(TOOL_NAMES.VISION_DETECT_OVERLAY),
+        toolResult: {
+          tool: TOOL_NAMES.VISION_DETECT_OVERLAY,
+          ok: true,
+          code: 'OK',
+          summary: 'Vision observation: cookie banner overlaps checkout button',
+          detail: {
+            data: {
+              screenshot: {
+                id: 'shot_secret',
+                tabId: 42,
+                mode: 'viewport',
+                mimeType: 'image/png',
+                width: 1280,
+                height: 720,
+                dataUrl: 'data:image/png;base64,SHOULD_NOT_REACH_PROMPT',
+                captureSource: 'tabs_capture_visible_tab',
+                capturedAt: 123,
+                traceSafe: false
+              },
+              observation: {
+                imageRef: 'shot_secret',
+                summary: 'cookie banner overlaps checkout button',
+                visibleText: ['Checkout', 'Accept cookies'],
+                blockers: ['cookie banner overlaps checkout button'],
+                layoutIssues: ['primary CTA shifted below fold'],
+                fallback: 'none',
+                confidence: 0.82,
+                grounding: [
+                  {
+                    claim: 'cookie banner overlaps checkout button',
+                    source: 'dom_backed',
+                    confidence: 'high',
+                    evidence: [{ kind: 'dom_text', text: 'Accept cookies' }]
+                  }
+                ],
+                pointerFallback: {
+                  allowed: false,
+                  targetConfidence: 'medium',
+                  domRefUnavailable: false,
+                  reason: 'DOM-backed click target is available.'
+                }
+              }
+            }
+          },
+          changedPage: false,
+          requiresObserve: false
+        }
+      },
+      toolsContracts: [toolContract(TOOL_NAMES.VISION_DETECT_OVERLAY)],
+      locale: 'zh'
+    });
+
+    const prompt = messages.at(-1)?.content ?? '';
+    const parsed = JSON.parse(prompt) as {
+      visionEvidence?: {
+        summary: string;
+        screenshot: { mode: string; width: number; height: number };
+        grounding: Array<{ claim: string; source: string; evidence: Array<{ text?: string }> }>;
+      };
+    };
+
+    expect(parsed.visionEvidence).toMatchObject({
+      summary: 'cookie banner overlaps checkout button',
+      screenshot: {
+        mode: 'viewport',
+        width: 1280,
+        height: 720
+      },
+      grounding: [{
+        claim: 'cookie banner overlaps checkout button',
+        source: 'dom_backed',
+        evidence: [{ text: 'Accept cookies' }]
+      }]
+    });
+    expect(prompt).not.toContain('SHOULD_NOT_REACH_PROMPT');
+    expect(prompt).not.toContain('data:image');
+  });
+
+  it('does not add vision evidence from the default page observation path', () => {
+    const messages = buildMessages({
+      record: recordWithTrace([]),
+      snapshot: {
+        ...snapshotWithLastToolResult(TOOL_NAMES.PAGE_OBSERVE),
+        observation: {
+          url: 'https://example.com/checkout',
+          title: 'Checkout',
+          currentDomain: 'example.com',
+          origin: 'https://example.com',
+          visibleTextSummary: 'Visible page says cookie banner overlaps checkout button.',
+          pageStateSummary: 'Ready',
+          interactiveCount: 3,
+          warnings: []
+        },
+        toolResult: {
+          tool: TOOL_NAMES.PAGE_OBSERVE,
+          ok: true,
+          code: 'OK',
+          summary: 'Page observed: cookie banner overlaps checkout button',
+          detail: {
+            data: {
+              observation: {
+                summary: 'This shape resembles a vision observation but was not produced by a vision tool.',
+                blockers: ['cookie banner overlaps checkout button']
+              }
+            }
+          },
+          changedPage: false,
+          requiresObserve: false
+        }
+      },
+      toolsContracts: [toolContract(TOOL_NAMES.PAGE_OBSERVE)],
+      locale: 'zh'
+    });
+
+    const prompt = messages.at(-1)?.content ?? '';
+    const parsed = JSON.parse(prompt) as { visionEvidence?: unknown; observation?: { visibleTextSummary?: string } };
+
+    expect(parsed.visionEvidence).toBeUndefined();
+    expect(parsed.observation?.visibleTextSummary).toContain('cookie banner overlaps checkout button');
+  });
+
   it('injects memory hits and scratchpad only through the dynamic suffix', () => {
     const domain = `memory-${Date.now()}.example.com`;
     defaultMemoryRepo.save({

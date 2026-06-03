@@ -3,6 +3,7 @@ import type { Observation } from '../../../shared/schemas/observation.schema';
 import type { ToolResult } from '../../../shared/schemas/tool-result.schema';
 import type { TraceEvent } from '../../../shared/schemas/trace.schema';
 import type { RunMode } from '../../../shared/schemas/tool.schema';
+import type { AdapterId } from '../../../adapters/adapter-types';
 import { TOOL_NAMES } from '../../../shared/constants/tool-names';
 import { TRACE_EVENT_NAMES } from '../../../shared/constants/event-names';
 import { buildStructuredPageData } from '../../../page/structured/structured-page-data';
@@ -14,6 +15,7 @@ import { buildPlanState } from '../../../agent/planning/plan-builder';
 import { t } from '../../../i18n/t';
 import type { Locale } from '../../../i18n/types';
 import { defaultDomainAdapterRegistry } from '../../../adapters/registry';
+import { defaultAdapterFailureReporter } from '../../../tools/adapter/adapter-failure-reporter';
 import {
   buildDebugReport,
   buildFormDoctorFindings,
@@ -258,13 +260,41 @@ export function buildDomainAdapterSnapshot(url: string): RunSnapshot['domainAdap
         : {})
     };
   }
+  const lastFailure = lastAdapterFailure(detection.adapter.id);
   return {
     enabled: true,
     id: detection.adapter.id,
+    version: detection.adapter.version,
     label: detection.adapter.label,
     workflowCount: detection.adapter.workflows.length,
     locatorCount: detection.adapter.locators.length,
-    approvalEnforced: true
+    approvalEnforced: true,
+    driftStatus: {
+      status: detection.adapter.driftStatus.status,
+      genericFallbackReason: detection.adapter.driftStatus.genericFallbackReason
+    },
+    ...(lastFailure ? {
+      lastFailure
+    } : {})
+  };
+}
+
+function lastAdapterFailure(adapterId: AdapterId): NonNullable<
+  Extract<RunSnapshot['domainAdapter'], { enabled: true }>['lastFailure']
+> | undefined {
+  const report = defaultAdapterFailureReporter.list()
+    .filter((candidate) => candidate.adapterId === adapterId)
+    .at(-1);
+  if (!report) {
+    return undefined;
+  }
+  return {
+    adapterId,
+    ...(report.adapterVersion ? { adapterVersion: report.adapterVersion } : {}),
+    ...(report.workflowId ? { workflowId: report.workflowId } : {}),
+    ...(report.locatorId ? { locatorId: report.locatorId } : {}),
+    errorCode: report.errorCode,
+    message: report.message
   };
 }
 

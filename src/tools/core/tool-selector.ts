@@ -145,14 +145,6 @@ export function selectToolsForRun(input: SelectToolsInput): ToolSelection {
       continue;
     }
 
-    if (tool.name.startsWith('bh_vision_') && !taskNeedsVision(input.task, input.lastError?.code)) {
-      hiddenTools.push({
-        tool: tool.name,
-        reason: 'Vision tools are reserved for visual ambiguity or DOM/a11y fallback'
-      });
-      continue;
-    }
-
     visibleTools.push(tool.name);
   }
 
@@ -162,13 +154,6 @@ export function selectToolsForRun(input: SelectToolsInput): ToolSelection {
     hiddenTools,
     limitations
   };
-}
-
-function taskNeedsVision(task: string, lastErrorCode: string | undefined): boolean {
-  if (lastErrorCode === 'ELEMENT_NOT_ACTIONABLE' || lastErrorCode === 'ELEMENT_NOT_FOUND') {
-    return true;
-  }
-  return /screenshot|vision|visual|see|look|canvas|chart|map|overlay|blocked|covered|layout|misaligned|hidden|obstruct|截图|视觉|看一下|看见|画布|图表|地图|遮挡|挡住|覆盖|布局|错位|隐藏/u.test(task);
 }
 
 function evaluateAdvancedToolGate(

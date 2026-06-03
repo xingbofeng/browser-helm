@@ -178,6 +178,11 @@ body.animal-cursor--force *,
   transform: translateY(2px) !important;
 }
 
+.bh-agentSidePanel .bh-headerIconButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+}
+
 .bh-agentSidePanel .bh-headerIconButton svg {
   color: inherit !important;
   stroke: currentColor !important;
@@ -1343,6 +1348,36 @@ body.animal-cursor--force *,
   color: #25734b;
   font-size: 11px;
   font-weight: 900;
+}
+
+.bh-visionPanelActions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.bh-visionShotPreview {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.bh-visionShotPreview img {
+  display: block;
+  width: 100%;
+  max-height: 280px;
+  border: 1px solid #ead6c0;
+  border-radius: 8px;
+  background: #fffdf9;
+  object-fit: contain;
+}
+
+.bh-visionShotPreview figcaption {
+  color: #7a6656;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .bh-visionShotMeta {

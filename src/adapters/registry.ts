@@ -66,8 +66,28 @@ function detectedAdapter(adapter: DomainAdapter, url: URL): DetectedDomainAdapte
     id: adapter.id,
     label: adapter.label,
     domain: adapter.domains[0] ?? url.hostname,
+    version: adapter.version,
+    lastVerifiedAt: adapter.lastVerifiedAt,
+    supportedUrlPatterns: adapter.supportedUrlPatterns,
+    matchedUrlPattern: matchedUrlPattern(adapter, url),
+    requiredSignals: adapter.requiredSignals,
+    driftChecks: adapter.driftChecks,
+    driftStatus: adapter.getDriftStatus(ctx),
     guidance: adapter.getGuidance(ctx),
     workflows: adapter.listWorkflows(ctx),
     locators: adapter.listLocators(ctx)
   };
+}
+
+function matchedUrlPattern(adapter: DomainAdapter, url: URL): string {
+  return adapter.supportedUrlPatterns.find((pattern) => matchesUrlPattern(url, pattern)) ??
+    adapter.supportedUrlPatterns[0] ??
+    `${url.origin}/*`;
+}
+
+function matchesUrlPattern(url: URL, pattern: string): boolean {
+  if (pattern.endsWith('/*')) {
+    return url.origin === pattern.slice(0, -2);
+  }
+  return url.href === pattern;
 }

@@ -139,8 +139,13 @@ describe('snapshotFromObserveResult', () => {
       enabled: true,
       id: 'github',
       label: 'GitHub',
+      version: '1.0.0',
       workflowCount: 1,
       locatorCount: 1,
+      driftStatus: {
+        status: 'not_checked',
+        genericFallbackReason: 'Use generic browser tools if adapter hints fail drift checks.'
+      },
       approvalEnforced: true
     });
   });

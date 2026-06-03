@@ -4,7 +4,12 @@ export const cdpAttachStateSchema = z.object({
   tabId: z.number().int().positive(),
   attached: z.boolean(),
   protocolVersion: z.string(),
+  owner: z.string().min(1).optional(),
+  createdAt: z.number().int().nonnegative().optional(),
   attachedAt: z.number().int().nonnegative().optional(),
+  lastEventAt: z.number().int().nonnegative().optional(),
+  enabledDomains: z.array(z.string().min(1)).optional(),
+  detachReason: z.string().optional(),
   reason: z.string().optional()
 });
 

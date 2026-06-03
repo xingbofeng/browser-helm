@@ -39,7 +39,17 @@ describe('pointer click tool', () => {
     });
 
     const result = await bhPointerClick().execute(
-      { x: 30, y: 40, reason: 'Dismiss tooltip that blocks the menu' },
+      {
+        x: 30,
+        y: 40,
+        reason: 'Dismiss tooltip that blocks the menu',
+        visionGrounding: {
+          allowed: true,
+          targetConfidence: 'high',
+          domRefUnavailable: true,
+          reason: 'Vision grounding confirmed visual fallback target.'
+        }
+      },
       { runId: 'run_1', stepId: 'step_1', runMode: 'full', tabId: 42 }
     );
 
@@ -53,6 +63,27 @@ describe('pointer click tool', () => {
       target: { tabId: 42 },
       args: [30, 40]
     }));
+  });
+
+  it('refuses non-sensitive pointer fallback without high-confidence vision grounding', async () => {
+    const executeScript = vi.fn(async () => [{ result: { clicked: true, tagName: 'BUTTON' } }]);
+    vi.stubGlobal('chrome', {
+      scripting: { executeScript }
+    });
+
+    const result = await bhPointerClick().execute(
+      { x: 30, y: 40, reason: 'Dismiss tooltip that blocks the menu' },
+      { runId: 'run_1', stepId: 'step_1', runMode: 'full', tabId: 42 }
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'POINTER_ACTION_FAILED',
+      changedPage: false,
+      requiresObserve: false
+    });
+    expect(result.summary).toContain('high-confidence vision grounding');
+    expect(executeScript).not.toHaveBeenCalled();
   });
 
   it('does not click sensitive coordinates and asks for approval', async () => {
@@ -92,7 +123,17 @@ describe('pointer click tool', () => {
     });
 
     const result = await bhPointerClick().execute(
-      { x: 30, y: 40, reason: 'Dismiss tooltip that blocks the menu' },
+      {
+        x: 30,
+        y: 40,
+        reason: 'Dismiss tooltip that blocks the menu',
+        visionGrounding: {
+          allowed: true,
+          targetConfidence: 'high',
+          domRefUnavailable: true,
+          reason: 'Vision grounding confirmed visual fallback target.'
+        }
+      },
       { runId: 'run_1', stepId: 'step_1', runMode: 'full', tabId: 42 }
     );
 

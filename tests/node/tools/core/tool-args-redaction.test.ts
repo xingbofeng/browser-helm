@@ -18,6 +18,25 @@ describe('tool args redaction', () => {
     });
   });
 
+  it('redacts storage set values from trace and approval preview args', () => {
+    const redacted = redactToolArgs(TOOL_NAMES.STORAGE_SET_WITH_APPROVAL, {
+      area: 'localStorage',
+      key: 'authToken',
+      value: 'storage private password'
+    });
+
+    expect(redacted).toEqual({
+      area: 'localStorage',
+      key: 'authToken',
+      valuePreview: {
+        masked: true,
+        preview: '[MASKED]',
+        reason: 'redacted'
+      }
+    });
+    expect(JSON.stringify(redacted)).not.toContain('storage private password');
+  });
+
   it('keeps only the file basename for upload approval previews', () => {
     const redacted = redactToolArgs(TOOL_NAMES.FILE_UPLOAD_WITH_APPROVAL, {
       targetRefId: 'ref_upload',

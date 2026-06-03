@@ -155,14 +155,10 @@ export class CdpDebugFlow {
     expect(health.ok).toBe(true);
     expect(JSON.stringify(health.data)).not.toContain('pre-opt-in');
 
-    await fixture.page.evaluate(() => {
-      window.postMessage({
-        channel: 'BROWSER_HELM_PAGE_HEALTH_EVENT',
-        kind: 'network_failure',
-        url: 'https://api.example.com/private/path?token=secret#frag',
-        method: 'GET',
-        errorText: 'failed with sk-1234567890abcdef'
-      }, '*');
+    await fixture.page.evaluate(async () => {
+      const targetUrl = `${window.location.origin}/private/path?token=secret#frag`;
+      await fetch(targetUrl).catch(() => undefined);
+      console.error('failed with sk-1234567890abcdef');
     });
     const updatedHealth = await executeToolResult(sidePanel.executeTool({
       runId: snapshot.runId,

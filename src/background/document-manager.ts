@@ -51,7 +51,8 @@ export class DocumentManager {
     const pageCount = countPdfPages(pdfText);
     const pageStart = clampPage(options.pageStart, 1, pageCount);
     const pageEnd = clampPage(options.pageEnd, pageStart, pageCount);
-    const text = extractPdfTextForRange(pdfText, pageStart, pageEnd).trim();
+    const extraction = extractPdfTextForRange(pdfText, pageStart, pageEnd);
+    const text = extraction.text.trim();
     return {
       sourceUrl: sanitizeUrl(options.url),
       mimeType,
@@ -59,7 +60,15 @@ export class DocumentManager {
       pageStart,
       pageEnd,
       pageCount,
-      scanned: text.length === 0
+      scanned: text.length === 0,
+      ...(text.length === 0 && extraction.filteredStream
+        ? {
+            unavailableReason: 'pdf_filter_unsupported',
+            parserLimitations: [
+              'Built-in PDF reader does not decompress filtered streams such as FlateDecode.'
+            ]
+          }
+        : {})
     };
   }
 }
@@ -127,15 +136,19 @@ function extractPdfText(source: string): string {
   ].join(' ').replace(/\s+/gu, ' ').trim();
 }
 
-function extractPdfTextForRange(source: string, pageStart: number, pageEnd: number): string {
+function extractPdfTextForRange(source: string, pageStart: number, pageEnd: number): { text: string; filteredStream: boolean } {
   const objects = parsePdfObjects(source);
   const pages = [...objects.values()]
     .filter((object) => /\/Type\s*\/Page\b/u.test(object.body))
     .sort((left, right) => left.offset - right.offset);
   if (!pages.length) {
-    return extractPdfText(source);
+    return {
+      text: extractPdfText(source),
+      filteredStream: hasFilteredStream(source)
+    };
   }
   const selectedStreams: string[] = [];
+  let filteredStream = false;
   for (let index = pageStart - 1; index < pageEnd; index += 1) {
     const page = pages[index];
     if (!page) {
@@ -144,12 +157,18 @@ function extractPdfTextForRange(source: string, pageStart: number, pageEnd: numb
     for (const objectId of readPageContentObjectIds(page.body)) {
       const contentObject = objects.get(objectId);
       const stream = contentObject ? readStreamPayload(contentObject.body) : undefined;
+      if (contentObject && hasFilteredStream(contentObject.body)) {
+        filteredStream = true;
+      }
       if (stream !== undefined) {
         selectedStreams.push(stream);
       }
     }
   }
-  return extractPdfText(selectedStreams.join('\n'));
+  return {
+    text: extractPdfText(selectedStreams.join('\n')),
+    filteredStream
+  };
 }
 
 function parsePdfObjects(source: string): Map<number, { body: string; offset: number }> {
@@ -181,6 +200,10 @@ function readPageContentObjectIds(pageBody: string): number[] {
 function readStreamPayload(objectBody: string): string | undefined {
   const match = objectBody.match(/\bstream\r?\n?([\s\S]*?)\r?\n?endstream\b/u);
   return match?.[1];
+}
+
+function hasFilteredStream(value: string): boolean {
+  return /\/Filter\b/u.test(value);
 }
 
 function extractLiteralText(source: string): string[] {

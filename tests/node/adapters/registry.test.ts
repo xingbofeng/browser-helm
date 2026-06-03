@@ -70,6 +70,14 @@ describe('domain adapter registry', () => {
       expect(detection.adapter.guidance.summary.length).toBeGreaterThan(0);
       expect(detection.adapter.workflows.length).toBeGreaterThan(0);
       expect(detection.adapter.locators.length).toBeGreaterThan(0);
+      expect(detection.adapter.version).toMatch(/^\d+\.\d+\.\d+$/u);
+      expect(detection.adapter.lastVerifiedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
+      expect(detection.adapter.supportedUrlPatterns.length).toBeGreaterThan(0);
+      expect(detection.adapter.requiredSignals).toContain('url_domain_match');
+      expect(detection.adapter.driftStatus).toMatchObject({
+        status: 'not_checked',
+        genericFallbackReason: 'Use generic browser tools if adapter hints fail drift checks.'
+      });
     }
   });
 

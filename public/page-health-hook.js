@@ -1,12 +1,16 @@
 (() => {
   const marker = '__BROWSER_HELM_PAGE_HEALTH_HOOK_INSTALLED__';
   const channel = 'BROWSER_HELM_PAGE_HEALTH_EVENT';
+  const nonce = document.currentScript && document.currentScript.dataset
+    ? document.currentScript.dataset.browserhelmPageHealthNonce
+    : '';
   if (window[marker]) return;
   window[marker] = true;
 
   const post = (payload) => {
+    if (!nonce) return;
     try {
-      window.postMessage({ channel, ...payload }, window.location.origin);
+      window.postMessage({ channel, nonce, ...payload }, window.location.origin);
     } catch {}
   };
 

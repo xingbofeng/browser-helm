@@ -4,6 +4,7 @@
  * These contracts are used by content-script form actions and kept separate
  * from DOM mutation helpers so execution modules can stay focused.
  */
+import type { FormFieldSnapshot } from '../../shared/schemas/structured-page-data.schema';
 
 export interface FillFieldTarget {
   fieldRefId: string;
@@ -36,6 +37,7 @@ export interface FillManyResult {
   failedCount: number;
   changedPage: boolean;
   requiresObserve: boolean;
+  updatedFields?: FormFieldSnapshot[] | undefined;
   retried?: boolean | undefined;
   fallbackAvailable?: boolean | undefined;
   summary: string;

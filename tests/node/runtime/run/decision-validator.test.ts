@@ -6,7 +6,6 @@ import {
 } from '../../../../src/agent/loop/form-fill-augmenter';
 import type { RunRecord } from '../../../../src/agent/loop/types';
 import type { RunSnapshot } from '../../../../src/runtime/runtime-messages';
-import { ERROR_CODES } from '../../../../src/shared/constants/error-codes';
 import { TRACE_EVENT_NAMES } from '../../../../src/shared/constants/event-names';
 import { TOOL_NAMES } from '../../../../src/shared/constants/tool-names';
 import type { AgentDecision } from '../../../../src/shared/schemas/agent-decision.schema';
@@ -249,7 +248,7 @@ describe('normalizeModelDecision', () => {
 });
 
 describe('validateModelDecision', () => {
-  it('rejects finish when the task explicitly requires tool calls that have not succeeded', () => {
+  it('does not parse required tool calls out of free-form task text', () => {
     const decision: AgentDecision = {
       type: 'finish',
       message: '已完成'
@@ -260,101 +259,6 @@ describe('validateModelDecision', () => {
       '第二步调用 bh_iframe_read 读取 iframe visible_text。',
       '禁止调用 bh_form_fill_field。'
     ].join('\n'));
-
-    const rejection = validateModelDecision(
-      decision,
-      toolContracts(),
-      makeSnapshot([]),
-      record
-    );
-
-    expect(rejection).toMatchObject({
-      kind: 'required_tool_missing',
-      detail: {
-        requiredTools: [TOOL_NAMES.IFRAME_LIST, TOOL_NAMES.IFRAME_READ],
-        missingTools: [TOOL_NAMES.IFRAME_LIST, TOOL_NAMES.IFRAME_READ]
-      }
-    });
-  });
-
-  it('allows finish after all explicitly required tools have succeeded', () => {
-    const decision: AgentDecision = {
-      type: 'finish',
-      message: '已完成'
-    };
-
-    const record = recordWithSuccessfulToolSequence([
-      [TOOL_NAMES.IFRAME_LIST, {}],
-      [TOOL_NAMES.IFRAME_READ, { iframeId: 'frame_7' }]
-    ]);
-    record.task = [
-      '第一步调用 bh_iframe_list 找到 iframe。',
-      '第二步调用 bh_iframe_read 读取 iframe visible_text。',
-      '禁止调用 bh_form_fill_field。'
-    ].join('\n');
-
-    const rejection = validateModelDecision(
-      decision,
-      toolContracts(),
-      makeSnapshot([]),
-      record
-    );
-
-    expect(rejection).toBeUndefined();
-  });
-
-  it('treats explicitly required alternative tools as satisfied when either option succeeded', () => {
-    const decision: AgentDecision = {
-      type: 'finish',
-      message: '已完成'
-    };
-
-    const record = recordWithSuccessfulToolSequence([
-      [TOOL_NAMES.FORM_FILL_FIELD, { fieldRefId: 'field-1', value: '美国 无障碍' }]
-    ]);
-    record.task = [
-      '第一步必须调用 bh_form_read_fields 读取页面里的可写字段。',
-      '填写必须通过 bh_form_fill_field 或 bh_form_fill_many 完成；没有调用填写工具就不能说已经填写。'
-    ].join('\n');
-    record.trace.unshift(
-      {
-        runId: 'test-run-1',
-        type: TRACE_EVENT_NAMES.TOOL_STARTED,
-        payload: { tool: TOOL_NAMES.FORM_READ_FIELDS, args: {} }
-      },
-      {
-        runId: 'test-run-1',
-        type: TRACE_EVENT_NAMES.TOOL_RESULT,
-        payload: { tool: TOOL_NAMES.FORM_READ_FIELDS, ok: true, code: 'OK', changedPage: false }
-      }
-    );
-
-    const rejection = validateModelDecision(
-      decision,
-      toolContracts(),
-      makeSnapshot([]),
-      record
-    );
-
-    expect(rejection).toBeUndefined();
-  });
-
-  it('treats VISION_UNAVAILABLE as satisfying an explicitly required vision call', () => {
-    const decision: AgentDecision = {
-      type: 'finish',
-      message: '已用 DOM fallback 完成'
-    };
-
-    const record = makeRecord('第二步调用 bh_vision_detect_overlay；如果返回 VISION_UNAVAILABLE，不要重试 vision。');
-    record.trace.push({
-      runId: 'test-run-1',
-      type: TRACE_EVENT_NAMES.TOOL_RESULT,
-      payload: {
-        tool: TOOL_NAMES.VISION_DETECT_OVERLAY,
-        ok: false,
-        code: ERROR_CODES.VISION_UNAVAILABLE
-      }
-    });
 
     const rejection = validateModelDecision(
       decision,

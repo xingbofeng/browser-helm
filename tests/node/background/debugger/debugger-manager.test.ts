@@ -101,4 +101,61 @@ describe('DebuggerManager', () => {
     });
     expect(manager.isAttached(33)).toBe(false);
   });
+
+  it('tracks auditable session lifecycle and keeps one BrowserHelm session per tab', async () => {
+    let eventListener: ((source: chrome.debugger.Debuggee, method: string, params?: object) => void) | undefined;
+    let detachListener: ((source: chrome.debugger.Debuggee, reason?: string) => void) | undefined;
+    const attach = vi.fn(async () => undefined);
+    const detach = vi.fn(async () => undefined);
+    const sendCommand = vi.fn(async () => ({}));
+    vi.stubGlobal('chrome', {
+      debugger: {
+        attach,
+        detach,
+        getTargets: vi.fn(async () => []),
+        sendCommand,
+        onEvent: {
+          addListener: vi.fn((listener: typeof eventListener) => {
+            eventListener = listener;
+          })
+        },
+        onDetach: {
+          addListener: vi.fn((listener: typeof detachListener) => {
+            detachListener = listener;
+          })
+        }
+      }
+    });
+    const manager = new DebuggerManager();
+
+    await manager.attach(44);
+    await manager.attach(44);
+    eventListener?.({ tabId: 44 }, 'Runtime.consoleAPICalled', {
+      type: 'error',
+      args: [{ value: 'failed' }]
+    });
+    eventListener?.({ tabId: 44 }, 'Network.requestWillBeSent', {
+      requestId: 'req_1',
+      request: {
+        url: 'https://api.example.com/data',
+        method: 'GET',
+        headers: {}
+      }
+    });
+    expect(manager.networkEvents(44)).toHaveLength(1);
+    detachListener?.({ tabId: 44 }, 'target_closed');
+
+    expect(attach).toHaveBeenCalledTimes(1);
+    expect(manager.sessionState(44)).toMatchObject({
+      tabId: 44,
+      owner: 'browserhelm',
+      attached: false,
+      detachReason: 'target_closed',
+      enabledDomains: ['Network', 'Runtime', 'Performance']
+    });
+    expect(manager.sessionState(44)?.createdAt).toBeTypeOf('number');
+    expect(manager.sessionState(44)?.lastEventAt).toBeTypeOf('number');
+    expect(manager.networkEvents(44)).toEqual([]);
+    expect(manager.isAttached(44)).toBe(false);
+  });
 });

@@ -75,6 +75,53 @@ describe('shadow tools', () => {
     expect(result.summary).toContain('role=button');
   });
 
+  it('bounds shadow query data and reports omitted element count', async () => {
+    const request: ContentRpcClient['request'] = vi.fn(async () => ({
+      ok: true as const,
+      shadowQuery: {
+        hostSelector: '#large-widget',
+        selector: '*',
+        elements: Array.from({ length: 80 }, (_, index) => ({
+          tagName: 'button',
+          name: `Action ${index}`,
+          role: 'button',
+          text: `Action ${index} ${'details '.repeat(80)}`
+        }))
+      }
+    }));
+
+    const result = await bhShadowQuery(rpc(request)).execute({
+      hostSelector: '#large-widget',
+      selector: '*'
+    }, {
+      runId: 'run_1',
+      stepId: 'step_1',
+      runMode: 'full'
+    });
+
+    const shadowQuery = (result.data as {
+      shadowQuery: {
+        hostSelector: string;
+        selector: string;
+        elements: unknown[];
+        omittedCount: number;
+      };
+    }).shadowQuery;
+
+    expect(shadowQuery.hostSelector).toBe('#large-widget');
+    expect(shadowQuery.selector).toBe('*');
+    expect(shadowQuery.elements).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'Action 0' }),
+      expect.objectContaining({ name: 'Action 49' })
+    ]));
+    expect(shadowQuery.omittedCount).toBe(30);
+    const elements = shadowQuery.elements;
+    expect(elements).toHaveLength(50);
+    expect(JSON.stringify(result.data)).not.toContain('Action 50');
+    expect(JSON.stringify(result.data)).not.toContain('details details details details details details details details details details details details details details details');
+    expect(result.context?.summary).toContain('omitted=30');
+  });
+
   it('registers stable v1.5 shadow tool names', () => {
     expect(bhShadowList(rpc()).name).toBe(TOOL_NAMES.SHADOW_LIST);
     expect(bhShadowQuery(rpc()).name).toBe(TOOL_NAMES.SHADOW_QUERY);

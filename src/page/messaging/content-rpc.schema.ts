@@ -146,11 +146,12 @@ export const contentRpcRequestSchema = z.discriminatedUnion('type', [
     fieldRefIds: z.array(z.string().min(1)).optional(),
     formRefId: z.string().min(1).optional(),
     submitTargetRefId: z.string().min(1).optional(),
+    frameId: z.number().int().nonnegative().optional(),
     runId: z.string().min(1),
     stepId: z.string().min(1)
   }),
-  z.object({ type: z.literal(CONTENT_RPC_MESSAGES.FORM_FILL_FIELD), fieldRefId: z.string().min(1), value: z.string(), clear: z.boolean().optional(), actionToken: z.string().optional(), runId: z.string().min(1), stepId: z.string().min(1) }),
-  z.object({ type: z.literal(CONTENT_RPC_MESSAGES.FORM_FILL_MANY), targets: z.array(z.object({ fieldRefId: z.string().min(1), value: z.string(), clear: z.boolean().optional() })), actionToken: z.string().optional(), runId: z.string().min(1), stepId: z.string().min(1) }),
+  z.object({ type: z.literal(CONTENT_RPC_MESSAGES.FORM_FILL_FIELD), fieldRefId: z.string().min(1), value: z.string(), clear: z.boolean().optional(), actionToken: z.string().optional(), frameId: z.number().int().nonnegative().optional(), runId: z.string().min(1), stepId: z.string().min(1) }),
+  z.object({ type: z.literal(CONTENT_RPC_MESSAGES.FORM_FILL_MANY), targets: z.array(z.object({ fieldRefId: z.string().min(1), value: z.string(), clear: z.boolean().optional() })), actionToken: z.string().optional(), frameId: z.number().int().nonnegative().optional(), runId: z.string().min(1), stepId: z.string().min(1) }),
   z.object({ type: z.literal(CONTENT_RPC_MESSAGES.FORM_VERIFY), fieldRefIds: z.array(z.string().min(1)), submitRefId: z.string().min(1).optional() }),
   z.object({
     type: z.literal(CONTENT_RPC_MESSAGES.FORM_EXECUTE_SUBMIT),
@@ -158,6 +159,7 @@ export const contentRpcRequestSchema = z.discriminatedUnion('type', [
     submitTargetRefId: z.string().min(1).optional(),
     actionToken: z.string().optional(),
     allowDisabledSubmit: z.boolean().optional(),
+    frameId: z.number().int().nonnegative().optional(),
     runId: z.string().min(1),
     stepId: z.string().min(1)
   }),

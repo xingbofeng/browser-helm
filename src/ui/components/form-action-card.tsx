@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, ClipboardList, FilePenLine, Shield, XCircle } from 'lucide-react';
 import { useT } from '../../i18n/context';
 import type { RunSnapshot, RuntimeToolResultSnapshot } from '../../runtime/runtime-messages';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { StreamingMarkdown } from './streaming-markdown';
 
 type FormActionCardProps = {
@@ -51,6 +52,14 @@ function VerifyCard({ result, t }: { result: RuntimeToolResultSnapshot; t: Retur
 }
 
 function ApprovalCard({ toolResult, snapshot, t }: { toolResult: RuntimeToolResultSnapshot; snapshot?: RunSnapshot | undefined; t: ReturnType<typeof useT> }) {
+  if (toolResult.code === ERROR_CODES.APPROVAL_CONTEXT_STALE) {
+    return (
+      <div className="bh-formCard bh-formCard--error" role="alert">
+        <div className="bh-formCardIcon"><XCircle size={18} /></div>
+        <div className="bh-formCardBody"><strong>{t('form.card.submitStale')}</strong><p>{t('form.card.submitStaleReason')}</p></div>
+      </div>
+    );
+  }
   if (snapshot?.pendingApproval?.status === 'denied') {
     return (
       <div className="bh-formCard bh-formCard--error" role="status">
@@ -64,6 +73,14 @@ function ApprovalCard({ toolResult, snapshot, t }: { toolResult: RuntimeToolResu
       <div className="bh-formCard bh-formCard--approval" role="alert">
         <div className="bh-formCardIcon"><Shield size={18} /></div>
         <div className="bh-formCardBody"><strong>{t('form.card.submitApproving')}</strong><p>{t('form.card.submitApprovingWait')}</p></div>
+      </div>
+    );
+  }
+  if (toolResult.code === ERROR_CODES.APPROVAL_REQUIRED || toolResult.requiresApproval) {
+    return (
+      <div className="bh-formCard bh-formCard--approval" role="alert">
+        <div className="bh-formCardIcon"><Shield size={18} /></div>
+        <div className="bh-formCardBody"><strong>{t('form.card.submitRequired')}</strong><StreamingMarkdown content={toolResult.summary} /></div>
       </div>
     );
   }

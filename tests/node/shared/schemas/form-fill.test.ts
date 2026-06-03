@@ -58,7 +58,7 @@ describe('formVerifyResultSchema', () => {
 
 describe('submitApprovalPayloadSchema', () => {
   it('accepts valid payload', () => {
-    expect(submitApprovalPayloadSchema.parse({ runId: 'run', stepId: 'step', formName: 'test', submitMethod: 'button-click', fields: [], fieldCount: 0, filledCount: 0, skippedCount: 0, verifyStatus: 'pass', verifyFailed: false, risk: 'high', riskExplanation: 'test', highRisk: false, warnings: [] })).toBeDefined();
+    expect(submitApprovalPayloadSchema.parse({ runId: 'run', stepId: 'step', formName: 'test', submitMethod: 'button-click', fields: [], fieldCount: 0, filledCount: 0, skippedCount: 0, skippedFields: [], verifyStatus: 'pass', verifyFailed: false, risk: 'high', riskExplanation: 'test', highRisk: false, warnings: [] })).toBeDefined();
   });
 });
 

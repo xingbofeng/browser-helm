@@ -22,8 +22,8 @@ describe('DomainAdapterStatus', () => {
     );
 
     expect(html).toContain('GitHub adapter');
-    expect(html).toContain('1 workflow');
-    expect(html).toContain('Approval policy enforced');
+    expect(html).toContain('1 workflow hint');
+    expect(html).toContain('Global approval policy still enforced');
   });
 
   it('renders generic fallback state when no adapter is enabled', () => {
@@ -60,6 +60,38 @@ describe('DomainAdapterStatus', () => {
     );
 
     expect(html).toContain('Disable GitHub adapter');
+  });
+
+  it('renders drift fallback and last failure visibility for enabled adapters', () => {
+    const html = renderToString(
+      <I18nProvider initialLocale="en">
+        <DomainAdapterStatus
+          adapter={{
+            enabled: true,
+            id: 'github',
+            label: 'GitHub',
+            workflowCount: 1,
+            locatorCount: 1,
+            approvalEnforced: true,
+            driftStatus: {
+              status: 'drift_suspected',
+              genericFallbackReason: 'Use generic browser tools if adapter hints fail drift checks.'
+            },
+            lastFailure: {
+              adapterId: 'github',
+              errorCode: 'ADAPTER_LOCATOR_FAILED',
+              locatorId: 'github-issues-tab',
+              message: 'Locator github-issues-tab did not match observed candidates.'
+            }
+          }}
+        />
+      </I18nProvider>
+    );
+
+    expect(html).toContain('Drift suspected');
+    expect(html).toContain('Use generic browser tools if adapter hints fail drift checks.');
+    expect(html).toContain('Last failure: ADAPTER_LOCATOR_FAILED');
+    expect(html).toContain('github-issues-tab');
   });
 
   it('renders an enable control for a disabled matched adapter', () => {

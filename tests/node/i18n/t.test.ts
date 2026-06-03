@@ -61,6 +61,16 @@ describe('t() 纯函数翻译', () => {
     expect(t('form.card.fillFields', 'en')).toBe('Field fill');
     expect(t('form.card.verify', 'en')).toBe('Form verification');
   });
+
+  it('describes Full mode without implying approval bypass', () => {
+    const enBoundary = t('mode.boundary.full', 'en');
+    const zhBoundary = t('mode.boundary.full', 'zh');
+
+    expect(enBoundary).toContain('approval');
+    expect(enBoundary).not.toContain('not intercepted');
+    expect(zhBoundary).toContain('审批');
+    expect(zhBoundary).not.toContain('不再被审批拦截');
+  });
 });
 
 describe('tZh() helper', () => {

@@ -43,8 +43,32 @@ describe('ClipboardApprovalFlow', () => {
     }));
   });
 
-  it('returns clipboard text after read approval while masking snapshot detail', async () => {
+  it('does not touch clipboard when approved execution has no stored pending action', async () => {
+    const writeText = vi.fn();
+    const flow = new ClipboardApprovalFlow({
+      ...deps({
+        getPendingAction: () => undefined,
+        clipboardManager: { writeText, readText: vi.fn() }
+      })
+    });
+
+    const result = await flow.onApproved({
+      runId: 'run_1',
+      requestId: 'apr_missing',
+      tool: TOOL_NAMES.CLIPBOARD_WRITE_WITH_APPROVAL
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.CLIPBOARD_UNAVAILABLE,
+      changedPage: false
+    });
+    expect(writeText).not.toHaveBeenCalled();
+  });
+
+  it('returns clipboard text after read approval without exposing it to model context or snapshot detail', async () => {
     const setSnapshot = vi.fn();
+    const readText = 'approved read value';
     const flow = new ClipboardApprovalFlow({
       ...deps({
         getPendingAction: () => ({
@@ -55,7 +79,7 @@ describe('ClipboardApprovalFlow', () => {
         setSnapshot,
         clipboardManager: {
           writeText: vi.fn(),
-          readText: vi.fn().mockResolvedValue({ text: 'approved read value', textLength: 19 })
+          readText: vi.fn().mockResolvedValue({ text: readText, textLength: 19 })
         }
       })
     });
@@ -69,8 +93,10 @@ describe('ClipboardApprovalFlow', () => {
     expect(result).toMatchObject({
       ok: true,
       code: ERROR_CODES.OK,
-      data: { operation: 'read', sensitiveText: 'approved read value', textLength: 19 }
+      data: { operation: 'read', sensitiveText: readText, textLength: 19 }
     });
+    expect(result.context?.summary).toBe('Clipboard read completed after approval (19 characters).');
+    expect(JSON.stringify(result.context)).not.toContain(readText);
     expect(setSnapshot.mock.calls.at(-1)?.[1]).toMatchObject({
       toolResult: {
         detail: {
@@ -80,6 +106,27 @@ describe('ClipboardApprovalFlow', () => {
         }
       }
     });
+    expect(JSON.stringify(setSnapshot.mock.calls.at(-1)?.[1])).not.toContain(readText);
+  });
+
+  it('denies clipboard approval without reading or writing clipboard state', () => {
+    const clipboardManager = {
+      writeText: vi.fn(),
+      readText: vi.fn()
+    };
+    const flow = new ClipboardApprovalFlow({
+      ...deps({ clipboardManager })
+    });
+
+    const result = flow.onDenied();
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.USER_DENIED_APPROVAL,
+      changedPage: false
+    });
+    expect(clipboardManager.writeText).not.toHaveBeenCalled();
+    expect(clipboardManager.readText).not.toHaveBeenCalled();
   });
 });
 

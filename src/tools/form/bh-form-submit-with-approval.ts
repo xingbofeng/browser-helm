@@ -58,7 +58,7 @@ export function bhFormSubmitWithApproval(
     risk: 'high',
     argsSchema,
     resultSchema: toolResultSchema,
-    execute(args) {
+    execute(args, ctx) {
       const snapshotDigest = buildSubmitApprovalSnapshotDigest({
         formRefId: args.formRefId,
         fieldRefIds: args.fields.map((f) => f.fieldRefId),
@@ -74,8 +74,12 @@ export function bhFormSubmitWithApproval(
       });
 
       const payload = {
+        runId: ctx.runId,
+        stepId: ctx.stepId,
         formRefId: args.formRefId,
         formName: args.formName,
+        formAction: args.formAction,
+        formMethod: args.formMethod,
         submitMethod: args.submitMethod,
         submitTargetRefId: args.submitTargetRefId,
         verifyStatus: args.verifyStatus,
@@ -83,6 +87,7 @@ export function bhFormSubmitWithApproval(
         fieldCount: args.fieldCount,
         filledCount: args.filledCount,
         skippedCount: args.skippedCount,
+        skippedFields: args.fields.filter((field) => field.skipped === true),
         risk: 'high' as const,
         riskExplanation: args.verifyFailed ? `Verification failed, still submitting: ${args.riskExplanation}` : args.riskExplanation,
         highRisk: args.verifyFailed,

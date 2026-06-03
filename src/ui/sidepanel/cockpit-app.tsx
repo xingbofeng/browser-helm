@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Bug, Settings, Trash2 } from 'lucide-react';
+import { Bug, Camera, Settings, Trash2 } from 'lucide-react';
 import { Button } from 'animal-island-ui';
 
 import type {
@@ -10,6 +10,7 @@ import type {
 import type { RuntimePort } from '../../runtime/runtime-port';
 import type { AgentMessage } from '../../shared/schemas/agent-message.schema';
 import type { RunMode } from '../../shared/schemas/tool.schema';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import { useT } from '../../i18n/context';
 import { useLocale } from '../../i18n/context';
@@ -21,7 +22,7 @@ import {
   readEditableSubmitApprovalArgs,
   readString
 } from '../approval/submit-approval-preview';
-import { AdvancedDebugPanel } from '../components/advanced-debug-drawer';
+import { AdvancedDebugPanel, type VisionPreview } from '../components/advanced-debug-drawer';
 import { AgentMessageList } from '../components/agent-message-list';
 import { ChatPanel } from '../components/chat-panel';
 import { DomainAdapterStatus } from '../components/domain-adapter-status';
@@ -74,6 +75,10 @@ export function CockpitApp({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   const [debugTab, setDebugTab] = useState<'trace' | 'tools' | 'elements' | 'streaming' | 'form' | 'deep' | 'vision'>('trace');
+  const [visionPreview, setVisionPreview] = useState<VisionPreview>();
+  const [visionBusy, setVisionBusy] = useState(false);
+  const [visionMessage, setVisionMessage] = useState<string>();
+  const [visionError, setVisionError] = useState<string>();
   const [conversationMessages, setConversationMessages] = useState<AgentMessage[]>([]);
   const [memoryEntries, setMemoryEntries] = useState<MemoryEntry[]>([]);
   const unsubscribeRunRef = useRef<(() => void) | undefined>(undefined);
@@ -325,6 +330,10 @@ export function CockpitApp({
     setMode('ask');
     setBusy(false);
     setApprovalResult(undefined);
+    setVisionPreview(undefined);
+    setVisionBusy(false);
+    setVisionMessage(undefined);
+    setVisionError(undefined);
     setConversationMessages([]);
     agentStore.getState().reset();
     pageDataStore.getState().clearSnapshot();
@@ -470,6 +479,19 @@ export function CockpitApp({
     setMemoryEntries([]);
   };
 
+  const clearAllMemory = async () => {
+    const currentSnapshot = snapshot;
+    if (!currentSnapshot) {
+      return;
+    }
+    await runtime.executeTool({
+      runId: currentSnapshot.runId,
+      tool: TOOL_NAMES.MEMORY_CLEAR_ALL,
+      args: {}
+    });
+    setMemoryEntries([]);
+  };
+
   const approveReplay = async () => {
     const currentSnapshot = snapshot;
     if (!currentSnapshot || !replayPreview) {
@@ -523,6 +545,55 @@ export function CockpitApp({
     applySnapshot(await runtime.getRunSnapshot(currentSnapshot.runId), { persistMessages: true });
   };
 
+  const ensureSnapshotForPanelTool = async (): Promise<RunSnapshot> => {
+    if (snapshot && (snapshot.mode === 'debug' || snapshot.mode === 'full')) {
+      return snapshot;
+    }
+    const panelTabId = snapshot?.targetTabId ?? targetTabId;
+    if (!panelTabId) {
+      throw new Error(t('runtime.error.noActiveTab'));
+    }
+    const started = await runtime.startRun({
+      task: t('cockpit.autoObserveTask'),
+      mode: 'debug',
+      tabId: panelTabId,
+      runKind: 'observe_only'
+    });
+    subscribeToRun(started.runId);
+    const nextSnapshot = await runtime.getRunSnapshot(started.runId);
+    applySnapshot(nextSnapshot);
+    setMode(nextSnapshot.mode);
+    return nextSnapshot;
+  };
+
+  const runVisionPanelTool = async (tool: string) => {
+    setDebugTab('vision');
+    setDebugOpen(true);
+    setVisionBusy(true);
+    setVisionMessage(undefined);
+    setVisionError(undefined);
+    try {
+      const panelSnapshot = await ensureSnapshotForPanelTool();
+      const result = await runtime.executeTool({
+        runId: panelSnapshot.runId,
+        tool,
+        args: {}
+      });
+      const nextPreview = readVisionPreviewFromToolResult(result);
+      if (nextPreview) {
+        setVisionPreview(nextPreview);
+      }
+      setVisionMessage(result.summary);
+      setVisionError(result.ok || result.code === ERROR_CODES.VISION_UNAVAILABLE ? undefined : result.summary);
+      const nextSnapshot = await runtime.getRunSnapshot(panelSnapshot.runId);
+      applySnapshot(nextSnapshot);
+    } catch (error) {
+      setVisionError(error instanceof Error ? error.message : t('error.cantStart'));
+    } finally {
+      setVisionBusy(false);
+    }
+  };
+
   return (
     <main className="bh-agentSidePanel animal-cursor--force">
       <header className="bh-agentHeader">
@@ -537,6 +608,18 @@ export function CockpitApp({
           <span className={`bh-agentStatus${!settingsState.settings ? ' bh-agentStatus--unconfigured' : ''}`}>
             {statusLabel(runDisplayState, t)}
           </span>
+          <button
+            type="button"
+            className="bh-headerIconButton"
+            aria-label={t('header.captureScreenshotAria')}
+            title={t('header.captureScreenshotAria')}
+            disabled={visionBusy}
+            onClick={() => {
+              void runVisionPanelTool(TOOL_NAMES.VISION_CAPTURE_VIEWPORT);
+            }}
+          >
+            <Camera size={18} />
+          </button>
           <Button
             htmlType="button"
             className="bh-headerIconButton"
@@ -589,6 +672,9 @@ export function CockpitApp({
           }}
           onClearDomain={() => {
             void clearDomainMemory();
+          }}
+          onClearAll={() => {
+            void clearAllMemory();
           }}
         />
         {replayPreview ? (
@@ -704,6 +790,16 @@ export function CockpitApp({
                 onInspectElement={(refId) => {
                   void inspectElement(refId);
                 }}
+                visionPreview={visionPreview}
+                visionBusy={visionBusy}
+                visionMessage={visionMessage}
+                visionError={visionError}
+                onCaptureViewport={() => {
+                  void runVisionPanelTool(TOOL_NAMES.VISION_CAPTURE_VIEWPORT);
+                }}
+                onDetectOverlay={() => {
+                  void runVisionPanelTool(TOOL_NAMES.VISION_DETECT_OVERLAY);
+                }}
               />
             </div>
           </div>
@@ -732,4 +828,46 @@ function readSavedWorkflowId(result: RuntimeToolExecutionResult): string | undef
   const data = isRecord(result.data) ? result.data : undefined;
   const workflow = isRecord(data?.workflow) ? data.workflow : undefined;
   return readString(workflow?.id);
+}
+
+function readVisionPreviewFromToolResult(result: RuntimeToolExecutionResult): VisionPreview | undefined {
+  const data = isRecord(result.data) ? result.data : undefined;
+  const screenshot = isRecord(data?.screenshot) ? data.screenshot : undefined;
+  if (!screenshot) {
+    return undefined;
+  }
+  const mode = readScreenshotMode(screenshot.mode);
+  const dataUrl = readImageDataUrl(screenshot.dataUrl);
+  const mimeType = readString(screenshot.mimeType);
+  const width = readFiniteNumber(screenshot.width);
+  const height = readFiniteNumber(screenshot.height);
+  const bounds = isRecord(screenshot.bounds) ? {
+    x: readFiniteNumber(screenshot.bounds.x) ?? 0,
+    y: readFiniteNumber(screenshot.bounds.y) ?? 0,
+    width: readFiniteNumber(screenshot.bounds.width) ?? 0,
+    height: readFiniteNumber(screenshot.bounds.height) ?? 0
+  } : undefined;
+  return {
+    ...(mode ? { mode } : {}),
+    ...(mimeType ? { mimeType } : {}),
+    ...(width ? { width } : {}),
+    ...(height ? { height } : {}),
+    ...(bounds ? { bounds } : {}),
+    ...(dataUrl ? { dataUrl } : {})
+  };
+}
+
+function readScreenshotMode(value: unknown): VisionPreview['mode'] | undefined {
+  return value === 'viewport' || value === 'full_page' || value === 'element'
+    ? value
+    : undefined;
+}
+
+function readImageDataUrl(value: unknown): string | undefined {
+  const raw = readString(value);
+  return raw?.startsWith('data:image/') ? raw : undefined;
+}
+
+function readFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }

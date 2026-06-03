@@ -11,6 +11,24 @@ test('根据自动观察渲染 Agent 瀑布流', async () => {
   }
 });
 
+test('面板头部直接提供视口截图入口', async () => {
+  const flow = await CockpitUiFlow.start();
+  try {
+    await flow.expectHeaderScreenshotCapture();
+  } finally {
+    await flow.close();
+  }
+});
+
+test('窄宽度侧栏布局和原生 side panel 绑定可验收', async () => {
+  const flow = await CockpitUiFlow.start();
+  try {
+    await flow.expectNarrowSidePanelLayoutAndNativeBinding();
+  } finally {
+    await flow.close();
+  }
+});
+
 test('流式回答前先读取被截断的长页面', async () => {
   const flow = await CockpitUiFlow.start();
   try {

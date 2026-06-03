@@ -19,6 +19,7 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "test:node": "vitest run tests/node",
+    "test:security": "vitest run tests/node/security/security-suite-config.test.ts tests/node/runtime/run/security/prompt-injection-mutation.test.ts tests/node/runtime/run/tools/tool-runtime-policy.test.ts tests/dom/page/messaging/content-rpc-handler.test.ts tests/node/runtime/run/approval/approval-coordinator.test.ts tests/node/runtime/run/security/authorization-service.test.ts tests/dom/ui/streaming-markdown.test.tsx tests/node/entrypoints/content-page-health.test.ts tests/node/storage/memory-repo.test.ts tests/node/runtime/run/workflow-replay-approval-flow.test.ts tests/node/runtime/run/prompt-builder.test.ts && npm run build && playwright test tests/e2e/specs/extension/security",
     "test:e2e": "npm run build && playwright test",
     "test:e2e:no-build": "playwright test",
     "test:e2e:real": "npm run test:e2e:real:model",

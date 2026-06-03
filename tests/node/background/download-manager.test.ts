@@ -47,6 +47,30 @@ describe('DownloadManager', () => {
     expect(JSON.stringify(downloads)).not.toContain('sig=secret');
   });
 
+  it('redacts sensitive URL path and filename metadata', async () => {
+    const search = vi.fn(async () => [
+      {
+        id: 43,
+        url: 'https://example.com/files/alice@example.com/sk-liveDownloadSecret/report.pdf?token=secret#frag',
+        filename: '/Users/counter/Downloads/alice@example.com-sk-liveDownloadSecret.pdf',
+        mime: 'application/pdf',
+        state: 'complete'
+      }
+    ]);
+    vi.stubGlobal('chrome', { downloads: { search } });
+
+    const downloads = await new DownloadManager().listDownloads({ limit: 1 });
+    const serialized = JSON.stringify(downloads);
+
+    expect(downloads[0]).toMatchObject({
+      fileName: '[REDACTED_EMAIL]-[MASKED].pdf',
+      url: 'https://example.com/files/[REDACTED_EMAIL]/[MASKED]/report.pdf'
+    });
+    expect(serialized).not.toContain('alice@example.com');
+    expect(serialized).not.toContain('sk-liveDownloadSecret');
+    expect(serialized).not.toContain('token=secret');
+  });
+
   it('returns unavailable when chrome.downloads is missing', async () => {
     vi.stubGlobal('chrome', {});
 

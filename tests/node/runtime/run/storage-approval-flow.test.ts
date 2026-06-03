@@ -52,6 +52,29 @@ describe('StorageApprovalFlow', () => {
     expect(JSON.stringify(setSnapshot.mock.calls.at(-1)?.[1])).not.toContain('dark');
   });
 
+  it('does not mutate Web Storage when approved execution has no stored pending action', async () => {
+    const request = vi.fn();
+    const flow = new StorageApprovalFlow({
+      ...deps({
+        getPendingAction: () => undefined,
+        createContentRpcClient: () => ({ request })
+      })
+    });
+
+    const result = await flow.onApproved({
+      runId: 'run_1',
+      requestId: 'apr_missing',
+      tool: TOOL_NAMES.STORAGE_SET_WITH_APPROVAL
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.TOOL_EXECUTION_FAILED,
+      changedPage: false
+    });
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it('deletes and clears Web Storage only after approval', async () => {
     const request = vi.fn(async (message: unknown) => ({
       ok: true,
@@ -101,6 +124,24 @@ describe('StorageApprovalFlow', () => {
       type: CONTENT_RPC_MESSAGES.STORAGE_CLEAR,
       area: 'sessionStorage'
     });
+  });
+
+  it('denies storage approval without mutating Web Storage', () => {
+    const request = vi.fn();
+    const flow = new StorageApprovalFlow({
+      ...deps({
+        createContentRpcClient: () => ({ request })
+      })
+    });
+
+    const result = flow.onDenied();
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: ERROR_CODES.USER_DENIED_APPROVAL,
+      changedPage: false
+    });
+    expect(request).not.toHaveBeenCalled();
   });
 });
 

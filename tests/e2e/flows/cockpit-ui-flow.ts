@@ -30,6 +30,59 @@ export class CockpitUiFlow {
     await cockpit.expectNoObserveStatusCards();
   }
 
+  async expectHeaderScreenshotCapture(): Promise<void> {
+    const fixture = await this.flowContext.fixturePage();
+    await fixture.goto('basic-form.html');
+
+    const tabId = await this.flowContext.shell().activeTabId();
+    const sidePanelPage = await this.flowContext.sidePanel().open(tabId);
+    const cockpit = new CockpitPanel(sidePanelPage);
+
+    await cockpit.expectShell();
+    await cockpit.captureViewportFromHeader();
+  }
+
+  async expectNarrowSidePanelLayoutAndNativeBinding(): Promise<void> {
+    const fixture = await this.flowContext.fixturePage();
+    await fixture.goto('basic-form.html');
+
+    const tabId = await this.flowContext.shell().activeTabId();
+    const sidePanelPage = await this.flowContext.sidePanel().open(tabId);
+    await sidePanelPage.setViewportSize({ width: 390, height: 820 });
+    const cockpit = new CockpitPanel(sidePanelPage);
+
+    await cockpit.expectShell();
+    await cockpit.expectObservedPage({
+      title: '欢迎注册 - 示例网站',
+      url: `${this.flowContext.origin}/basic-form.html`
+    });
+    await expect(sidePanelPage.getByText(
+      /未检测到表单|表单可提交|校验异常|提交禁用|No form detected|Form valid|Validation issues|Submit disabled/u
+    ).first()).toBeVisible();
+    const screenshot = await sidePanelPage.screenshot({ fullPage: false });
+    expect(screenshot.length).toBeGreaterThan(10_000);
+
+    const layout = await sidePanelPage.evaluate(() => {
+      const root = document.documentElement;
+      const body = document.body;
+      return {
+        viewportWidth: window.innerWidth,
+        documentScrollWidth: root.scrollWidth,
+        bodyScrollWidth: body.scrollWidth
+      };
+    });
+    expect(layout.viewportWidth).toBe(390);
+    expect(layout.documentScrollWidth).toBeLessThanOrEqual(400);
+    expect(layout.bodyScrollWidth).toBeLessThanOrEqual(400);
+
+    const nativeOptions = await this.flowContext.shell().nativeSidePanelOptions(tabId);
+    expect(nativeOptions).toMatchObject({
+      ok: true,
+      path: `sidepanel.html?target=active&tabId=${tabId}`,
+      enabled: true
+    });
+  }
+
   async expectLongPageArticleReadBeforeStreamingAnswer(): Promise<void> {
     const fixture = await this.flowContext.fixturePage();
     await fixture.goto('long-page.html');
@@ -188,12 +241,7 @@ export class CockpitUiFlow {
       args: {}
     }));
     await fixture.page.evaluate(() => {
-      window.postMessage({
-        channel: 'BROWSER_HELM_PAGE_HEALTH_EVENT',
-        kind: 'console_error',
-        message: 'Payment widget failed to initialize',
-        source: 'console'
-      }, '*');
+      console.error('Payment widget failed to initialize');
     });
     const snapshot = await sidePanel.runOnTab({
       tabId,

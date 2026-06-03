@@ -44,7 +44,8 @@ export const startRunInputSchema = z.object({
 export const executeToolInputSchema = z.object({
   runId: z.string().min(1),
   tool: z.string().min(1),
-  args: z.record(z.string(), z.unknown())
+  args: z.record(z.string(), z.unknown()),
+  source: z.enum(['agent', 'runtime', 'user']).optional()
 });
 
 export const decideApprovalInputSchema = z.object({
@@ -210,10 +211,23 @@ export type RuntimeDomainAdapterSnapshot =
   | {
       enabled: true;
       id: AdapterId;
+      version?: string | undefined;
       label: string;
       workflowCount: number;
       locatorCount: number;
       approvalEnforced: true;
+      driftStatus?: {
+        status: 'not_checked' | 'ok' | 'drift_suspected';
+        genericFallbackReason: string;
+      } | undefined;
+      lastFailure?: {
+        adapterId: AdapterId;
+        adapterVersion?: string | undefined;
+        workflowId?: string | undefined;
+        locatorId?: string | undefined;
+        errorCode: string;
+        message: string;
+      } | undefined;
     }
   | {
       enabled: false;

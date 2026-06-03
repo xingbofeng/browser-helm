@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { ApprovalManager } from '../../../../src/runtime/approval/approval-manager';
+import type { PersistedApprovalRequest } from '../../../../src/background/runtime/run/session-persistence';
 
 describe('approval-manager', () => {
   it('stores pending approval requests', () => {
@@ -135,6 +136,56 @@ describe('approval-manager', () => {
     ).toMatchObject({
       ok: false,
       code: 'APPROVAL_REQUEST_NOT_FOUND'
+    });
+  });
+
+  it('hydrates approval requests from session persistence when memory was reset', () => {
+    const persisted: PersistedApprovalRequest = {
+      requestId: 'apr_1',
+      runId: 'run_1',
+      generationId: 'run_1:generation',
+      request: {
+        id: 'apr_1',
+        runId: 'run_1',
+        stepId: 'step_1',
+        tool: 'bh_storage_set_with_approval',
+        argsPreview: {},
+        risk: 'high',
+        reason: 'Needs approval',
+        status: 'pending',
+        createdAt: 1710000000000
+      },
+      createdAt: 1710000000000,
+      expiresAt: 1710000600000
+    };
+    const persistApprovalRequest = vi.fn();
+    const manager = new ApprovalManager({
+      approvalPersistence: {
+        persistApprovalRequest,
+        readApprovalRequest: vi.fn().mockReturnValue(persisted)
+      },
+      getRunGenerationId: () => 'run_1:generation'
+    });
+
+    const result = manager.decide({
+      requestId: 'apr_1',
+      decision: 'approved',
+      decidedAt: 1710000001000
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      request: {
+        id: 'apr_1',
+        status: 'approved',
+        decidedAt: 1710000001000
+      }
+    });
+    const persistedUpdate = persistApprovalRequest.mock.lastCall?.[0] as PersistedApprovalRequest | undefined;
+    expect(persistedUpdate).toMatchObject({
+      requestId: 'apr_1',
+      generationId: 'run_1:generation',
+      request: { status: 'approved' }
     });
   });
 });

@@ -9,6 +9,7 @@ type MemoryViewerProps = {
   loading?: boolean | undefined;
   onDelete: (id: string) => void;
   onClearDomain: () => void;
+  onClearAll: () => void;
 };
 
 export function MemoryViewer({
@@ -16,7 +17,8 @@ export function MemoryViewer({
   entries,
   loading = false,
   onDelete,
-  onClearDomain
+  onClearDomain,
+  onClearAll
 }: MemoryViewerProps) {
   const t = useT();
   return (
@@ -26,15 +28,26 @@ export function MemoryViewer({
           <h2>{t('memory.viewer.title')}</h2>
           <p>{domain ? t('memory.viewer.domain', { domain }) : t('memory.viewer.noDomain')}</p>
         </div>
-        <button
-          type="button"
-          className="bh-memoryAction"
-          disabled={!domain || entries.length === 0 || loading}
-          onClick={onClearDomain}
-          aria-label={t('memory.viewer.clearDomainAria')}
-        >
-          <Trash2 size={14} aria-hidden="true" />
-        </button>
+        <div className="bh-memoryActions">
+          <button
+            type="button"
+            className="bh-memoryAction"
+            disabled={!domain || entries.length === 0 || loading}
+            onClick={onClearDomain}
+            aria-label={t('memory.viewer.clearDomainAria')}
+          >
+            <Trash2 size={14} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="bh-memoryAction"
+            disabled={entries.length === 0 || loading}
+            onClick={onClearAll}
+            aria-label={t('memory.viewer.clearAllAria')}
+          >
+            <Trash2 size={14} aria-hidden="true" />
+          </button>
+        </div>
       </header>
       {entries.length ? (
         <ul className="bh-memoryList">

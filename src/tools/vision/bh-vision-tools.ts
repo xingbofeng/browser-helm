@@ -4,10 +4,11 @@ import { defaultScreenshotManager } from '../../background/screenshot-manager';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
-import { screenshotCaptureSchema, visionObservationSchema, type ScreenshotCapture } from '../../shared/schemas/vision';
+import { screenshotCaptureSchema, visionObservationSchema } from '../../shared/schemas/vision';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ToolContext } from '../core/tool-context';
 import type { ToolSpec } from '../core/tool-spec';
+import { groundVisionObservation } from './vision-grounding';
 import { normalizeVisionObservation } from './vision-result-normalizer';
 
 const captureArgsSchema = z.object({
@@ -107,14 +108,14 @@ export function bhVisionDescribeViewport(_rpc: ContentRpcClient): ToolSpec<z.inf
       const tabId = requireTabId(ctx);
       const screenshot = await defaultScreenshotManager.captureViewport({ tabId, windowId: normalizeWindowId(args.windowId) });
       if (!ctx.visionClient) {
-        const observation = normalizeVisionObservation({
+        const observation = groundVisionObservation(normalizeVisionObservation({
           imageRef: screenshot.id,
-          summary: 'Vision model is unavailable; use DOM/a11y observation instead.',
+          summary: 'Viewport screenshot was captured, but the vision model is unavailable; use DOM/a11y observation instead.',
           fallback: 'dom_a11y',
           fallbackReason: 'vision_not_supported'
-        });
-        return failed(ERROR_CODES.VISION_UNAVAILABLE, 'Vision unavailable; falling back to DOM/a11y observation.', {
-          screenshot: screenshotMeta(screenshot),
+        }), ctx.snapshot?.structuredPageData);
+        return failed(ERROR_CODES.VISION_UNAVAILABLE, 'Viewport screenshot captured; vision model is unavailable, so DOM/a11y fallback is required.', {
+          screenshot: screenshotCaptureSchema.parse(screenshot),
           observation
         });
       }
@@ -123,17 +124,17 @@ export function bhVisionDescribeViewport(_rpc: ContentRpcClient): ToolSpec<z.inf
         prompt: args.prompt ?? viewportPrompt(),
         runId: ctx.runId
       });
-      const observation = visionObservationSchema.parse({
+      const observation = groundVisionObservation(visionObservationSchema.parse({
         ...vision.observation,
         imageRef: vision.observation.imageRef ?? screenshot.id
-      });
+      }), ctx.snapshot?.structuredPageData);
       return vision.ok
         ? ok(`Vision observation: ${observation.summary}`, {
-            screenshot: screenshotMeta(screenshot),
+            screenshot: screenshotCaptureSchema.parse(screenshot),
             observation
           })
-        : failed(ERROR_CODES.VISION_UNAVAILABLE, `Vision unavailable: ${vision.reason ?? observation.fallbackReason ?? 'unknown'}`, {
-            screenshot: screenshotMeta(screenshot),
+        : failed(ERROR_CODES.VISION_UNAVAILABLE, `Viewport screenshot captured; vision model unavailable: ${vision.reason ?? observation.fallbackReason ?? 'unknown'}`, {
+            screenshot: screenshotCaptureSchema.parse(screenshot),
             observation
           });
     }
@@ -237,7 +238,7 @@ function ok(summary: string, data: unknown): ToolResult {
 
 function failed(code: string, summary: string, data: unknown): ToolResult {
   const fallbackSummary = code === ERROR_CODES.VISION_UNAVAILABLE
-    ? `${summary} Do not retry the vision tool in this run; use DOM/a11y or visible-text fallback evidence and finish.`
+    ? `${summary} Use DOM/a11y or visible-text fallback evidence; do not retry the vision model unless settings change.`
     : summary;
   return {
     ok: false,
@@ -246,7 +247,11 @@ function failed(code: string, summary: string, data: unknown): ToolResult {
     data,
     error: { message: fallbackSummary, detail: data },
     nextHints: code === ERROR_CODES.VISION_UNAVAILABLE
-      ? ['Do not retry vision in this run.', 'Use bh_page_read_visible_text or page observation as fallback evidence.', 'Finish with a fallback diagnosis.']
+      ? [
+          'The screenshot capture succeeded, but the vision model result is unavailable.',
+          'Use bh_page_read_visible_text or page observation as fallback evidence.',
+          'Do not call another vision model tool unless provider settings change.'
+        ]
       : undefined,
     changedPage: false,
     requiresObserve: false,
@@ -255,25 +260,6 @@ function failed(code: string, summary: string, data: unknown): ToolResult {
       summary: fallbackSummary
     }
   };
-}
-
-function screenshotMeta(screenshot: ScreenshotCapture) {
-  const meta: {
-    id: string;
-    mode: ScreenshotCapture['mode'];
-    mimeType: string;
-    width?: number;
-    height?: number;
-    bounds?: ScreenshotCapture['bounds'];
-  } = {
-    id: screenshot.id,
-    mode: screenshot.mode,
-    mimeType: screenshot.mimeType
-  };
-  if (screenshot.width !== undefined) meta.width = screenshot.width;
-  if (screenshot.height !== undefined) meta.height = screenshot.height;
-  if (screenshot.bounds !== undefined) meta.bounds = screenshot.bounds;
-  return meta;
 }
 
 function viewportPrompt(): string {

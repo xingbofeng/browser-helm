@@ -23,11 +23,12 @@ export class MemoryRepo {
   }
 
   save(input: SaveMemoryInput): MemoryEntry {
+    const domain = requireDomain(input.domain);
     const now = Date.now();
     const id = createId('mem');
     const entry: MemoryEntry = {
       id,
-      domain: input.domain,
+      domain,
       ...(input.origin ? { origin: input.origin } : {}),
       kind: input.kind ?? 'domain_fact',
       task: sanitizeMemoryText(input.task).value,
@@ -91,14 +92,16 @@ export class MemoryRepo {
   }
 
   list(domain?: string): MemoryEntry[] {
+    const scopedDomain = domain === undefined ? undefined : requireDomain(domain);
     return [...this.entries.values()]
-      .filter((entry) => domain ? entry.domain === domain : true)
+      .filter((entry) => scopedDomain ? entry.domain === scopedDomain : true)
       .sort((left, right) => right.updatedAt - left.updatedAt);
   }
 
   lookup(input: { domain: string; query?: string | undefined; limit?: number | undefined }): MemoryHit[] {
+    const domain = requireDomain(input.domain);
     const queryTokens = tokenize(input.query ?? '');
-    return this.list(input.domain)
+    return this.list(domain)
       .map((entry) => ({
         ...entry,
         score: scoreMemory(entry, queryTokens)
@@ -152,6 +155,14 @@ function scoreMemory(entry: MemoryEntry, queryTokens: string[]): number {
 
 function tokenize(value: string): string[] {
   return value.toLowerCase().split(/[^\p{Letter}\p{Number}_]+/u).filter(Boolean);
+}
+
+function requireDomain(domain: string): string {
+  const normalized = domain.trim();
+  if (!normalized) {
+    throw new Error('Memory domain is required');
+  }
+  return normalized;
 }
 
 function createId(prefix: string): string {

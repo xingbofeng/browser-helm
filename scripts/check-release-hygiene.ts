@@ -9,6 +9,8 @@ import { resolve } from 'node:path';
 import { execSync } from 'node:child_process';
 
 const ROOT = process.cwd();
+const COMPLETION_MATRIX_PATH = 'docs/audits/v1-1-v1-6-completion-matrix.md';
+const REQUIRED_COMPLETION_MATRIX_VERSIONS = ['v1.1', 'v1.2', 'v1.3', 'v1.4', 'v1.5', 'v1.6'];
 
 // ── Patterns that must be gitignored ──
 const GITIGNORE_PATTERNS = [
@@ -41,6 +43,25 @@ const FORBIDDEN_ON_DISK = [
 const gitignore = readFileSync(resolve(ROOT, '.gitignore'), 'utf8');
 
 let hasError = false;
+
+// ── Check v1.1-v1.6 completion matrix release gate ──
+const completionMatrixPath = resolve(ROOT, COMPLETION_MATRIX_PATH);
+if (!existsSync(completionMatrixPath)) {
+  console.error(`❌ Missing v1.1-v1.6 completion matrix: ${COMPLETION_MATRIX_PATH}`);
+  hasError = true;
+} else {
+  const completionMatrix = readFileSync(completionMatrixPath, 'utf8');
+  for (const version of REQUIRED_COMPLETION_MATRIX_VERSIONS) {
+    if (!completionMatrix.includes(version)) {
+      console.error(`❌ Completion matrix missing roadmap version: ${version}`);
+      hasError = true;
+    }
+  }
+  if (hasOpenP0Marker(completionMatrix)) {
+    console.error('❌ Completion matrix still marks P0 as open.');
+    hasError = true;
+  }
+}
 
 for (const pattern of GITIGNORE_PATTERNS) {
   // .env is covered by `.env` and `.env.*` patterns in .gitignore
@@ -91,7 +112,7 @@ for (const pattern of FORBIDDEN_ON_DISK) {
 }
 
 // ── Check that release zip doesn't leak forbidden files ──
-// Quick sanity: the .output directory should not contain .env or .reasonix
+// Quick sanity: generated output should not contain local secrets, traces, or temp logs.
 const outputDir = resolve(ROOT, '.output');
 if (existsSync(outputDir)) {
   try {
@@ -101,8 +122,7 @@ if (existsSync(outputDir)) {
     ).split('\n').filter(Boolean);
 
     for (const file of outputFiles) {
-      const basename = file.split('/').pop() ?? '';
-      if (basename === '.env' || basename === '.env.local' || basename.endsWith('.jsonl')) {
+      if (isForbiddenOutputPath(file)) {
         console.error(`❌ Forbidden file in build output: ${file}`);
         hasError = true;
       }
@@ -116,4 +136,22 @@ if (!hasError) {
   console.log('✅ Release hygiene check passed.');
 } else {
   process.exit(1);
+}
+
+function isForbiddenOutputPath(file: string): boolean {
+  const parts = file.split('/').filter(Boolean);
+  const basename = parts.at(-1) ?? '';
+  return parts.includes('.reasonix') ||
+    parts.includes('test-results') ||
+    parts.includes('artifacts') ||
+    basename === '.env' ||
+    basename.startsWith('.env.') ||
+    basename.endsWith('.jsonl');
+}
+
+function hasOpenP0Marker(content: string): boolean {
+  return /\bP0_GATE:\s*open\b/i.test(content) ||
+    /\bP0_STATUS:\s*open\b/i.test(content) ||
+    /\bP0\s+open\b/i.test(content) ||
+    /P0\s*状态[:：]\s*open/i.test(content);
 }

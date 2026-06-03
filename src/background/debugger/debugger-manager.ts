@@ -1,53 +1,63 @@
 import type { CdpAttachState, CdpEventListener, CdpPerformanceSnapshot } from '../../shared/schemas/cdp-event';
 import type { NetworkRequestRecord, RequestDetail } from '../../shared/schemas/network-request';
 import { cdpAttachStateSchema, cdpEventListenerSchema } from '../../shared/schemas/cdp-event';
-import { ConsoleEventStore } from './console-event-store';
-import { NetworkEventStore } from './network-event-store';
 import { buildPerformanceSnapshot } from './performance-store';
+import {
+  createCdpSession,
+  snapshotCdpSession,
+  type CdpDomain,
+  type CdpSession,
+  type CdpSessionOwner,
+  type CdpSessionState
+} from './cdp-session';
 
 const PROTOCOL_VERSION = '1.3';
+const MAX_RESPONSE_BODY_CHARS = 64_000;
+const SENSITIVE_RESPONSE_BODY_PATTERN = /\b(token|secret|password|api[_-]?key|apikey|authorization|bearer|cookie|set-cookie|otp|cvv)\b/iu;
 
 type CdpTarget = chrome.debugger.Debuggee;
 type CdpCommandResult = Record<string, unknown>;
 
 export class DebuggerManager {
-  private readonly sessions = new Map<number, {
-    attachedAt: number;
-    network: NetworkEventStore;
-    console: ConsoleEventStore;
-  }>();
+  private readonly sessions = new Map<number, CdpSession>();
+  private readonly detachedStates = new Map<number, CdpSessionState>();
   private listening = false;
 
-  async attach(tabId: number, protocolVersion = PROTOCOL_VERSION): Promise<CdpAttachState> {
+  async attach(tabId: number, protocolVersion = PROTOCOL_VERSION, owner: CdpSessionOwner = 'browserhelm'): Promise<CdpAttachState> {
     if (!globalThis.chrome?.debugger?.attach) {
       return cdpAttachStateSchema.parse({
         tabId,
         attached: false,
         protocolVersion,
+        owner,
         reason: 'chrome.debugger permission or API is unavailable'
       });
+    }
+    const existing = this.sessions.get(tabId);
+    if (existing) {
+      return this.attachState(existing);
     }
     this.ensureListener();
     const target = { tabId };
     try {
       await chrome.debugger.attach(target, protocolVersion);
-      this.sessions.set(tabId, {
-        attachedAt: Date.now(),
-        network: new NetworkEventStore(),
-        console: new ConsoleEventStore()
-      });
-      await this.enableCollectors(target);
-      return cdpAttachStateSchema.parse({
+      const createdAt = Date.now();
+      const session = createCdpSession({
         tabId,
-        attached: true,
+        owner,
         protocolVersion,
-        attachedAt: Date.now()
+        createdAt
       });
+      this.sessions.set(tabId, session);
+      this.detachedStates.delete(tabId);
+      session.enabledDomains = await this.enableCollectors(target);
+      return this.attachState(session);
     } catch (error) {
       return cdpAttachStateSchema.parse({
         tabId,
         attached: false,
         protocolVersion,
+        owner,
         reason: error instanceof Error ? error.message : 'debugger_attach_failed'
       });
     }
@@ -55,11 +65,12 @@ export class DebuggerManager {
 
   async detach(tabId: number): Promise<CdpAttachState> {
     if (!globalThis.chrome?.debugger?.detach) {
-      this.sessions.delete(tabId);
+      this.markDetached(tabId, 'chrome.debugger API is unavailable');
       return cdpAttachStateSchema.parse({
         tabId,
         attached: false,
         protocolVersion: PROTOCOL_VERSION,
+        owner: 'browserhelm',
         reason: 'chrome.debugger API is unavailable'
       });
     }
@@ -68,11 +79,17 @@ export class DebuggerManager {
     } catch {
       // Detach is idempotent from BrowserHelm's perspective.
     }
-    this.sessions.delete(tabId);
+    const state = this.markDetached(tabId, 'user_detached');
     return cdpAttachStateSchema.parse({
       tabId,
       attached: false,
-      protocolVersion: PROTOCOL_VERSION
+      protocolVersion: state?.protocolVersion ?? PROTOCOL_VERSION,
+      owner: state?.owner ?? 'browserhelm',
+      ...(state?.createdAt === undefined ? {} : { createdAt: state.createdAt }),
+      ...(state?.attachedAt === undefined ? {} : { attachedAt: state.attachedAt }),
+      ...(state?.lastEventAt === undefined ? {} : { lastEventAt: state.lastEventAt }),
+      ...(state?.enabledDomains === undefined ? {} : { enabledDomains: state.enabledDomains }),
+      detachReason: 'user_detached'
     });
   }
 
@@ -84,11 +101,11 @@ export class DebuggerManager {
   }
 
   consoleEvents(tabId: number, limit?: number) {
-    return this.session(tabId).console.list(limit);
+    return this.sessions.get(tabId)?.console.list(limit) ?? [];
   }
 
   networkEvents(tabId: number): NetworkRequestRecord[] {
-    return this.session(tabId).network.list();
+    return this.sessions.get(tabId)?.network.list() ?? [];
   }
 
   async requestDetail(tabId: number, requestId: string): Promise<RequestDetail | undefined> {
@@ -104,7 +121,7 @@ export class DebuggerManager {
     } catch {
       body = undefined;
     }
-    return this.session(tabId).network.detail(requestId, body);
+    return this.sessions.get(tabId)?.network.detail(requestId, body);
   }
 
   async responseBody(tabId: number, requestId: string): Promise<{
@@ -115,6 +132,13 @@ export class DebuggerManager {
   }> {
     try {
       const result = await this.sendCommand({ tabId }, 'Network.getResponseBody', { requestId });
+      const unavailableReason = responseBodyUnavailableReason(result);
+      if (unavailableReason) {
+        return {
+          requestId,
+          unavailableReason
+        };
+      }
       return {
         requestId,
         body: typeof result.body === 'string' ? result.body : '',
@@ -233,26 +257,33 @@ export class DebuggerManager {
     return this.sessions.has(tabId);
   }
 
-  private session(tabId: number): { network: NetworkEventStore; console: ConsoleEventStore } {
-    return this.sessions.get(tabId) ?? this.createDetachedSession(tabId);
+  sessionState(tabId: number): CdpSessionState | undefined {
+    const session = this.sessions.get(tabId);
+    return session ? snapshotCdpSession(session, { attached: true }) : this.detachedStates.get(tabId);
   }
 
-  private createDetachedSession(tabId: number): { network: NetworkEventStore; console: ConsoleEventStore } {
-    const session = {
-      attachedAt: Date.now(),
-      network: new NetworkEventStore(),
-      console: new ConsoleEventStore()
-    };
-    this.sessions.set(tabId, session);
-    return session;
+  resetForTesting(): void {
+    this.sessions.clear();
+    this.detachedStates.clear();
+    this.listening = false;
   }
 
-  private async enableCollectors(target: CdpTarget): Promise<void> {
-    await Promise.allSettled([
-      this.sendCommand(target, 'Network.enable'),
-      this.sendCommand(target, 'Runtime.enable'),
-      this.sendCommand(target, 'Performance.enable')
-    ]);
+  private async enableCollectors(target: CdpTarget): Promise<CdpDomain[]> {
+    const domains: Array<{ domain: CdpDomain; method: string }> = [
+      { domain: 'Network', method: 'Network.enable' },
+      { domain: 'Runtime', method: 'Runtime.enable' },
+      { domain: 'Performance', method: 'Performance.enable' }
+    ];
+    const enabled: CdpDomain[] = [];
+    await Promise.all(domains.map(async ({ domain, method }) => {
+      try {
+        await this.sendCommand(target, method);
+        enabled.push(domain);
+      } catch {
+        // Collector availability is reflected by the enabledDomains audit field.
+      }
+    }));
+    return enabled;
   }
 
   private async sendCommand(
@@ -294,15 +325,19 @@ export class DebuggerManager {
       }
       this.handleEvent(source.tabId, method, params as Record<string, unknown>);
     });
-    chrome.debugger.onDetach?.addListener((source) => {
+    chrome.debugger.onDetach?.addListener((source, reason) => {
       if (source.tabId) {
-        this.sessions.delete(source.tabId);
+        this.markDetached(source.tabId, typeof reason === 'string' ? reason : 'external_detach');
       }
     });
   }
 
   private handleEvent(tabId: number, method: string, params: Record<string, unknown>): void {
-    const session = this.session(tabId);
+    const session = this.sessions.get(tabId);
+    if (!session) {
+      return;
+    }
+    session.lastEventAt = Date.now();
     if (method === 'Network.requestWillBeSent') {
       session.network.requestWillBeSent(params);
       return;
@@ -327,6 +362,47 @@ export class DebuggerManager {
       session.console.addException(params);
     }
   }
+
+  private attachState(session: CdpSession): CdpAttachState {
+    return cdpAttachStateSchema.parse({
+      tabId: session.tabId,
+      attached: true,
+      protocolVersion: session.protocolVersion,
+      owner: session.owner,
+      createdAt: session.createdAt,
+      attachedAt: session.attachedAt,
+      ...(session.lastEventAt === undefined ? {} : { lastEventAt: session.lastEventAt }),
+      enabledDomains: session.enabledDomains
+    });
+  }
+
+  private markDetached(tabId: number, reason: string): CdpSessionState | undefined {
+    const session = this.sessions.get(tabId);
+    if (!session) {
+      return this.detachedStates.get(tabId);
+    }
+    const state = snapshotCdpSession(session, {
+      attached: false,
+      detachReason: reason
+    });
+    this.sessions.delete(tabId);
+    this.detachedStates.set(tabId, state);
+    return state;
+  }
+}
+
+function responseBodyUnavailableReason(result: Record<string, unknown>): string | undefined {
+  if (result.base64Encoded === true) {
+    return 'binary_response_body';
+  }
+  const body = typeof result.body === 'string' ? result.body : '';
+  if (body.length > MAX_RESPONSE_BODY_CHARS) {
+    return 'response_body_too_large';
+  }
+  if (SENSITIVE_RESPONSE_BODY_PATTERN.test(body)) {
+    return 'sensitive_response_body';
+  }
+  return undefined;
 }
 
 export const defaultDebuggerManager = new DebuggerManager();

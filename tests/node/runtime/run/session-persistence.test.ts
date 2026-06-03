@@ -28,6 +28,24 @@ describe('ChromeStorageRunSessionPersistence', () => {
           createdAt: 1000,
           expiresAt: Date.now() + RUN_SESSION_PENDING_TTL_MS
         }],
+        approvalRequests: [{
+          requestId: 'req_1',
+          runId: 'run_1',
+          generationId: 'run_1:generation',
+          request: {
+            id: 'req_1',
+            runId: 'run_1',
+            stepId: 'step_1',
+            tool: 'bh_form_submit_with_approval',
+            argsPreview: {},
+            risk: 'high',
+            reason: 'Needs approval',
+            status: 'pending',
+            createdAt: 1000
+          },
+          createdAt: 1000,
+          expiresAt: Date.now() + RUN_SESSION_PENDING_TTL_MS
+        }],
         auditEvents: [{
           runId: 'run_1',
           generationId: 'run_1:generation',
@@ -41,6 +59,7 @@ describe('ChromeStorageRunSessionPersistence', () => {
 
     expect(persistence.readSnapshotSummary('run_1')?.status).toBe('waiting_for_approval');
     expect(persistence.readPendingAction('req_1', Date.now())?.action.tool).toBe('bh_form_submit_with_approval');
+    expect(persistence.readApprovalRequest('req_1', Date.now())?.request.tool).toBe('bh_form_submit_with_approval');
     expect(persistence.readAuditEvents('run_1')[0]?.type).toBe('approval_required');
   });
 
@@ -69,6 +88,39 @@ describe('ChromeStorageRunSessionPersistence', () => {
       pendingActions: Array<{ requestId: string }>;
     };
     expect(state.pendingActions).toMatchObject([{ requestId: 'req_1' }]);
+  });
+
+  it('flushes approval request changes back to chrome.storage.session', async () => {
+    const backing: Record<string, unknown> = {};
+    const area = fakeStorageArea(backing);
+    const persistence = new ChromeStorageRunSessionPersistence(area);
+    await persistence.ready;
+
+    persistence.persistApprovalRequest({
+      requestId: 'apr_1',
+      runId: 'run_1',
+      generationId: 'run_1:generation',
+      request: {
+        id: 'apr_1',
+        runId: 'run_1',
+        stepId: 'step_1',
+        tool: 'bh_storage_set_with_approval',
+        argsPreview: {},
+        risk: 'high',
+        reason: 'Needs approval',
+        status: 'pending',
+        createdAt: 1000
+      },
+      createdAt: 1000,
+      expiresAt: Date.now() + RUN_SESSION_PENDING_TTL_MS
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const state = backing['browserHelm.runSession.v1'] as {
+      approvalRequests: Array<{ requestId: string }>;
+    };
+    expect(state.approvalRequests).toMatchObject([{ requestId: 'apr_1' }]);
   });
 });
 

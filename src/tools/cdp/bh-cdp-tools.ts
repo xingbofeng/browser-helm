@@ -24,6 +24,7 @@ const requestArgsSchema = tabArgsSchema.extend({
 const eventListenersArgsSchema = tabArgsSchema.extend({
   objectExpression: z.string().min(1).optional()
 });
+const MAX_EVENT_LISTENERS_RETURNED = 50;
 
 /**
  * Attach Chrome debugger to the current tab and enable Network/Runtime/Performance collectors.
@@ -128,6 +129,8 @@ export function bhCdpGetNetworkEvents(_rpc: ContentRpcClient): ToolSpec<z.infer<
     execute: async (args, ctx) => {
       const tabId = await resolveTabId(args.tabId, ctx);
       if (!tabId) return unavailable('No active tab is available for network events');
+      const detached = detachedSessionFailure(tabId);
+      if (detached) return detached;
       const requests = defaultDebuggerManager.networkEvents(tabId);
       return ok(`Collected ${requests.length} network request(s).`, { tabId, requests });
     }
@@ -205,7 +208,16 @@ export function bhCdpGetPerformanceMetrics(_rpc: ContentRpcClient): ToolSpec<z.i
       const tabId = await resolveTabId(args.tabId, ctx);
       if (!tabId) return unavailable('No active tab is available for performance metrics');
       const snapshot = await defaultDebuggerManager.performanceMetrics(tabId);
-      return ok(`Collected ${snapshot.metrics.length} performance metric(s).`, { snapshot });
+      const summary = {
+        metricCount: snapshot.metrics.length,
+        highlights: snapshot.metrics.slice(0, 10)
+      };
+      return ok(`Collected ${snapshot.metrics.length} performance metric(s).`, {
+        snapshot: {
+          ...snapshot,
+          summary
+        }
+      });
     }
   });
 }
@@ -227,7 +239,16 @@ export function bhCdpGetEventListeners(_rpc: ContentRpcClient): ToolSpec<z.infer
       const tabId = await resolveTabId(args.tabId, ctx);
       if (!tabId) return unavailable('No active tab is available for event listeners');
       const listeners = await defaultDebuggerManager.eventListeners(tabId, args.objectExpression);
-      return ok(`Collected ${listeners.length} event listener(s).`, { tabId, listeners });
+      const boundedListeners = listeners.slice(0, MAX_EVENT_LISTENERS_RETURNED);
+      return ok(`Collected ${listeners.length} event listener(s).`, {
+        tabId,
+        listeners: boundedListeners,
+        summary: {
+          listenerCount: listeners.length,
+          returnedCount: boundedListeners.length,
+          eventTypes: [...new Set(listeners.map((listener) => listener.type))].slice(0, 20)
+        }
+      });
     }
   });
 }
@@ -317,4 +338,13 @@ function failed(code: string, summary: string, data: unknown): ToolResult {
 
 function unavailable(message: string): ToolResult {
   return failed(ERROR_CODES.RUNTIME_UNAVAILABLE, message, { reason: message });
+}
+
+function detachedSessionFailure(tabId: number): ToolResult | undefined {
+  const state = defaultDebuggerManager.sessionState(tabId);
+  if (!state || state.attached) {
+    return undefined;
+  }
+  const reason = state.detachReason ?? 'debugger_detached';
+  return failed(ERROR_CODES.RUNTIME_UNAVAILABLE, `Debugger detached: ${reason}`, { tabId, state });
 }

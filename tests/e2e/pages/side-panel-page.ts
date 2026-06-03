@@ -117,6 +117,7 @@ export class SidePanelPage {
     runId: string;
     tool: string;
     args: Record<string, unknown>;
+    source?: 'agent' | 'runtime' | 'user';
   }): Promise<unknown> {
     const page = this.pageObject;
     return await page.evaluate(async ({ runtimeMessages, ...toolInput }) => {

@@ -7,9 +7,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { AdvancedDebugDrawer } from '../../../../src/ui/components/advanced-debug-drawer';
 import { AgentMessageList } from '../../../../src/ui/components/agent-message-list';
 import { ChatPanel } from '../../../../src/ui/components/chat-panel';
+import { FormActionCard } from '../../../../src/ui/components/form-action-card';
 import { ModelConfigForm } from '../../../../src/ui/components/model-config-modal';
 import type { RunSnapshot } from '../../../../src/runtime/runtime-messages';
 import { I18nProvider } from '../../../../src/i18n/context';
+import { ERROR_CODES } from '../../../../src/shared/constants/error-codes';
+import { TRACE_EVENT_NAMES } from '../../../../src/shared/constants/event-names';
+import { TOOL_NAMES } from '../../../../src/shared/constants/tool-names';
 import type { StructuredPageData } from '../../../../src/shared/schemas/structured-page-data.schema';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -52,7 +56,7 @@ describe('agent side panel components', () => {
       expect(container.textContent).not.toContain('表单 / Form');
       expect(container.textContent).not.toContain('调试 / Debug');
     } finally {
-      root.unmount();
+      await unmountRoot(root);
       container.remove();
     }
   });
@@ -110,6 +114,96 @@ describe('agent side panel components', () => {
     expect(html).not.toContain('ref_submit');
   });
 
+  it('renders v1.1 page acceptance state signals in the page summary', () => {
+    expect(renderPageSummary(structuredDataWithoutForms())).toContain('未检测到表单');
+    expect(renderPageSummary(structuredDataWithValidForm())).toContain('表单可提交');
+    expect(renderPageSummary(structuredData())).toContain('校验异常 1');
+    expect(renderPageSummary(structuredDataWithDisabledSubmit())).toContain('提交禁用');
+
+    const healthHtml = renderPageSummary(structuredDataWithoutForms(), {
+      toolResult: {
+        tool: TOOL_NAMES.DEBUG_COLLECT_PAGE_HEALTH,
+        ok: true,
+        code: ERROR_CODES.OK,
+        summary: '检测到页面错误',
+        detail: {
+          data: {
+            consoleErrors: [{ message: 'boom', count: 1 }],
+            consoleMessages: [],
+            networkFailures: [{ url: 'https://api.example.com/[REDACTED_PATH]', method: 'GET', errorText: 'Failed' }],
+            hasForm: false,
+            pageStateSummary: '检测到页面错误'
+          }
+        }
+      }
+    });
+
+    expect(healthHtml).toContain('Console error 1');
+    expect(healthHtml).toContain('Network failure 1');
+  });
+
+  it('renders submit approval required, denied, and stale states distinctly', () => {
+    const approvalRequired = renderToString(
+      <I18nProvider>
+        <FormActionCard
+          toolResult={{
+            tool: TOOL_NAMES.FORM_SUBMIT_WITH_APPROVAL,
+            ok: false,
+            code: ERROR_CODES.APPROVAL_REQUIRED,
+            summary: 'Submit requires approval',
+            requiresApproval: true
+          }}
+        />
+      </I18nProvider>
+    );
+    expect(approvalRequired).toContain('提交需要确认');
+
+    const denied = renderToString(
+      <I18nProvider>
+        <FormActionCard
+          toolResult={{
+            tool: TOOL_NAMES.FORM_SUBMIT_WITH_APPROVAL,
+            ok: false,
+            code: ERROR_CODES.USER_DENIED_APPROVAL,
+            summary: 'Denied'
+          }}
+          snapshot={{
+            runId: 'run_denied',
+            mode: 'form',
+            status: 'failed',
+            pendingApproval: {
+              id: 'approval_1',
+              runId: 'run_denied',
+              stepId: 'step_1',
+              tool: TOOL_NAMES.FORM_SUBMIT_WITH_APPROVAL,
+              argsPreview: {},
+              risk: 'high',
+              reason: 'Confirm submit',
+              status: 'denied',
+              createdAt: 1,
+              decidedAt: 2
+            }
+          }}
+        />
+      </I18nProvider>
+    );
+    expect(denied).toContain('提交已拒绝');
+
+    const stale = renderToString(
+      <I18nProvider>
+        <FormActionCard
+          toolResult={{
+            tool: TOOL_NAMES.FORM_SUBMIT_WITH_APPROVAL,
+            ok: false,
+            code: ERROR_CODES.APPROVAL_CONTEXT_STALE,
+            summary: 'Approval context changed'
+          }}
+        />
+      </I18nProvider>
+    );
+    expect(stale).toContain('提交上下文已变化');
+  });
+
   it('renders diagnosis evidence and confidence without exposing raw ref ids', () => {
     const html = renderToString(
       <I18nProvider>
@@ -150,7 +244,7 @@ describe('agent side panel components', () => {
     expect(html).not.toContain('ref_email');
   });
 
-  it('sanitizes untrusted agent markdown before rendering HTML', () => {
+  it('sanitizes untrusted agent markdown before rendering HTML', async () => {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
@@ -188,7 +282,7 @@ describe('agent side panel components', () => {
     expect(links.map((link) => link.textContent)).toEqual(['bad', 'ok']);
     expect(links[0]?.hasAttribute('href')).toBe(false);
     expect(links[1]?.getAttribute('href')).toBe('https://example.com');
-    root.unmount();
+    await unmountRoot(root);
     container.remove();
   });
 
@@ -242,7 +336,7 @@ describe('agent side panel components', () => {
       expect(scrollValues.length).toBeGreaterThanOrEqual(2);
       expect(scrollValues.at(-1)).toBe(320);
     } finally {
-      root.unmount();
+      await unmountRoot(root);
       container.remove();
       restoreDescriptor(HTMLElement.prototype, 'scrollTop', scrollTopDescriptor);
       restoreDescriptor(HTMLElement.prototype, 'scrollHeight', scrollHeightDescriptor);
@@ -289,7 +383,7 @@ describe('agent side panel components', () => {
     expect(container.textContent).toContain('ref_submit');
     expect(container.textContent).toContain('邮箱');
     expect(container.textContent).toContain('浅层 Debug / CDP 不可用');
-    root.unmount();
+    await unmountRoot(root);
     container.remove();
   });
 
@@ -342,8 +436,130 @@ describe('agent side panel components', () => {
     expect(container.textContent).toContain('按钮被浮层遮挡');
     expect(container.textContent).toContain('cookie banner overlaps button');
     expect(container.textContent).toContain('1280 x 720');
-    root.unmount();
+    await unmountRoot(root);
     container.remove();
+  });
+
+  it('renders CDP product states without leaking sensitive request data', async () => {
+    expect(await renderDeepInspectText({ runId: 'run_cdp_detached', mode: 'debug', status: 'observed' }))
+      .toContain('Debugger 未连接，请先连接后再收集请求详情。');
+
+    expect(await renderDeepInspectText({
+      runId: 'run_cdp_attaching',
+      mode: 'debug',
+      status: 'executing_tool',
+      trace: [
+        {
+          runId: 'run_cdp_attaching',
+          type: TRACE_EVENT_NAMES.TOOL_STARTED,
+          payload: { tool: TOOL_NAMES.CDP_ATTACH, argsPreview: {} }
+        }
+      ]
+    })).toContain('Debugger 正在连接，请稍候。');
+
+    expect(await renderDeepInspectText({
+      runId: 'run_cdp_failed',
+      mode: 'debug',
+      status: 'failed',
+      toolResult: {
+        tool: TOOL_NAMES.CDP_ATTACH,
+        ok: false,
+        code: ERROR_CODES.RUNTIME_UNAVAILABLE,
+        summary: 'Debugger attach failed',
+        detail: {
+          data: {
+            state: {
+              tabId: 42,
+              attached: false,
+              protocolVersion: '1.3',
+              reason: 'permission denied'
+            }
+          }
+        }
+      }
+    })).toContain('permission denied');
+
+    const attachedNoRequests = await renderDeepInspectText({
+      runId: 'run_cdp_empty',
+      mode: 'debug',
+      status: 'observed',
+      toolResult: {
+        tool: TOOL_NAMES.CDP_GET_NETWORK_EVENTS,
+        ok: true,
+        code: ERROR_CODES.OK,
+        summary: 'Collected 0 network request(s).',
+        detail: { data: { tabId: 42, requests: [] } }
+      }
+    });
+    expect(attachedNoRequests).toContain('Debugger 已连接，深度网络检查已启用。');
+    expect(attachedNoRequests).toContain('尚未捕获请求，可刷新页面后重试。');
+
+    const selectedRequest = await renderDeepInspectText({
+      runId: 'run_cdp_detail',
+      mode: 'debug',
+      status: 'observed',
+      toolResult: {
+        tool: TOOL_NAMES.CDP_GET_REQUEST_DETAIL,
+        ok: true,
+        code: ERROR_CODES.OK,
+        summary: 'Request detail loaded.',
+        detail: {
+          data: {
+            detail: {
+              requestId: 'req_1',
+              url: 'https://api.example.test/[REDACTED_PATH]',
+              method: 'POST',
+              status: 200,
+              failed: false,
+              requestHeadersPreview: {
+                Authorization: '[REDACTED]',
+                Cookie: '[REDACTED]',
+                Accept: 'application/json'
+              },
+              responseHeadersPreview: {
+                'Set-Cookie': '[REDACTED]',
+                'Content-Type': 'application/json'
+              },
+              responseBodyAvailable: false,
+              responseBodyPreviewAvailable: false,
+              responseBodyUnavailableReason: 'sensitive_response_body',
+              responseBodyPreview: '[REDACTED]'
+            }
+          }
+        }
+      }
+    });
+    expect(selectedRequest).toContain('POST 200');
+    expect(selectedRequest).toContain('req_1');
+    expect(selectedRequest).toContain('Authorization');
+    expect(selectedRequest).toContain('[REDACTED]');
+    expect(selectedRequest).toContain('sensitive_response_body');
+    expect(selectedRequest).not.toContain('Bearer secret-token');
+    expect(selectedRequest).not.toContain('session=secret-cookie');
+    expect(selectedRequest).not.toContain('super-secret-response');
+
+    const externallyDetached = await renderDeepInspectText({
+      runId: 'run_cdp_external_detach',
+      mode: 'debug',
+      status: 'observed',
+      toolResult: {
+        tool: TOOL_NAMES.CDP_GET_NETWORK_EVENTS,
+        ok: false,
+        code: ERROR_CODES.RUNTIME_UNAVAILABLE,
+        summary: 'Debugger detached externally.',
+        detail: {
+          data: {
+            state: {
+              tabId: 42,
+              attached: false,
+              protocolVersion: '1.3',
+              detachReason: 'target closed'
+            }
+          }
+        }
+      }
+    });
+    expect(externallyDetached).toContain('Debugger 已从外部断开：target closed');
   });
 
   it('renders sanitized screenshot metadata in the Vision tab without requiring raw image data', async () => {
@@ -397,7 +613,7 @@ describe('agent side panel components', () => {
     expect(container.textContent).toContain('full_page');
     expect(container.textContent).toContain('1440 x 2400');
     expect(container.innerHTML).not.toContain('data:image');
-    root.unmount();
+    await unmountRoot(root);
     container.remove();
   });
 
@@ -467,7 +683,7 @@ describe('agent side panel components', () => {
       apiKey: 'sk-new-secret',
       streamingEnabled: true
     });
-    root.unmount();
+    await unmountRoot(root);
     container.remove();
   });
 
@@ -515,7 +731,7 @@ describe('agent side panel components', () => {
       baseUrl: 'http://127.0.0.1:8787/v1',
       allowLocalProviderEndpoints: true
     }));
-    root.unmount();
+    await unmountRoot(root);
     container.remove();
   });
 });
@@ -574,6 +790,55 @@ function snapshotWithStreamingMessage(content: string, updatedAt: number): RunSn
       }
     ]
   };
+}
+
+function renderPageSummary(data: StructuredPageData, snapshot: Partial<RunSnapshot> = {}): string {
+  return renderToString(
+    <I18nProvider>
+      <AgentMessageList
+        snapshot={{
+          runId: 'run_page_states',
+          mode: 'ask',
+          status: 'observed',
+          structuredPageData: data,
+          ...snapshot
+        }}
+      />
+    </I18nProvider>
+  );
+}
+
+async function renderDeepInspectText(snapshot: RunSnapshot): Promise<string> {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  let text: string;
+  try {
+    await act(async () => {
+      root.render(<I18nProvider><AdvancedDebugDrawer snapshot={snapshot} structuredPageData={structuredData()} /></I18nProvider>);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      openDebugDrawer(container);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      button('Deep Inspect', container).click();
+      await Promise.resolve();
+    });
+    text = container.textContent ?? '';
+  } finally {
+    await unmountRoot(root);
+    container.remove();
+  }
+  return text;
+}
+
+async function unmountRoot(root: ReturnType<typeof createRoot>): Promise<void> {
+  await act(async () => {
+    root.unmount();
+    await Promise.resolve();
+  });
 }
 
 function restoreDescriptor(
@@ -664,4 +929,48 @@ function structuredData(): StructuredPageData {
       warnings: []
     }
   };
+}
+
+function structuredDataWithoutForms(): StructuredPageData {
+  const data = structuredData();
+  data.forms = {
+    ...data.forms,
+    summary: '未检测到表单',
+    count: 0,
+    items: []
+  };
+  return data;
+}
+
+function structuredDataWithValidForm(): StructuredPageData {
+  const data = structuredData();
+  data.forms = {
+    ...data.forms,
+    summary: '检测到 1 个可提交字段',
+    items: data.forms.items.map((field) => ({
+      ...field,
+      valuePreview: 'counter@example.com',
+      validation: { valid: true }
+    }))
+  };
+  return data;
+}
+
+function structuredDataWithDisabledSubmit(): StructuredPageData {
+  const data = structuredDataWithValidForm();
+  data.forms = {
+    ...data.forms,
+    items: data.forms.items.map((field) => ({
+      ...field,
+      submit: {
+        refId: 'ref_submit',
+        disabled: true,
+        reason: {
+          kind: 'confirmed',
+          message: '缺少同意条款'
+        }
+      }
+    }))
+  };
+  return data;
 }

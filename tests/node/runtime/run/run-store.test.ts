@@ -299,6 +299,7 @@ describe('RunStore', () => {
 
     store.setSnapshot(runId, {
       runId,
+      targetTabId: 42,
       mode: 'form',
       status: 'waiting_for_approval',
       observation: {
@@ -329,7 +330,10 @@ describe('RunStore', () => {
       runId,
       status: 'waiting_for_approval',
       domain: 'app.example.com',
-      pendingApprovalId: 'req_1'
+      targetTabId: 42,
+      pendingApprovalId: 'req_1',
+      pendingApprovalTool: 'test_tool',
+      pendingApprovalSummary: 'Needs approval'
     });
 
     const restoredStore = new RunStore({ sessionPersistence: persistence });
@@ -353,6 +357,119 @@ describe('RunStore', () => {
     const restoredStore = new RunStore({ sessionPersistence: persistence });
     expect(restoredStore.getPendingApprovalAction('req_1')).toBeUndefined();
     vi.useRealTimers();
+  });
+
+  it('expires in-memory pending approval actions by the same TTL as restored actions', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1000);
+    const store = new RunStore();
+    const action = {
+      runId: store.createRunId(),
+      tool: 'test_tool',
+      args: {}
+    };
+
+    store.setPendingApprovalAction('req_1', action);
+    expect(store.getPendingApprovalAction('req_1')).toBe(action);
+
+    vi.setSystemTime(1000 + 11 * 60 * 1000);
+    expect(store.getPendingApprovalAction('req_1')).toBeUndefined();
+    vi.useRealTimers();
+  });
+
+  it('does not restore a pending approval action from an older run generation', () => {
+    const persistence = new InMemoryRunSessionPersistence();
+    persistence.persistPendingAction({
+      requestId: 'req_1',
+      runId: 'run_1',
+      generationId: 'run_1:old-generation',
+      action: {
+        runId: 'run_1',
+        tool: 'test_tool',
+        args: {}
+      },
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 10 * 60 * 1000
+    });
+    const store = new RunStore({ sessionPersistence: persistence });
+
+    expect(store.createRunId()).toBe('run_1');
+    expect(store.getPendingApprovalAction('req_1')).toBeUndefined();
+    expect(persistence.readPendingAction('req_1', Date.now())).toBeUndefined();
+  });
+
+  it('recovers a persisted pending approval snapshot only with matching tab and domain evidence', () => {
+    const persistence = new InMemoryRunSessionPersistence();
+    const store = new RunStore({ sessionPersistence: persistence });
+    const runId = store.createRunId();
+    const generationId = store.getRunGenerationId(runId)!;
+    persistence.persistSnapshotSummary({
+      runId,
+      generationId,
+      status: 'waiting_for_approval',
+      mode: 'form',
+      targetTabId: 42,
+      domain: 'app.example.com',
+      pendingApprovalId: 'req_1',
+      pendingApprovalTool: 'test_tool',
+      pendingApprovalSummary: 'Needs approval',
+      updatedAt: 1000
+    });
+    persistence.persistPendingAction({
+      requestId: 'req_1',
+      runId,
+      generationId,
+      action: {
+        runId,
+        tool: 'test_tool',
+        args: {
+          frameId: 7
+        }
+      },
+      createdAt: 1000,
+      expiresAt: Date.now() + 10 * 60 * 1000
+    });
+    persistence.persistApprovalRequest({
+      requestId: 'req_1',
+      runId,
+      generationId,
+      request: {
+        id: 'req_1',
+        runId,
+        stepId: 'step_1',
+        tool: 'test_tool',
+        argsPreview: {},
+        risk: 'high',
+        reason: 'Needs approval',
+        status: 'pending',
+        createdAt: 1000
+      },
+      createdAt: 1000,
+      expiresAt: Date.now() + 10 * 60 * 1000
+    });
+
+    const recovered = store.recoverPendingApprovalSession({
+      runId,
+      requestId: 'req_1',
+      currentTabId: 42,
+      currentDomain: 'app.example.com',
+      currentFrameId: 7
+    });
+
+    expect(recovered.status).toBe('recovering');
+    expect(store.getSnapshot(runId).status).toBe('recovering');
+    expect(store.getSnapshot(runId).pendingApproval?.id).toBe('req_1');
+
+    const failed = store.recoverPendingApprovalSession({
+      runId,
+      requestId: 'req_1',
+      currentTabId: 99,
+      currentDomain: 'evil.example',
+      currentFrameId: 8
+    });
+
+    expect(failed.status).toBe('error');
+    expect(failed.error?.message).toContain('tab mismatch');
   });
 
   it('isolates data between different runs', () => {

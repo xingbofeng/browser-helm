@@ -1,4 +1,3 @@
-import { DecisionParser } from '../parser/decision-parser';
 import type { ModelClient } from '../model/model-client';
 import type { SettingsStore } from '../../storage/interfaces/settings-store';
 import type { ExecuteToolInput, RunSnapshot, RuntimeEvent } from '../../runtime/runtime-messages';
@@ -8,7 +7,6 @@ import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { TRACE_EVENT_NAMES } from '../../shared/constants/event-names';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import type { AgentDecision } from '../../shared/schemas/agent-decision.schema';
-import type { ModelMessage } from '../../shared/schemas/model-message.schema';
 import type { RunMode } from '../../shared/schemas/tool.schema';
 import type { AgentMessage } from '../../shared/schemas/agent-message.schema';
 import { streamingStateFromTrace } from '../../background/runtime/run/streaming-state';
@@ -17,36 +15,29 @@ import {
   sanitizeSensitiveDetail
 } from '../../shared/redaction';
 import type { Locale } from '../../i18n/types';
-import { t, tZh } from '../../i18n/t';
+import { t } from '../../i18n/t';
 import { modeSwitchRequestMessage } from '../../background/runtime/run/mode-switch-message';
 import type { ToolPromptContract } from '../../tools/core/tool-router';
-import { buildMessages, getPromptToolContracts } from './prompt-builder';
-import { selectToolsForRun } from '../modes/tool-selector';
-import { resolveRuntimeCapabilities } from '../../runtime/capabilities/runtime-capabilities';
+import { getPromptToolContracts } from './prompt-builder';
 import {
   augmentRuntimeToolDecision,
-  normalizeModelDecision,
   runtimeFormCandidates,
   validateRuntimeToolDecision
 } from './form-fill-augmenter';
 import {
-  validateModelDecision,
-  validateRepairDecision,
   isExistingValueOverwriteError,
   existingValueFinishMessage,
   buildRepairMessages
 } from './decision-validator';
 import type { ModelDecisionError } from './decision-validator';
-import {
-  applyModelTaskStateUpdate,
-  syncTaskStateFromToolResult
-} from './runtime-task-state';
+import { ModelGateway } from './model-gateway';
+import { ContextAssembler } from './context-assembler';
+import { TaskStateReducer } from './task-state-reducer';
+import { TerminationEvaluator } from './termination-evaluator';
+import { DecisionPipeline } from './decision-pipeline';
 
 // ── Runtime constants ──
 const MAX_REPAIR_ATTEMPTS = 1;
-const MODEL_DECISION_TIMEOUT_MS = 10 * 60 * 1000;
-const MODEL_DECISION_TIMEOUT_MESSAGE = tZh('runtime.error.modelTimeout');
-const MODEL_TIMEOUT = Symbol('model_timeout');
 
 // ── Types ──
 
@@ -76,14 +67,28 @@ type AgentLoopInput = {
 // ── Class ──
 
 export class AgentLoop {
-  private readonly parser = new DecisionParser();
-  private readonly abortControllers = new Map<string, AbortController>();
+  private readonly modelGateway: ModelGateway;
+  private readonly contextAssembler: ContextAssembler;
+  private readonly taskStateReducer = new TaskStateReducer();
+  private readonly terminationEvaluator = new TerminationEvaluator();
+  private readonly decisionPipeline = new DecisionPipeline();
 
-  constructor(private readonly deps: AgentLoopDeps) {}
+  constructor(private readonly deps: AgentLoopDeps) {
+    this.modelGateway = new ModelGateway({
+      appendTrace: deps.appendTrace,
+      updateStreaming: (runId, record) => {
+        this.updateStreaming(runId, record);
+      }
+    });
+    this.contextAssembler = new ContextAssembler({
+      getDomainPolicy: deps.settingsStore.getDomainPolicy
+        ? async () => await deps.settingsStore.getDomainPolicy?.()
+        : undefined
+    });
+  }
 
   abortRun(runId: string): void {
-    this.abortControllers.get(runId)?.abort();
-    this.abortControllers.delete(runId);
+    this.modelGateway.abortRun(runId);
   }
 
   async run(input: AgentLoopInput): Promise<RunSnapshot> {
@@ -120,7 +125,6 @@ export class AgentLoop {
       input.record.mode
     );
     const locale = input.record.locale ?? 'zh';
-    const hasDomainPolicyApi = typeof this.deps.settingsStore.getDomainPolicy === 'function';
 
     for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
       const current = this.deps.getSnapshot(input.runId);
@@ -140,66 +144,18 @@ export class AgentLoop {
         trace: input.record.trace
       });
 
-      const domainPolicy = await this.deps.settingsStore.getDomainPolicy?.();
-      const selectedTools = selectToolsForRun({
-        mode: input.record.mode,
-        task: input.record.task,
-        tools: allToolsContracts,
-        capabilities: current.capabilities ?? resolveRuntimeCapabilities({
-          hasActiveTab: Boolean(input.record.tabId),
-          hasDebuggerPermission: true,
-          hasClipboardPermission: true,
-          hasDownloadsPermission: true,
-          shallowDebugAvailable: true
-        }),
-        ...(hasDomainPolicyApi
-          ? {
-              permissions: {
-                allowedDomains: domainPolicy?.enabledDomains ?? [],
-                requireExplicitDomainConsent: true
-              }
-            }
-          : {}),
-        pendingApproval: current.pendingApproval !== undefined,
-        ...(current.observation?.currentDomain
-          ? { pageDomain: current.observation.currentDomain }
-          : {}),
-        ...(current.error?.code ? { lastError: { code: current.error.code } } : {}),
-        ...(current.structuredPageData?.forms
-          ? { pageState: { hasForm: current.structuredPageData.forms.status !== 'empty' } }
-          : {})
-      });
-      const selectedToolNames = new Set(selectedTools.visibleTools);
-      const toolsContracts = allToolsContracts.filter((tool) => selectedToolNames.has(tool.name));
-
-      const selectionPayload: {
-        stepIndex: number;
-        toolCount: number;
-        toolNames: string[];
-        hiddenToolCount?: number;
-        limitations?: string[];
-      } = {
+      const turnContext = await this.contextAssembler.assembleTurn({
+        record: input.record,
+        snapshot: current,
+        tabId: input.record.tabId,
         stepIndex,
-        toolCount: toolsContracts.length,
-        toolNames: toolsContracts.map((t) => t.name)
-      };
-      if (selectedTools.limitations.length > 0) {
-        selectionPayload.hiddenToolCount = selectedTools.hiddenTools.length;
-        selectionPayload.limitations = selectedTools.limitations;
-      }
+        allToolsContracts
+      });
 
       this.deps.appendTrace(input.record, {
         runId: input.runId,
         type: TRACE_EVENT_NAMES.TOOLS_SELECTED,
-        payload: selectionPayload
-      });
-
-      const messages = buildMessages({
-        record: input.record,
-        snapshot: current,
-        toolsContracts,
-        locale,
-        domainPolicy
+        payload: turnContext.selectionPayload
       });
 
       this.deps.appendTrace(input.record, {
@@ -207,93 +163,37 @@ export class AgentLoop {
         type: TRACE_EVENT_NAMES.CONTEXT_BUILT,
         payload: {
           stepIndex,
-          messageCount: messages.length,
-          estimatedChars: JSON.stringify(messages).length
+          messageCount: turnContext.messages.length,
+          estimatedChars: JSON.stringify(turnContext.messages).length
         }
       });
 
       // Attempt model decision; retry once on parse failure
       let repairCount = 0;
       let lastRepairError: ModelDecisionError | undefined;
-      let output = await this.requestModelDecision({
+      let output = await this.modelGateway.requestDecision({
         client,
         settings,
-        loopInput: input,
+        runId: input.runId,
+        record: input.record,
         stepIndex,
-        messages
+        messages: turnContext.messages
       });
       if (!output) {
         return this.deps.getSnapshot(input.runId);
       }
 
       while (repairCount <= MAX_REPAIR_ATTEMPTS) {
-        const parsed = this.parser.parse(output.text);
-        if (parsed.ok) {
-          const decision = normalizeModelDecision(parsed.decision);
-          const decisionError = validateRepairDecision(decision, lastRepairError) ?? validateModelDecision(
-            decision,
-            toolsContracts,
-            this.deps.getSnapshot(input.runId),
-            input.record
-          );
-          if (decisionError) {
-            this.deps.appendTrace(input.record, {
-              runId: input.runId,
-              type: TRACE_EVENT_NAMES.DECISION_PARSE_FAILED,
-              payload: {
-                stepIndex,
-                repairAttempt: repairCount,
-                parseError: decisionError
-              }
-            });
-
-            if (repairCount >= MAX_REPAIR_ATTEMPTS) {
-              if (isExistingValueOverwriteError(decisionError)) {
-                const handled = await this.handleDecision(input, {
-                  type: 'finish',
-                  message: existingValueFinishMessage(locale)
-                });
-                return handled.snapshot;
-              }
-              if (
-                decisionError.kind === 'repeated_form_fill' &&
-                !taskRequestsSubmit(input.record.task)
-              ) {
-                const handled = await this.handleDecision(input, {
-                  type: 'finish',
-                  message: repeatedFormFillFinishMessage(locale)
-                });
-                return handled.snapshot;
-              }
-              const failed: RunSnapshot = {
-                ...this.deps.getSnapshot(input.runId),
-                status: 'failed',
-                error: {
-                  code: decisionError.code,
-                  message: decisionError.message
-                },
-                trace: input.record.trace
-              };
-              this.setSnapshot(input.runId, this.deps.withRunMessages(failed, input.record));
-              return failed;
-            }
-
-            repairCount += 1;
-            lastRepairError = decisionError;
-            output = await this.requestModelDecision({
-              client,
-              settings,
-              loopInput: input,
-              stepIndex,
-              messages: buildRepairMessages(messages, decisionError, toolsContracts)
-            }) ?? { text: '' };
-            if (!output) {
-              return this.deps.getSnapshot(input.runId);
-            }
-            continue;
-          }
-
-          applyModelTaskStateUpdate(input.record, decision);
+        const evaluatedDecision = this.decisionPipeline.evaluate({
+          outputText: output.text,
+          toolsContracts: turnContext.toolsContracts,
+          snapshot: this.deps.getSnapshot(input.runId),
+          record: input.record,
+          lastRepairError
+        });
+        if (evaluatedDecision.ok) {
+          const decision = evaluatedDecision.decision;
+          this.taskStateReducer.applyModelDecision(input.record, decision);
           this.deps.appendTrace(input.record, {
             runId: input.runId,
             type: TRACE_EVENT_NAMES.MODEL_DECISION,
@@ -309,13 +209,73 @@ export class AgentLoop {
           break; // proceed to next turn
         }
 
+        if (evaluatedDecision.parsed) {
+          const decisionError = evaluatedDecision.error;
+          this.deps.appendTrace(input.record, {
+            runId: input.runId,
+            type: TRACE_EVENT_NAMES.DECISION_PARSE_FAILED,
+            payload: {
+              stepIndex,
+              repairAttempt: repairCount,
+              parseError: decisionError
+            }
+          });
+
+          if (repairCount >= MAX_REPAIR_ATTEMPTS) {
+            if (isExistingValueOverwriteError(decisionError)) {
+              const handled = await this.handleDecision(input, {
+                type: 'finish',
+                message: existingValueFinishMessage(locale)
+              });
+              return handled.snapshot;
+            }
+            if (
+              decisionError.kind === 'repeated_form_fill' &&
+              !taskRequestsSubmit(input.record.task)
+            ) {
+              const handled = await this.handleDecision(input, {
+                type: 'finish',
+                message: repeatedFormFillFinishMessage(locale)
+              });
+              return handled.snapshot;
+            }
+            const failed: RunSnapshot = {
+              ...this.deps.getSnapshot(input.runId),
+              status: 'failed',
+              error: {
+                code: decisionError.code,
+                message: decisionError.message
+              },
+              trace: input.record.trace
+            };
+            this.setSnapshot(input.runId, this.deps.withRunMessages(failed, input.record));
+            return failed;
+          }
+
+          repairCount += 1;
+          lastRepairError = decisionError;
+          output = await this.modelGateway.requestDecision({
+            client,
+            settings,
+            runId: input.runId,
+            record: input.record,
+            stepIndex,
+            messages: buildRepairMessages(turnContext.messages, decisionError, turnContext.toolsContracts)
+          }) ?? { text: '' };
+          if (!output) {
+            return this.deps.getSnapshot(input.runId);
+          }
+          continue;
+        }
+
+        const parseError = evaluatedDecision.error;
         this.deps.appendTrace(input.record, {
           runId: input.runId,
           type: TRACE_EVENT_NAMES.DECISION_PARSE_FAILED,
           payload: {
             stepIndex,
             repairAttempt: repairCount,
-            parseError: parsed.error
+            parseError
           }
         });
 
@@ -332,8 +292,8 @@ export class AgentLoop {
             ...this.deps.getSnapshot(input.runId),
             status: 'failed',
             error: {
-              code: parsed.error.code,
-              message: parsed.error.message
+              code: parseError.code,
+              message: parseError.message
             },
             trace: input.record.trace
           };
@@ -344,24 +304,24 @@ export class AgentLoop {
         // Repair: append corrective prompt and retry
         repairCount += 1;
         const parseFailureError: ModelDecisionError = {
-          code: parsed.error.code,
-          message: parsed.error.message,
+          code: parseError.code,
+          message: parseError.message,
           kind: 'parse_failure'
         };
         lastRepairError = parseFailureError;
-        output = await this.requestModelDecision({
+        output = await this.modelGateway.requestDecision({
           client,
           settings,
-          loopInput: input,
+          runId: input.runId,
+          record: input.record,
           stepIndex,
-          messages: buildRepairMessages(messages, parseFailureError, toolsContracts)
+          messages: buildRepairMessages(turnContext.messages, parseFailureError, turnContext.toolsContracts)
         }) ?? { text: '' };
         if (!output) {
           return this.deps.getSnapshot(input.runId);
         }
       }
 
-      this.abortControllers.delete(input.runId);
       this.updateStreaming(input.runId, input.record);
       this.deps.appendTrace(input.record, {
         runId: input.runId,
@@ -388,149 +348,6 @@ export class AgentLoop {
     this.deps.notifySnapshotUpdated(runId);
   }
 
-  private async requestModelDecision(ctx: {
-    client: ModelClient;
-    settings: { baseUrl: string; model: string; streamingEnabled?: boolean | undefined };
-    loopInput: AgentLoopInput;
-    stepIndex: number;
-    messages: ModelMessage[];
-  }): Promise<{ text: string } | undefined> {
-    const controller = new AbortController();
-    this.abortControllers.set(ctx.loopInput.runId, controller);
-    const common = {
-      runId: ctx.loopInput.runId,
-      stepIndex: ctx.stepIndex,
-      responseFormat: 'json' as const,
-      messages: ctx.messages,
-      signal: controller.signal
-    };
-    const provider = providerHost(ctx.settings.baseUrl);
-    const streamComplete = ctx.client.streamComplete?.bind(ctx.client);
-    const streamingEnabled = ctx.settings.streamingEnabled !== false && streamComplete !== undefined;
-    this.deps.appendTrace(ctx.loopInput.record, {
-      runId: ctx.loopInput.runId,
-      type: TRACE_EVENT_NAMES.MODEL_STREAM_STARTED,
-      payload: {
-        stepIndex: ctx.stepIndex,
-        provider,
-        model: ctx.settings.model,
-        streamingEnabled
-      }
-    });
-    this.updateStreaming(ctx.loopInput.runId, ctx.loopInput.record);
-
-    if (streamingEnabled && streamComplete) {
-      let charCount = 0;
-      try {
-        const output = await withModelDecisionTimeout(
-          streamComplete(common, {
-            onDelta: (_delta) => {
-              charCount += typeof _delta === 'string' ? _delta.length : 0;
-              // Only record charCount in trace, never raw delta content
-              this.deps.appendTrace(ctx.loopInput.record, {
-                runId: ctx.loopInput.runId,
-                type: TRACE_EVENT_NAMES.MODEL_STREAM_DELTA,
-                payload: {
-                  stepIndex: ctx.stepIndex,
-                  charCount
-                }
-              });
-              this.updateStreaming(ctx.loopInput.runId, ctx.loopInput.record);
-            }
-          }),
-          controller
-        );
-        if (output === MODEL_TIMEOUT) {
-          return this.modelTimeoutDecision(ctx, charCount);
-        }
-        this.deps.appendTrace(ctx.loopInput.record, {
-          runId: ctx.loopInput.runId,
-          type: TRACE_EVENT_NAMES.MODEL_STREAM_FINISHED,
-          payload: {
-            stepIndex: ctx.stepIndex,
-            model: ctx.settings.model,
-            charCount,
-            finalPreview: redactModelOutputText(output.text)
-          }
-        });
-        return output;
-      } catch (error) {
-        if (controller.signal.aborted) {
-          return undefined;
-        }
-        const message = maskSecret(error instanceof Error ? error.message : String(error));
-        this.deps.appendTrace(ctx.loopInput.record, {
-          runId: ctx.loopInput.runId,
-          type: TRACE_EVENT_NAMES.MODEL_STREAM_FAILED,
-          payload: {
-            stepIndex: ctx.stepIndex,
-            charCount,
-            summary: message
-          }
-        });
-        this.deps.appendTrace(ctx.loopInput.record, {
-          runId: ctx.loopInput.runId,
-          type: TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_STARTED,
-          payload: {
-            stepIndex: ctx.stepIndex,
-            reason: `stream_failed: ${message}`
-          }
-        });
-        this.updateStreaming(ctx.loopInput.runId, ctx.loopInput.record);
-      }
-    } else {
-      this.deps.appendTrace(ctx.loopInput.record, {
-        runId: ctx.loopInput.runId,
-        type: TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_STARTED,
-        payload: {
-          stepIndex: ctx.stepIndex,
-          reason: 'streaming_disabled'
-        }
-      });
-      this.updateStreaming(ctx.loopInput.runId, ctx.loopInput.record);
-    }
-
-    const output = await withModelDecisionTimeout(ctx.client.complete(common), controller);
-    if (output === MODEL_TIMEOUT) {
-      return this.modelTimeoutDecision(ctx, 0);
-    }
-    this.deps.appendTrace(ctx.loopInput.record, {
-      runId: ctx.loopInput.runId,
-      type: TRACE_EVENT_NAMES.MODEL_STREAM_FALLBACK_FINISHED,
-      payload: {
-        stepIndex: ctx.stepIndex,
-        model: ctx.settings.model,
-        finalPreview: redactModelOutputText(output.text)
-      }
-    });
-    return output;
-  }
-
-  private modelTimeoutDecision(ctx: {
-    settings: { model: string };
-    loopInput: AgentLoopInput;
-    stepIndex: number;
-  }, charCount: number): { text: string } {
-    this.deps.appendTrace(ctx.loopInput.record, {
-      runId: ctx.loopInput.runId,
-      type: TRACE_EVENT_NAMES.MODEL_STREAM_FAILED,
-      payload: {
-        stepIndex: ctx.stepIndex,
-        model: ctx.settings.model,
-        charCount,
-        summary: `timeout after ${MODEL_DECISION_TIMEOUT_MS}ms`
-      }
-    });
-    this.updateStreaming(ctx.loopInput.runId, ctx.loopInput.record);
-    return {
-      text: JSON.stringify({
-        type: 'fail',
-        code: ERROR_CODES.MODEL_REQUEST_FAILED,
-        message: MODEL_DECISION_TIMEOUT_MESSAGE
-      })
-    };
-  }
-
   private updateStreaming(runId: string, record: RunRecord): void {
     const current = this.deps.getSnapshot(runId);
     this.setSnapshot(runId, {
@@ -546,22 +363,22 @@ export class AgentLoop {
   ): Promise<{ done: boolean; snapshot: RunSnapshot }> {
     if (decision.type === 'finish') {
       const current = this.deps.getSnapshot(input.runId);
-      const finishCriteria = evaluateFinishCriteria(
-        current.goal,
-        input.record.taskState,
-        explicitSuccessCriteria(input.record.trace)
-      );
-      if (finishCriteria.unmetCriteria.length > 0) {
+      const termination = this.terminationEvaluator.evaluateFinish({
+        goal: current.goal,
+        taskState: input.record.taskState,
+        trace: input.record.trace
+      });
+      if (termination.unmetCriteria.length > 0) {
         const snapshot: RunSnapshot = {
           ...current,
           status: 'waiting_for_user',
           taskState: input.record.taskState,
-          ...(finishCriteria.goal ? { goal: finishCriteria.goal } : {}),
+          ...(termination.goal ? { goal: termination.goal } : {}),
           messages: upsertAgentMessage(
             current.messages,
             askUserMessage(
               input.runId,
-              unmetCriteriaQuestion(finishCriteria.unmetCriteria, input.record.locale ?? 'zh'),
+              unmetCriteriaQuestion(termination.unmetCriteria, input.record.locale ?? 'zh'),
               input.record.locale ?? 'zh'
             )
           ),
@@ -573,7 +390,37 @@ export class AgentLoop {
           payload: {
             status: 'waiting_for_user',
             reason: 'success_criteria_unmet',
-            unmetCriteria: finishCriteria.unmetCriteria
+            unmetCriteria: termination.unmetCriteria
+          }
+        });
+        this.setSnapshot(input.runId, this.deps.withRunMessages(snapshot, input.record));
+        return { done: true, snapshot };
+      }
+      const completionEvidence = termination.completionEvidence;
+      if (!completionEvidence.ok) {
+        const snapshot: RunSnapshot = {
+          ...current,
+          status: 'waiting_for_user',
+          taskState: input.record.taskState,
+          ...(termination.goal ? { goal: termination.goal } : {}),
+          messages: upsertAgentMessage(
+            current.messages,
+            askUserMessage(
+              input.runId,
+              taskVerificationQuestion(completionEvidence.reason, input.record.locale ?? 'zh'),
+              input.record.locale ?? 'zh'
+            )
+          ),
+          trace: input.record.trace
+        };
+        this.deps.appendTrace(input.record, {
+          runId: input.runId,
+          type: TRACE_EVENT_NAMES.STATE_CHANGED,
+          payload: {
+            status: 'waiting_for_user',
+            reason: 'task_verification_unmet',
+            verifierReason: completionEvidence.reason,
+            tool: completionEvidence.tool
           }
         });
         this.setSnapshot(input.runId, this.deps.withRunMessages(snapshot, input.record));
@@ -591,7 +438,7 @@ export class AgentLoop {
         ...current,
         status: 'finished',
         taskState: input.record.taskState,
-        ...(finishCriteria.goal ? { goal: finishCriteria.goal } : {}),
+        ...(termination.goal ? { goal: termination.goal } : {}),
         messages: upsertFinalMessage(
           current.messages,
           input.runId,
@@ -700,10 +547,11 @@ export class AgentLoop {
     await this.deps.executeTool({
       runId: input.runId,
       tool: executableDecision.tool,
-      args: executableDecision.args
+      args: executableDecision.args,
+      source: 'agent'
     });
     const snapshot = this.deps.getSnapshot(input.runId);
-    syncTaskStateFromToolResult(input.record, snapshot.toolResult);
+    this.taskStateReducer.syncFromToolResult(input.record, snapshot.toolResult);
     const snapshotWithTaskState: RunSnapshot = {
       ...snapshot,
       taskState: input.record.taskState
@@ -795,72 +643,19 @@ function askUserMessage(
   };
 }
 
-function evaluateFinishCriteria(
-  goal: RunSnapshot['goal'],
-  taskState: RunSnapshot['taskState'],
-  explicitCriteria: string[] | undefined
-): {
-  goal: RunSnapshot['goal'];
-  unmetCriteria: string[];
-} {
-  if (!explicitCriteria?.length) {
-    return { goal, unmetCriteria: [] };
-  }
-  if (!goal) {
-    return { goal, unmetCriteria: explicitCriteria };
-  }
-  const criteria = explicitCriteria;
-  const completed = [
-    ...goal.satisfiedCriteria,
-    ...(taskState?.completed ?? [])
-  ];
-  const satisfiedCriteria = criteria.filter((criterion) =>
-    completed.some((item) => textMatchesCriterion(item, criterion))
-  );
-  const unmetCriteria = criteria.filter((criterion) =>
-    !satisfiedCriteria.some((satisfied) => textMatchesCriterion(satisfied, criterion))
-  );
-  return {
-    goal: {
-      ...goal,
-      satisfiedCriteria,
-      unsatisfiedCriteria: unmetCriteria
-    },
-    unmetCriteria
-  };
-}
-
-function explicitSuccessCriteria(trace: RunRecord['trace']): string[] | undefined {
-  const started = trace.find((event) => event.type === TRACE_EVENT_NAMES.RUN_STARTED);
-  if (!started || typeof started.payload !== 'object' || started.payload === null) {
-    return undefined;
-  }
-  const value = started.payload.successCriteria;
-  return Array.isArray(value)
-    ? value.filter((criterion): criterion is string =>
-        typeof criterion === 'string' && criterion.trim().length > 0
-      )
-    : undefined;
-}
-
-function textMatchesCriterion(left: string, right: string): boolean {
-  const normalizedLeft = normalizeCriterionText(left);
-  const normalizedRight = normalizeCriterionText(right);
-  return normalizedLeft === normalizedRight ||
-    normalizedLeft.includes(normalizedRight) ||
-    normalizedRight.includes(normalizedLeft);
-}
-
-function normalizeCriterionText(value: string): string {
-  return value.trim().replace(/\s+/gu, ' ').toLowerCase();
-}
-
 function unmetCriteriaQuestion(criteria: string[], locale: Locale): string {
   const list = criteria.map((criterion) => `- ${criterion}`).join('\n');
   if (locale === 'en') {
     return `Before finishing, these success criteria are still unverified:\n${list}\nPlease keep verifying them or explain why they cannot be satisfied.`;
   }
   return `完成前仍有未验证的验收条件：\n${list}\n请继续验证这些条件，或说明为什么无法满足。`;
+}
+
+function taskVerificationQuestion(reason: string, locale: Locale): string {
+  if (locale === 'en') {
+    return `Missing page change evidence before finishing: ${reason}. Please verify the page state or explain why completion cannot be proven.`;
+  }
+  return `完成前缺少页面变更证据：${reason}。请继续验证页面状态，或说明为什么无法证明已完成。`;
 }
 
 function explicitValueFieldLabels(
@@ -884,40 +679,6 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
-function providerHost(baseUrl: string): string {
-  try {
-    return new URL(baseUrl).host;
-  } catch {
-    return 'unknown';
-  }
-}
-
-function maskSecret(value: string): string {
-  return value.replace(/sk-[A-Za-z0-9_-]+/gu, '[MASKED]');
-}
-
-function withModelDecisionTimeout<T>(
-  promise: Promise<T>,
-  controller: AbortController
-): Promise<T | typeof MODEL_TIMEOUT> {
-  return new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      controller.abort();
-      resolve(MODEL_TIMEOUT);
-    }, MODEL_DECISION_TIMEOUT_MS);
-    promise.then(
-      (value) => {
-        clearTimeout(timeoutId);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timeoutId);
-        reject(error instanceof Error ? error : new Error(String(error)));
-      }
-    );
-  });
-}
-
 function isTerminalStatus(status: RunSnapshot['status']): boolean {
   return status === 'cancelled' ||
     status === 'waiting_for_approval' ||
@@ -925,10 +686,6 @@ function isTerminalStatus(status: RunSnapshot['status']): boolean {
     status === 'finished' ||
     status === 'failed' ||
     status === 'error';
-}
-
-function redactModelOutputText(text: string): string {
-  return maskSecret(redactTextForModelContext(text));
 }
 
 function taskRequestsSubmit(task: string): boolean {

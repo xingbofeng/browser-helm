@@ -91,6 +91,36 @@ function normalizeOptionText(value: string | null | undefined): string {
   return (value ?? '').trim().toLowerCase();
 }
 
+function isNativePickerInputType(inputType: string): boolean {
+  return inputType === 'date' ||
+    inputType === 'datetime-local' ||
+    inputType === 'time' ||
+    inputType === 'month' ||
+    inputType === 'week' ||
+    inputType === 'color';
+}
+
+function isAutocompletePopupField(element: HTMLElement): boolean {
+  if (!(element instanceof HTMLInputElement)) {
+    return false;
+  }
+  const ariaAutocomplete = element.getAttribute('aria-autocomplete')?.toLowerCase();
+  const role = element.getAttribute('role')?.toLowerCase();
+  return element.hasAttribute('list') ||
+    ariaAutocomplete === 'list' ||
+    ariaAutocomplete === 'both' ||
+    role === 'combobox';
+}
+
+function isRichEditorPluginSurface(element: HTMLElement): boolean {
+  if (element.getAttribute('contenteditable')?.toLowerCase() !== 'true') {
+    return false;
+  }
+  const richEditorSelector = '.ProseMirror, .ql-editor, .tox-edit-area, [data-lexical-editor="true"], [data-slate-editor="true"]';
+  return element.matches(richEditorSelector) ||
+    element.closest(richEditorSelector) !== null;
+}
+
 export function setRadioChecked(
   element: HTMLInputElement,
   desiredValue: string
@@ -216,10 +246,19 @@ export function fillSingleField(
   if (el.getAttribute('readonly') !== null) {
     return skippedField(target, el, fieldType, fieldLabel, t('formFill.skip.readonly', locale));
   }
+  if (isAutocompletePopupField(el)) {
+    return skippedField(target, el, fieldType, fieldLabel, t('formFill.skip.autocompletePopup', locale));
+  }
+  if (isRichEditorPluginSurface(el)) {
+    return skippedField(target, el, fieldType, fieldLabel, t('formFill.skip.richEditor', locale));
+  }
 
   try {
     if (el instanceof HTMLInputElement) {
       const inputType = (el.getAttribute('type') ?? 'text').toLowerCase();
+      if (isNativePickerInputType(inputType)) {
+        return skippedField(target, el, fieldType, fieldLabel, t('formFill.skip.nativePicker', locale));
+      }
       if (inputType === 'file') {
         return skippedField(target, el, fieldType, fieldLabel, t('formFill.skip.fileUpload', locale));
       }
@@ -499,6 +538,7 @@ export function verifyForm(
       fieldRefId: refId,
       label: label.label || undefined,
       name: el.getAttribute('name')?.trim() || undefined,
+      type: elementType(el),
       valid: validation.validation.valid && !isMissing,
       required: validation.required,
       filled,
@@ -561,6 +601,7 @@ export function verifyForm(
     status,
     formAction: formIdentity?.action,
     formMethod: formIdentity?.method,
+    ...(submitRefId ? { submitTargetRefId: submitRefId } : {}),
     allValid,
     missingRequired,
     invalidFields,

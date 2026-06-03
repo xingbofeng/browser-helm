@@ -3,6 +3,8 @@ import { z } from 'zod';
 export const adapterFailureReportInputSchema = z.object({
   url: z.string().url(),
   adapterId: z.string().min(1),
+  adapterVersion: z.string().min(1).optional(),
+  urlPattern: z.string().min(1).optional(),
   workflowId: z.string().min(1).optional(),
   locatorId: z.string().min(1).optional(),
   errorCode: z.string().min(1),

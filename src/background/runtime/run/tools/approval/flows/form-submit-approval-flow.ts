@@ -3,7 +3,7 @@ import type { ToolResult } from '../../../../../../shared/schemas/tool-result.sc
 import type { RuntimeEvent, ExecuteToolInput, RunSnapshot } from '../../../../../../runtime/runtime-messages';
 import { ERROR_CODES } from '../../../../../../shared/constants/error-codes';
 import { TOOL_NAMES } from '../../../../../../shared/constants/tool-names';
-import { TRACE_EVENT_NAMES, APPROVAL_EVENT_NAMES, CONTENT_RPC_MESSAGES } from '../../../../../../shared/constants/event-names';
+import { TRACE_EVENT_NAMES, CONTENT_RPC_MESSAGES } from '../../../../../../shared/constants/event-names';
 import { snapshotToolResult, snapshotFromObserveResult } from '../../../run-snapshot-assembler';
 import type { ToolApprovalFlow } from './tool-approval-flow';
 import type { ToolRouter } from '../../../../../../tools/core/tool-router';
@@ -30,12 +30,6 @@ export class FormSubmitApprovalFlow implements ToolApprovalFlow {
 
   onApproved(input: { runId: string; requestId: string; tool: string }): Promise<ToolResult> {
     const record = this.deps.getRecord(input.runId);
-    if (record) {
-      this.deps.appendTrace(record, {
-        runId: input.runId, type: APPROVAL_EVENT_NAMES.APPROVED,
-        payload: { requestId: input.requestId, reason: 'Submit approval granted', code: ERROR_CODES.OK }
-      });
-    }
     if (!record?.tabId) {
       const result: ToolResult = {
         ok: false, code: ERROR_CODES.RUNTIME_UNAVAILABLE,
@@ -306,7 +300,9 @@ function buildCurrentDigest(
   originalDigest: SubmitApprovalSnapshotDigest | undefined
 ): string | undefined {
   if (!isRecord(verifyResult)) return undefined;
-  const fields = Array.isArray(verifyResult.fields) ? verifyResult.fields.filter(isRecord) : [];
+  const fields = Array.isArray(verifyResult.fieldResults)
+    ? verifyResult.fieldResults.filter(isRecord)
+    : [];
   if (!fields.length) return undefined;
   const digests: FieldPresenceDigest[] = fields.map((f) => ({
     refId: readPrimitiveString(f.fieldRefId),
@@ -323,7 +319,9 @@ function buildCurrentDigest(
   return buildSnapshotDigestHash({
     fieldDigests: digests,
     formRefId: originalDigest?.formRefId,
-    submitTargetRefId: originalDigest?.submitTargetRefId,
+    submitTargetRefId: originalDigest?.submitTargetRefId
+      ? readOptionalString(verifyResult.submitTargetRefId)
+      : undefined,
     frameKey: originalDigest?.frameKey ? readCurrentFrameKey(digests) : undefined,
     formAction: originalDigest?.formAction ? readOptionalString(verifyResult.formAction) : undefined,
     formMethod: originalDigest?.formMethod ? readOptionalString(verifyResult.formMethod) : undefined

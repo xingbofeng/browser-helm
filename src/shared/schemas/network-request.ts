@@ -15,6 +15,18 @@ export const networkRequestRecordSchema = z.object({
   requestBodyPreview: z.string().optional(),
   responseBodyAvailable: z.boolean().default(false),
   responseBodyUnavailableReason: z.string().optional(),
+  responseBodyPreviewAvailable: z.boolean().optional(),
+  timing: z.object({
+    dnsMs: z.number().nonnegative().optional(),
+    connectMs: z.number().nonnegative().optional(),
+    sendMs: z.number().nonnegative().optional(),
+    receiveHeadersEndMs: z.number().nonnegative().optional()
+  }).optional(),
+  initiator: z.object({
+    type: z.string().min(1),
+    url: z.string().optional(),
+    lineNumber: z.number().optional()
+  }).optional(),
   timestamp: z.number().optional()
 });
 

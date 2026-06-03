@@ -37,6 +37,7 @@ describe('memory and replay components', () => {
             }]}
             onDelete={onDelete}
             onClearDomain={() => undefined}
+            onClearAll={() => undefined}
           />
         </I18nProvider>
       );
@@ -46,10 +47,58 @@ describe('memory and replay components', () => {
     expect(container.textContent).toContain('入口在 Billing');
     const buttons = container.querySelectorAll('button');
     act(() => {
-      buttons[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      buttons[buttons.length - 1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onDelete).toHaveBeenCalledWith('mem_1');
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it('renders domain and global memory clearing controls', () => {
+    const onClearDomain = vi.fn();
+    const onClearAll = vi.fn();
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <I18nProvider initialLocale="zh">
+          <MemoryViewer
+            domain="app.example.com"
+            entries={[{
+              id: 'mem_1',
+              domain: 'app.example.com',
+              kind: 'domain_fact',
+              task: '打开账单',
+              summary: '入口在 Billing',
+              successCount: 2,
+              failureCount: 0,
+              createdAt: 1,
+              updatedAt: 1,
+              tags: [],
+              masked: true
+            }]}
+            onDelete={() => undefined}
+            onClearDomain={onClearDomain}
+            onClearAll={onClearAll}
+          />
+        </I18nProvider>
+      );
+    });
+
+    const buttons = container.querySelectorAll('button');
+    act(() => {
+      buttons[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      buttons[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onClearDomain).toHaveBeenCalledOnce();
+    expect(onClearAll).toHaveBeenCalledOnce();
+    act(() => {
+      root.unmount();
+    });
     container.remove();
   });
 
@@ -78,7 +127,8 @@ describe('memory and replay components', () => {
                 risk: 'high',
                 requiresApproval: true
               }],
-              warnings: ['需要确认']
+              warnings: ['需要确认'],
+              unmetPreconditions: []
             }}
             onApprove={onApprove}
             onDeny={onDeny}
@@ -94,7 +144,9 @@ describe('memory and replay components', () => {
     });
     expect(onApprove).toHaveBeenCalledOnce();
     expect(onDeny).not.toHaveBeenCalled();
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
     container.remove();
   });
 
@@ -138,7 +190,9 @@ describe('memory and replay components', () => {
       container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onSave).toHaveBeenCalledOnce();
-    root.unmount();
+    act(() => {
+      root.unmount();
+    });
     container.remove();
   });
 });

@@ -18,6 +18,9 @@ export const ERROR_CODE_DEFINITIONS = [
   { number: 2201, code: 'USER_DENIED_APPROVAL', description: '用户拒绝审批' },
   { number: 2202, code: 'APPROVAL_REQUEST_NOT_FOUND', description: '审批请求不存在' },
   { number: 2203, code: 'APPROVAL_REQUEST_NOT_PENDING', description: '审批请求不处于待处理状态' },
+  { number: 2204, code: 'DOMAIN_CONSENT_REQUIRED', description: '当前域名需要显式授权' },
+  { number: 2205, code: 'CAPABILITY_UNAVAILABLE', description: '运行时能力不可用' },
+  { number: 2206, code: 'USER_INTENT_MISMATCH', description: '动作目标与用户意图不匹配' },
   { number: 2300, code: 'MAX_STEPS_EXCEEDED', description: '超过最大步骤数' },
   { number: 3000, code: 'RUNTIME_UNAVAILABLE', description: '扩展 runtime 不可用' },
   { number: 3001, code: 'RUNTIME_RESPONSE_INVALID', description: '扩展 runtime 响应无效' },
@@ -67,7 +70,9 @@ export const ERROR_CODE_DEFINITIONS = [
   { number: 3702, code: 'CLIPBOARD_UNAVAILABLE', description: '剪贴板不可用' },
   { number: 3800, code: 'ADAPTER_NOT_FOUND', description: '未检测到站点 adapter' },
   { number: 3801, code: 'ADAPTER_LOCATOR_FAILED', description: '站点 adapter locator 匹配失败' },
-  { number: 3802, code: 'ADAPTER_WORKFLOW_FAILED', description: '站点 adapter workflow 匹配失败' }
+  { number: 3802, code: 'ADAPTER_WORKFLOW_FAILED', description: '站点 adapter workflow 匹配失败' },
+  { number: 3900, code: 'WORKFLOW_PRECONDITION_FAILED', description: 'workflow replay 前置条件不匹配' },
+  { number: 3901, code: 'WORKFLOW_POSTCONDITION_FAILED', description: 'workflow replay 后置验证未通过' }
 ] as const;
 
 export const ERROR_CODES = {
@@ -90,6 +95,9 @@ export const ERROR_CODES = {
   USER_DENIED_APPROVAL: 'USER_DENIED_APPROVAL',
   APPROVAL_REQUEST_NOT_FOUND: 'APPROVAL_REQUEST_NOT_FOUND',
   APPROVAL_REQUEST_NOT_PENDING: 'APPROVAL_REQUEST_NOT_PENDING',
+  DOMAIN_CONSENT_REQUIRED: 'DOMAIN_CONSENT_REQUIRED',
+  CAPABILITY_UNAVAILABLE: 'CAPABILITY_UNAVAILABLE',
+  USER_INTENT_MISMATCH: 'USER_INTENT_MISMATCH',
   MAX_STEPS_EXCEEDED: 'MAX_STEPS_EXCEEDED',
   RUNTIME_UNAVAILABLE: 'RUNTIME_UNAVAILABLE',
   RUNTIME_RESPONSE_INVALID: 'RUNTIME_RESPONSE_INVALID',
@@ -139,6 +147,8 @@ export const ERROR_CODES = {
   ADAPTER_NOT_FOUND: 'ADAPTER_NOT_FOUND',
   ADAPTER_LOCATOR_FAILED: 'ADAPTER_LOCATOR_FAILED',
   ADAPTER_WORKFLOW_FAILED: 'ADAPTER_WORKFLOW_FAILED',
+  WORKFLOW_PRECONDITION_FAILED: 'WORKFLOW_PRECONDITION_FAILED',
+  WORKFLOW_POSTCONDITION_FAILED: 'WORKFLOW_POSTCONDITION_FAILED',
 } as const;
 
 export const ERROR_CODE_NUMBERS = Object.fromEntries(

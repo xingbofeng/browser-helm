@@ -9,6 +9,7 @@ import {
   bhAdapterReportFailure
 } from '../../../../src/tools/adapter/bh-adapter-tools';
 import { defaultAdapterFailureReporter } from '../../../../src/tools/adapter/adapter-failure-reporter';
+import { buildDomainAdapterSnapshot } from '../../../../src/background/runtime/run/run-snapshot-assembler';
 
 describe('adapter tools', () => {
   beforeEach(() => {
@@ -32,6 +33,10 @@ describe('adapter tools', () => {
     expect(detection?.enabled).toBe(true);
     expect(adapter?.id).toBe('github');
     expect(adapter?.label).toBe('GitHub');
+    expect(readRecord(adapter?.driftStatus)).toMatchObject({
+      status: 'not_checked',
+      genericFallbackReason: 'Use generic browser tools if adapter hints fail drift checks.'
+    });
   });
 
   it('lists adapter workflows for a supported site', async () => {
@@ -131,9 +136,20 @@ describe('adapter tools', () => {
     const report = readRecord(data?.report);
     expect(data?.fallback).toBe('generic_browser_tools');
     expect(report?.adapterId).toBe('github');
+    expect(report?.adapterVersion).toBe('1.0.0');
     expect(report?.locatorId).toBe('github-issues-tab');
+    expect(report?.urlPattern).toBe('https://github.com/*');
     expect(report?.errorCode).toBe('ADAPTER_LOCATOR_FAILED');
     expect(defaultAdapterFailureReporter.list()).toHaveLength(1);
+    expect(buildDomainAdapterSnapshot('https://github.com/openai/browser-helm/issues')).toMatchObject({
+      enabled: true,
+      lastFailure: {
+        adapterId: 'github',
+        adapterVersion: '1.0.0',
+        locatorId: 'github-issues-tab',
+        errorCode: 'ADAPTER_LOCATOR_FAILED'
+      }
+    });
   });
 
   it('records workflow failure reports without blocking generic fallback', async () => {
