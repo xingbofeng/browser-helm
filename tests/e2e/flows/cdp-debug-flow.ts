@@ -141,7 +141,8 @@ export class CdpDebugFlow {
     const deniedSnapshot = await sidePanel.runOnTab({
       tabId,
       task: 'CDP approval e2e deny',
-      mode: 'debug'
+      mode: 'debug',
+      continueOnEmpty: true
     });
     expect(deniedSnapshot.status).toBe('waiting_for_approval');
     expect(deniedSnapshot.pendingApproval?.tool).toBe(TOOL_NAMES.CDP_ATTACH);
@@ -162,7 +163,8 @@ export class CdpDebugFlow {
     const approvedSnapshot = await sidePanel.runOnTab({
       tabId,
       task: 'CDP approval e2e approve',
-      mode: 'debug'
+      mode: 'debug',
+      continueOnEmpty: true
     });
     expect(approvedSnapshot.status).toBe('waiting_for_approval');
     expect(approvedSnapshot.pendingApproval?.tool).toBe(TOOL_NAMES.CDP_ATTACH);

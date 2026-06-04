@@ -87,7 +87,7 @@ export function bhVisionCaptureFullPage(_rpc: ContentRpcClient): ToolSpec<z.infe
  *
  * Agent 语义：Debug/Vision 只读批量视觉工具，面向用户显式要求批量长截图时使用。
  * 默认扫描当前窗口 http/https tabs，每页截图前会滚动以触发 lazy-load 图片。滚动后恢复
- * 原视口，不点击/输入/提交，风险 safe，不触发 approval。参数 scope/maxTabs 控制范围；
+ * 原视口，不点击/输入/提交，风险 medium，不触发 approval。参数 scope/maxTabs 控制范围；
  * 结果包含每页 screenshot metadata 和 dataUrl，model context 仅暴露成功/失败摘要。
  */
 export function bhVisionBatchCaptureFullPages(_rpc: ContentRpcClient): ToolSpec<z.infer<typeof batchArgsSchema>, ToolResult> {
@@ -95,8 +95,11 @@ export function bhVisionBatchCaptureFullPages(_rpc: ContentRpcClient): ToolSpec<
     name: TOOL_NAMES.VISION_BATCH_CAPTURE_FULL_PAGES,
     title: 'Batch Capture Full Page Screenshots',
     description: 'Batch captures full-page screenshots for current-window pages after lazy-load scrolling.',
+    risk: 'medium',
     argsSchema: batchArgsSchema,
     execute: async (args, ctx) => {
+      const intentFailure = batchMediaIntentFailure(ctx);
+      if (intentFailure) return intentFailure;
       const tabId = requireTabId(ctx);
       const batchCapture = await defaultPageMediaManager.captureFullPageBatch({
         sourceTabId: tabId,
@@ -115,15 +118,18 @@ export function bhVisionBatchCaptureFullPages(_rpc: ContentRpcClient): ToolSpec<
  * Agent 语义：Debug/Vision 只读页面媒体清单工具，面向用户要求获取页面所有图片时使用。
  * 默认扫描当前窗口 http/https tabs，并先滚动页面触发 lazy-load；返回 img/srcset/picture、
  * icon/open graph 和 CSS background URL 清单。不会下载图片二进制，不修改业务状态，风险
- * safe，不触发 approval。参数控制范围、每页图片上限和是否包含 CSS background。
+ * medium，不触发 approval。参数控制范围、每页图片上限和是否包含 CSS background。
  */
 export function bhVisionCollectImages(_rpc: ContentRpcClient): ToolSpec<z.infer<typeof imageCollectArgsSchema>, ToolResult> {
   return visionTool({
     name: TOOL_NAMES.VISION_COLLECT_IMAGES,
     title: 'Batch Collect Page Images',
     description: 'Collects page image URLs across current-window pages after lazy-load scrolling.',
+    risk: 'medium',
     argsSchema: imageCollectArgsSchema,
     execute: async (args, ctx) => {
+      const intentFailure = batchMediaIntentFailure(ctx);
+      if (intentFailure) return intentFailure;
       const tabId = requireTabId(ctx);
       const imageCollection = await defaultPageMediaManager.collectImagesBatch({
         sourceTabId: tabId,
@@ -257,6 +263,7 @@ function visionTool<TArgs>(input: {
   name: string;
   title: string;
   description: string;
+  risk?: ToolSpec<TArgs, ToolResult>['risk'] | undefined;
   argsSchema: z.ZodType<TArgs>;
   execute: (args: TArgs, ctx: ToolContext) => Promise<ToolResult>;
 }): ToolSpec<TArgs, ToolResult> {
@@ -265,7 +272,7 @@ function visionTool<TArgs>(input: {
     title: input.title,
     description: input.description,
     modes: ['debug', 'vision'],
-    risk: 'safe',
+    risk: input.risk ?? 'safe',
     argsSchema: input.argsSchema,
     resultSchema: toolResultSchema,
     readOnly: true,
@@ -286,6 +293,32 @@ function visionTool<TArgs>(input: {
       }
     }
   };
+}
+
+function batchMediaIntentFailure(ctx: ToolContext): ToolResult | undefined {
+  if (ctx.source !== 'agent' && ctx.source !== 'runtime') {
+    return undefined;
+  }
+  if (hasExplicitBatchMediaIntent(ctx.userTask ?? '')) {
+    return undefined;
+  }
+  return {
+    ok: false,
+    code: ERROR_CODES.USER_INTENT_MISMATCH,
+    summary: 'Batch media collection requires explicit user intent before scanning screenshots or images across tabs.',
+    changedPage: false,
+    requiresObserve: false,
+    error: {
+      message: 'Batch media collection requires explicit user intent before scanning screenshots or images across tabs.'
+    },
+    nextHints: [
+      'Ask the user to explicitly request screenshots, long screenshots, image collection, or page media export.'
+    ]
+  };
+}
+
+function hasExplicitBatchMediaIntent(task: string): boolean {
+  return /(?:screenshot|full[-\s]?page|long screenshot|capture|image|media|图片|截图|长图|媒体|收集图片|导出图片)/iu.test(task);
 }
 
 function requireTabId(ctx: ToolContext): number {

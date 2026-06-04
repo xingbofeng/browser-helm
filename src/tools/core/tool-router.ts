@@ -32,6 +32,8 @@ export type ToolPromptContract = {
   readOnly: boolean;
   /** Whether the tool always requires user approval before execution. */
   requiresApproval: boolean;
+  /** What should happen after the user approves this approval-gated tool. */
+  approvalBehavior?: 'record_only' | 'execute_pending_action' | 'custom_flow' | undefined;
   /** How tool results should be presented in the model context. */
   contextVisibility: 'summary' | 'hidden' | 'full';
 };
@@ -57,6 +59,7 @@ export class ToolRouter {
       argsSchema: z.toJSONSchema(tool.argsSchema),
       readOnly: tool.readOnly ?? false,
       requiresApproval: tool.requiresApproval ?? (tool.risk === 'high'),
+      approvalBehavior: tool.approvalBehavior,
       contextVisibility: tool.contextVisibility ?? 'summary'
     }));
   }

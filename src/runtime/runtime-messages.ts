@@ -54,6 +54,11 @@ export const decideApprovalInputSchema = z.object({
   reason: z.string().min(1).optional()
 });
 
+export const requestCapabilityInputSchema = z.object({
+  runId: z.string().min(1),
+  capability: z.enum(['clipboard', 'debugger', 'downloads'])
+});
+
 export const reviseGoalInputSchema = z.object({
   runId: z.string().min(1),
   goal: z.string().min(1),
@@ -121,6 +126,10 @@ export const runtimeRequestSchema = z.discriminatedUnion('type', [
     input: decideApprovalInputSchema
   }),
   z.object({
+    type: z.literal(RUNTIME_MESSAGES.REQUEST_CAPABILITY),
+    input: requestCapabilityInputSchema
+  }),
+  z.object({
     type: z.literal(RUNTIME_MESSAGES.TEST_PROVIDER_CONNECTION),
     input: providerSettingsInputSchema
   }),
@@ -151,6 +160,7 @@ export type ExecuteToolInput = PublicExecuteToolInput & {
   approvalResume?: boolean | undefined;
 };
 export type DecideApprovalInput = z.infer<typeof decideApprovalInputSchema>;
+export type RequestCapabilityInput = z.infer<typeof requestCapabilityInputSchema>;
 export type ReviseGoalInput = z.infer<typeof reviseGoalInputSchema>;
 export type HighlightRefInput = z.infer<typeof highlightRefInputSchema>;
 export type TestProviderSettingsInput = z.infer<typeof providerSettingsInputSchema>;

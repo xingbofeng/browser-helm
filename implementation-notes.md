@@ -26,43 +26,13 @@
 
 已从主文件移出 2026-06-03 的 Task 9.3 最终 release verification 和 v1.6 production hardening 收口完整记录；主文件继续保留真实模型诊断、右键菜单、流式 UI 和最近问题修复记录。
 
+## 2026-06-04 主文件第十二次瘦身归档摘要
+
+已从主文件移出 2026-06-03 的真实模型 provider 402 诊断、deepseek-v4-pro 切换与 read-fields 恢复、v1.6 Production hardening 缺口补齐三段完整记录；完整记录迁入 `implementation-notes-archive.md`。
+
 ## 历史条目归档索引 - 2026-06-01
 
 v1.4 Vision/Screenshot、v1.5 Advanced Browser Tools、Floating Panel 稳定性、Review P0/P1、v1.6 Domain Adapters、v1.2-v1.6 验收补齐、早期真实站点/真实模型 E2E 扩展，以及 2026-06-01/02 的 P0 执行层授权、approval coordinator、tool manifest allowlist、completion matrix 记录已迁入 `implementation-notes-archive.md`，主文件保留当前任务要点。
-
-## 真实模型 provider 402 诊断可见性 - 2026-06-03
-
-**目标**：确认 `.env.development` 中真实模型 API key 是否加载正确，并避免真实模型失败时只留下 `{}` / `observed` 状态。
-
-**设计决策**：直接调用 `https://tokenhub.tencentmaas.com/v1/chat/completions` 验证 key 与 model；当前 `deepseek-v4-flash` 返回 `FREE_QUOTA_EXHAUSTED`，而其他测试 model 返回 `model not found`，说明 key 和 model 路由被服务端识别，阻塞来自 MaaS endpoint 免费额度耗尽/端点 inactive。`OpenAICompatibleClient` 现在保留脱敏后的 provider 错误体；`ModelGateway` 在 stream 与 fallback completion 都失败时返回结构化 `fail` decision，让 run 进入 `failed` 并展示可操作错误。
-
-**验证结果**：真实模型定向 E2E 现在快速失败为 `MODEL_REQUEST_FAILED: endpoint is inactive: FREE_QUOTA_EXHAUSTED | 401008 | gateway_error`，不泄露 API key；`npm run typecheck`、`npm run lint -- --max-warnings=0`、相关 provider/model gateway/runtime 单测、`npm test -- --reporter=dot --silent`、`npm run build && npm run check:release` 均通过。
-
-## 真实模型 deepseek-v4-pro 切换与 read-fields 恢复 - 2026-06-03
-
-**目标**：使用可用的 Tencent MaaS 模型继续真实模型 E2E，并修复真实模型跳过显式只读工具导致 max steps 的空转。
-
-**设计决策**：`.env.development` 的 `OPENAI_MODEL` 从 `deepseek-v4-flash` 切到 `deepseek-v4-pro`；同一 key/endpoint 下 `deepseek-v4-pro` 最小 chat completion 返回 200，`deepseek-v4-flash` 返回 `FREE_QUOTA_EXHAUSTED`。`AgentLoop` 在 finish 被 semantic gate 拦住且缺失的是允许自动恢复的只读显式工具时，会以 `source: runtime` 自动执行一次 `bh_form_read_fields`，随后让模型下一轮 finish；高风险/可变工具不走该恢复路径。
-
-**验证结果**：`BROWSER_HELM_REAL_MODEL_E2E=1 npx playwright test tests/e2e/specs/real-sites/real-model-api.spec.ts --grep "低敏注册表单填写" --timeout=360000` 通过：1 passed / 54.6s；`npm run typecheck`、`npm run lint -- --max-warnings=0`、相关 AgentLoop/model/provider/runtime 单测、`npm run build && npm run check:release` 均通过。
-
-## v1.6 Production hardening 缺口补齐 - 2026-06-03
-
-**目标**：补齐 production hardening 审计中确认的 adapter drift、API key persistence UI、workflow structured invariants 三个硬缺口。
-
-**设计决策**：adapter drift 不再固定 `not_checked`，`DomainAdapterRegistry.detect()` 可接收 DOM/fixture 侧 `observedSignals`，默认用 URL domain match 生成 `ok`，观测信号冲突时返回 `drift_suspected` 与 `missingSignals`，仍保留 generic fallback。模型设置 UI 明确展示 session/local API key storage 选择，默认 `session`，`local` 继承已有设置或用户显式选择，并显示本地持久化风险提示；runtime provider settings schema 同步接受 `apiKeyPersistence`。Workflow memory 新增结构化 `preconditions`/`postconditions`，支持 URL、DOM state、form value、text、adapter signal assertion；replay precheck/postcheck 现在返回 structured verifier results，postcondition fail 仍计为 workflow failure。
-
-**偏差说明**：DOM state assertion 当前依赖 snapshot refs 的 `disabled` 字段；更复杂的 CSS/ARIA 状态还没有扩展为独立 assertion 类型。
-
-**权衡分析**：
-- 方案一：保留旧字符串 hints 并新增结构化 invariants，兼容现有 workflow memory。
-- 方案二：一次性迁移旧字段到新 schema，语义更统一但风险更大。
-- 选择方案一，因为 production hardening 需要补强验收语义，同时不能破坏已有 memory/replay 数据。
-
-**验证结果**：TDD RED 覆盖 adapter drift `not_checked`、provider `apiKeyPersistence` 被 runtime schema 丢弃、设置 UI 无本地持久化风险提示、workflow structured invariant API 缺失、replay postcondition 缺少 structured result；GREEN 后 `npx vitest run tests/node/adapters/*.test.ts tests/node/tools/adapter/adapter-tools.test.ts tests/node/runtime/run/run-snapshot-assembler.test.ts tests/node/ui/components/domain-adapter-status.test.tsx tests/node/runtime/runtime-messages.test.ts tests/node/ui/components/agent-components.test.tsx tests/node/storage/chrome-settings-store.test.ts tests/node/storage/workflow-repo.test.ts tests/node/runtime/run/workflow-replay-approval-flow.test.ts tests/node/ui/components/memory-replay-components.test.tsx --reporter=dot` 通过：19 files / 118 tests；`npm run typecheck`、`npm run lint -- --max-warnings=0` 通过。
-
-**待确认**：
-- [ ] 全量 `npm test`、`npm run test:security`、`npm run test:coverage -- --reporter=dot`、`npm run test:e2e` 仍需在最终 release gate 前重跑。
 
 ## 真实模型 E2E provider preflight - 2026-06-03
 
@@ -295,3 +265,13 @@ v1.4 Vision/Screenshot、v1.5 Advanced Browser Tools、Floating Panel 稳定性�
 **偏差说明**：真实站点/真实模型 E2E 仍保持 opt-in，默认 gate 只证明本地扩展宿主和 mock provider 路径。
 
 **验证结果**：目标 Vitest 11 files / 81 tests 通过；`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm run build`、`npm run check:release` 通过；CDP debug E2E 4 passed；`npm run test:e2e` 62 passed / 37 skipped。
+
+## 审核属实与部分属实问题修复 - 2026-06-04
+
+**目标**：修复审核意见中确认属实/部分属实的后续缺口，包括 runtime 权限申请入口、Vision 批量媒体隐私风险、tool contract 审批行为、CDP same-tab contention 和 submit verifier 证据不足。
+
+**设计决策**：新增 extension-page 可调用、content-script 禁止的 `requestCapability` runtime API；`debugger/downloads` 作为 required 权限返回可解释不可选原因，optional 能力成功后刷新 snapshot。批量长图/图片采集改为 `medium` risk，并要求 agent/runtime 调用必须有明确批量媒体意图；用户手动触发仍可执行。Tool contract 和 manifest hash 纳入 `approvalBehavior`。CDP 同 tab 重复 attach 复用 session 但刷新 TTL。SubmitVerifier 在保留 error-first 前提下接受 post-submit URL change、network 2xx 和 form disappearance 结构化证据。
+
+**偏差说明**：本轮未把 `debugger/downloads` 改回 optional，因为 Chrome manifest 约束和右键下载核心路径都要求它们作为 required 权限；E2E 中 CDP 审批 flow 同步修复了空观察时过早停止轮询的问题。
+
+**验证结果**：目标 Vitest 8 files / 145 tests 通过；`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm test -- --reporter=dot`（1514 passed / 1 skipped）、`npm run build`、`npm run check:release`、`npm run test:e2e`（62 passed / 37 skipped）均通过。`npm test` 仍输出既有 React `act(...)` warning，但测试通过。

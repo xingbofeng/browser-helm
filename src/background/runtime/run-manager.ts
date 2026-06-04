@@ -6,6 +6,7 @@ import type {
   HighlightRefInput,
   RuntimeEvent,
   RuntimeProviderTestResult,
+  RequestCapabilityInput,
   RunSnapshot,
   ReviseGoalInput,
   StartRunInput,
@@ -57,6 +58,7 @@ import { DomainPolicyService } from './domain-policy-service';
 import { MemoryWorkflowService } from './memory-workflow-service';
 import { ToolExecutionFacade } from './tool-execution-facade';
 import { probeRuntimeCapabilities } from './capability-probe';
+import { ChromePermissionBroker } from './permission-broker';
 import { defaultDebuggerManager } from '../debugger/debugger-manager';
 
 export class RunManager {
@@ -242,6 +244,24 @@ export class RunManager {
     this.store.setSnapshot(input.runId, nextSnapshot);
     this.store.notifySnapshotUpdated(input.runId);
     return this.getSnapshot(input.runId);
+  }
+
+  async requestCapability(input: RequestCapabilityInput): Promise<ToolResult> {
+    const broker = this.deps.permissionBroker ?? new ChromePermissionBroker();
+    const requested = await broker.requestCapability(input.capability);
+    await this.lifecycle.refreshCapabilities(input.runId);
+    const summary = requested.granted
+      ? `${input.capability} capability granted`
+      : requested.reason ?? `${input.capability} capability is unavailable`;
+    return {
+      ok: requested.granted,
+      code: requested.granted ? ERROR_CODES.OK : ERROR_CODES.CAPABILITY_UNAVAILABLE,
+      summary,
+      changedPage: false,
+      requiresObserve: false,
+      data: requested,
+      ...(requested.granted ? {} : { error: { message: summary } })
+    };
   }
 
   decideApproval(input: DecideApprovalInput): Promise<ToolResult> {

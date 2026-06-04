@@ -196,6 +196,8 @@ export class ToolExecutionService {
         stepId: `${input.runId}:${input.tool}`,
         tabId: record.tabId,
         runMode: record.mode,
+        source: trustedToolExecutionSource(input),
+        userTask: record.task,
         snapshot: this.deps.getSnapshot(input.runId),
         ...(visionClient ? { visionClient } : {})
       }

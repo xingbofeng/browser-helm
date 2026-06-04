@@ -18,6 +18,85 @@ afterEach(() => {
 });
 
 describe('vision tools', () => {
+  it('marks batch media tools as medium risk', () => {
+    expect(bhVisionBatchCaptureFullPages(rpc()).risk).toBe('medium');
+    expect(bhVisionCollectImages(rpc()).risk).toBe('medium');
+  });
+
+  it('requires explicit task intent before agent-triggered batch media collection', async () => {
+    const result = await bhVisionCollectImages(rpc()).execute(
+      {
+        scope: 'current_window',
+        maxTabs: 8,
+        maxImagesPerTab: 250,
+        includeCssBackgrounds: true
+      },
+      {
+        runId: 'run_1',
+        stepId: 'step_1',
+        runMode: 'debug',
+        tabId: 42,
+        source: 'agent',
+        userTask: '总结当前页面'
+      }
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'USER_INTENT_MISMATCH'
+    });
+    expect(result.summary).toContain('Batch media collection requires explicit user intent');
+  });
+
+  it('allows user-triggered batch media collection even without task text intent', async () => {
+    vi.stubGlobal('chrome', {
+      tabs: {
+        query: vi.fn(async () => [
+          { id: 42, windowId: 6, url: 'https://example.com/gallery', title: 'Gallery' }
+        ])
+      },
+      scripting: {
+        executeScript: vi.fn(async () => [{
+          result: {
+            lazyLoad: {
+              attempted: true,
+              steps: 1,
+              initialScrollHeight: 800,
+              finalScrollHeight: 800,
+              restoredScrollX: 0,
+              restoredScrollY: 0
+            },
+            images: [
+              {
+                url: 'https://example.com/hero.jpg',
+                rawUrl: '/hero.jpg',
+                source: 'img',
+                alt: 'Hero'
+              }
+            ]
+          }
+        }])
+      }
+    });
+    const result = await bhVisionCollectImages(rpc()).execute(
+      {
+        scope: 'active_tab',
+        maxTabs: 8,
+        maxImagesPerTab: 1,
+        includeCssBackgrounds: true
+      },
+      {
+        runId: 'run_1',
+        stepId: 'step_1',
+        runMode: 'debug',
+        tabId: 42,
+        source: 'user'
+      }
+    );
+
+    expect(result.ok).toBe(true);
+  });
+
   it('captures viewport screenshots without putting image data into model context', async () => {
     vi.stubGlobal('chrome', chromeWithViewportCapture('data:image/png;base64,viewport'));
 

@@ -102,6 +102,44 @@ describe('ExtensionRuntimePort', () => {
     });
   });
 
+  it('sends capability requests through the runtime message boundary', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({
+      ok: true,
+      data: {
+        ok: false,
+        code: 'CAPABILITY_UNAVAILABLE',
+        summary: 'debugger is required',
+        changedPage: false,
+        requiresObserve: false,
+        data: {
+          capability: 'debugger',
+          granted: false,
+          reason: 'debugger is a required Chrome permission and cannot be requested optionally'
+        }
+      }
+    });
+    vi.stubGlobal('chrome', {
+      runtime: {
+        sendMessage
+      }
+    });
+    const port = new ExtensionRuntimePort();
+
+    const result = await port.requestCapability({
+      runId: 'run_1',
+      capability: 'debugger'
+    });
+
+    expect(result.ok).toBe(false);
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: RUNTIME_MESSAGES.REQUEST_CAPABILITY,
+      input: {
+        runId: 'run_1',
+        capability: 'debugger'
+      }
+    });
+  });
+
   it('subscribes to runtime run events through a named port', () => {
     const listeners: Array<(message: unknown) => void> = [];
     const disconnectListeners: Array<() => void> = [];

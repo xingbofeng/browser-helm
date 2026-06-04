@@ -310,6 +310,104 @@ describe('RunManager', () => {
     expect(probeRuntimeCapabilities).toHaveBeenCalledTimes(2);
   });
 
+  it('requests optional capabilities and refreshes the run snapshot', async () => {
+    const requestCapability = vi.fn(async () => ({
+      capability: 'clipboard' as const,
+      granted: true,
+      permissions: ['clipboardRead', 'clipboardWrite'],
+      origins: []
+    }));
+    const probeRuntimeCapabilities = vi.fn()
+      .mockResolvedValueOnce({
+        capabilities: {
+          hasActiveTab: true,
+          hasDebuggerPermission: true,
+          hasClipboardPermission: false,
+          hasDownloadsPermission: true,
+          hasStorageInspection: true,
+          hostPermissions: [],
+          shallowDebugAvailable: true,
+          cdp: 'available'
+        },
+        limitations: ['Clipboard capability is unavailable']
+      })
+      .mockResolvedValueOnce({
+        capabilities: {
+          hasActiveTab: true,
+          hasDebuggerPermission: true,
+          hasClipboardPermission: true,
+          hasDownloadsPermission: true,
+          hasStorageInspection: true,
+          hostPermissions: [],
+          shallowDebugAvailable: true,
+          cdp: 'available'
+        },
+        limitations: []
+      });
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async (message) => {
+        expect(message.type).toBe(CONTENT_RPC_MESSAGES.PAGE_OBSERVE);
+        return observationResponse();
+      }),
+      probeRuntimeCapabilities,
+      permissionBroker: {
+        requestCapability
+      }
+    });
+
+    const started = await manager.startRun({ task: '观察页面', mode: 'debug', runKind: 'observe_only' });
+    await waitForSnapshot(manager, started.runId, 'observed');
+    const result = await manager.requestCapability({
+      runId: started.runId,
+      capability: 'clipboard'
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      code: ERROR_CODES.OK,
+      data: {
+        capability: 'clipboard',
+        granted: true
+      }
+    });
+    expect(requestCapability).toHaveBeenCalledWith('clipboard');
+    expect(manager.getSnapshot(started.runId).capabilities?.hasClipboardPermission).toBe(true);
+    expect(manager.getSnapshot(started.runId).capabilityLimitations).toEqual([]);
+  });
+
+  it('explains required permissions that cannot be requested optionally', async () => {
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse()),
+      probeRuntimeCapabilities: grantedCapabilitiesProbe(),
+      permissionBroker: {
+        requestCapability: vi.fn(async () => ({
+          capability: 'debugger' as const,
+          granted: false,
+          permissions: ['debugger'],
+          origins: [],
+          reason: 'debugger is a required Chrome permission and cannot be requested optionally'
+        }))
+      }
+    });
+    const started = await manager.startRun({ task: '观察页面', mode: 'debug', runKind: 'observe_only' });
+    await waitForSnapshot(manager, started.runId, 'observed');
+
+    await expect(manager.requestCapability({
+      runId: started.runId,
+      capability: 'debugger'
+    })).resolves.toMatchObject({
+      ok: false,
+      code: ERROR_CODES.CAPABILITY_UNAVAILABLE,
+      summary: 'debugger is a required Chrome permission and cannot be requested optionally',
+      data: {
+        capability: 'debugger',
+        granted: false
+      }
+    });
+  });
+
   it('blocks high-risk iframe tools before ToolRouter execution', async () => {
     const calls: string[] = [];
     const manager = new RunManager({

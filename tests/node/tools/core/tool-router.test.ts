@@ -111,9 +111,37 @@ describe('ToolRouter', () => {
       name: 'bh_mock_page_observe',
       title: 'Observe Page',
       modes: ['ask'],
-      risk: 'low'
+      risk: 'low',
+      approvalBehavior: undefined
     });
     expect(JSON.stringify(contracts[0]?.argsSchema)).toContain('page');
+  });
+
+  it('exposes approval behavior in tool contracts for debug UI and manifest hashing', () => {
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'bh_mock_approval',
+      title: 'Approval Tool',
+      description: 'Needs approval',
+      modes: ['debug'],
+      risk: 'medium',
+      readOnly: false,
+      requiresApproval: true,
+      approvalBehavior: 'execute_pending_action',
+      argsSchema: z.object({}),
+      resultSchema: z.object({
+        ok: z.boolean(),
+        code: z.string(),
+        summary: z.string()
+      }),
+      execute: async () => ({ ok: true, code: 'OK', summary: 'ok' })
+    });
+
+    expect(new ToolRouter(registry).listToolContracts()[0]).toMatchObject({
+      name: 'bh_mock_approval',
+      requiresApproval: true,
+      approvalBehavior: 'execute_pending_action'
+    });
   });
 
   it('filters prompt contracts by run mode while keeping internal tools visible', () => {

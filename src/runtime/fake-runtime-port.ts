@@ -8,6 +8,7 @@ import type {
   RuntimeProviderSettings,
   RuntimeProviderTestResult,
   RuntimeToolExecutionResult,
+  RequestCapabilityInput,
   RunSnapshot,
   ReviseGoalInput,
   SetDomainAdapterEnabledInput,
@@ -269,6 +270,36 @@ export class FakeRuntimePort implements RuntimePort {
         requestId: input.requestId,
         reason: input.reason,
         code: result.code
+      }
+    });
+    return result;
+  }
+
+  async requestCapability(input: RequestCapabilityInput): Promise<RuntimeToolExecutionResult> {
+    const snapshot = await this.getRunSnapshot(input.runId);
+    const granted = input.capability === 'clipboard';
+    const result: RuntimeToolExecutionResult = {
+      ok: granted,
+      code: granted ? ERROR_CODES.OK : ERROR_CODES.CAPABILITY_UNAVAILABLE,
+      summary: granted
+        ? `${input.capability} capability granted`
+        : `${input.capability} is a required Chrome permission and cannot be requested optionally`,
+      changedPage: false,
+      requiresObserve: false,
+      data: {
+        capability: input.capability,
+        granted
+      }
+    };
+    this.snapshots.set(input.runId, {
+      ...snapshot,
+      toolResult: {
+        tool: `capability:${input.capability}`,
+        ok: result.ok,
+        code: result.code,
+        summary: result.summary,
+        changedPage: false,
+        requiresObserve: false
       }
     });
     return result;

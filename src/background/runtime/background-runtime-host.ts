@@ -21,6 +21,7 @@ const CONTENT_SCRIPT_BLOCKED_MESSAGES = new Set([
   RUNTIME_MESSAGES.DECIDE_APPROVAL,
   RUNTIME_MESSAGES.TEST_PROVIDER_CONNECTION,
   RUNTIME_MESSAGES.SET_DOMAIN_ADAPTER_ENABLED,
+  RUNTIME_MESSAGES.REQUEST_CAPABILITY,
   RUNTIME_MESSAGES.EXECUTE_TOOL
 ]);
 
@@ -36,7 +37,9 @@ type RuntimeRunManager = Pick<
   | 'testProviderSettings'
   | 'setDomainAdapterEnabled'
   | 'subscribeRun'
->;
+> & {
+  requestCapability?: RunManager['requestCapability'] | undefined;
+};
 
 export class BackgroundRuntimeHost {
   constructor(private readonly runManager: RuntimeRunManager = new RunManager()) {}
@@ -98,6 +101,18 @@ export class BackgroundRuntimeHost {
         return {
           ok: true,
           data: await this.runManager.decideApproval(parsed.data.input)
+        };
+      case RUNTIME_MESSAGES.REQUEST_CAPABILITY:
+        if (!this.runManager.requestCapability) {
+          return {
+            ok: false,
+            code: ERROR_CODES.RUNTIME_UNAVAILABLE,
+            message: 'Runtime capability request is unavailable'
+          };
+        }
+        return {
+          ok: true,
+          data: await this.runManager.requestCapability(parsed.data.input)
         };
       case RUNTIME_MESSAGES.TEST_PROVIDER_CONNECTION:
         return {

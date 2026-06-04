@@ -7,6 +7,7 @@ import type {
   RuntimeToolExecutionResult,
   RunSnapshot,
   HighlightRefInput,
+  RequestCapabilityInput,
   ReviseGoalInput,
   SetDomainAdapterEnabledInput,
   StartRunInput,
@@ -24,6 +25,7 @@ export interface RuntimePort {
   getRunSnapshot(runId: string): Promise<RunSnapshot>;
   subscribeRun(runId: string, listener: (event: RuntimeEvent) => void): () => void;
   decideApproval(input: DecideApprovalInput): Promise<RuntimeToolExecutionResult>;
+  requestCapability(input: RequestCapabilityInput): Promise<RuntimeToolExecutionResult>;
   getProviderSettings(): Promise<RuntimeProviderSettings | undefined>;
   setProviderSettings(settings: RuntimeProviderSettings): Promise<void>;
   getDomainPolicy(): Promise<BrowserHelmDomainPolicy | undefined>;

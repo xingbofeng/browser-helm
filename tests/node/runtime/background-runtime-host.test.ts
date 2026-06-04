@@ -57,6 +57,21 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
         message: '连接正常',
         supportsStreaming: true
       }),
+      requestCapability: async (input) => {
+        calls.push(`${input.runId}:${input.capability}`);
+        return {
+          ok: false,
+          code: 'CAPABILITY_UNAVAILABLE',
+          summary: 'debugger is required',
+          changedPage: false,
+          requiresObserve: false,
+          data: {
+            capability: input.capability,
+            granted: false,
+            reason: 'debugger is a required Chrome permission and cannot be requested optionally'
+          }
+        };
+      },
       setDomainAdapterEnabled: async (input) => ({
         runId: input.runId,
         mode: 'ask',
@@ -117,6 +132,67 @@ describe('BackgroundRuntimeHost approval runtime API', () => {
       'run_1:denied',
       'run_1:frame_7:ref_201'
     ]);
+  });
+
+  it('routes capability requests from extension pages and blocks content scripts', async () => {
+    const calls: string[] = [];
+    const host = new BackgroundRuntimeHost({
+      startRun: async () => ({ runId: 'run_1' }),
+      getSnapshot: () => ({ runId: 'run_1', mode: 'debug', status: 'observed' }),
+      cancelRun: async () => ({ runId: 'run_1', status: 'cancelled' }),
+      reviseGoal: async (input) => ({ runId: input.runId, mode: 'debug', status: 'observed' }),
+      executeTool: async () => ({ ok: true, code: 'OK', summary: 'ok' }),
+      highlightRef: async () => ({ ok: true, code: 'OK', summary: 'highlighted' }),
+      decideApproval: async () => ({ ok: true, code: 'OK', summary: 'approved' }),
+      testProviderSettings: async () => ({ ok: true, code: 'OK', message: 'ok' }),
+      requestCapability: async (input) => {
+        calls.push(`${input.runId}:${input.capability}`);
+        return {
+          ok: true,
+          code: 'OK',
+          summary: 'Clipboard permission granted',
+          changedPage: false,
+          requiresObserve: false,
+          data: {
+            capability: input.capability,
+            granted: true,
+            permissions: ['clipboardRead', 'clipboardWrite'],
+            origins: []
+          }
+        };
+      },
+      setDomainAdapterEnabled: async (input) => ({ runId: input.runId, mode: 'ask', status: 'observed' }),
+      subscribeRun: () => () => undefined
+    });
+
+    await expect(host.handleMessage({
+      type: RUNTIME_MESSAGES.REQUEST_CAPABILITY,
+      input: {
+        runId: 'run_1',
+        capability: 'clipboard'
+      }
+    }, { isExtensionPage: true, isContentScript: false })).resolves.toMatchObject({
+      ok: true,
+      data: {
+        ok: true,
+        code: 'OK',
+        data: {
+          capability: 'clipboard',
+          granted: true
+        }
+      }
+    });
+    await expect(host.handleMessage({
+      type: RUNTIME_MESSAGES.REQUEST_CAPABILITY,
+      input: {
+        runId: 'run_1',
+        capability: 'clipboard'
+      }
+    }, { isExtensionPage: false, isContentScript: true })).resolves.toMatchObject({
+      ok: false,
+      code: 'RUNTIME_MESSAGE_INVALID'
+    });
+    expect(calls).toEqual(['run_1:clipboard']);
   });
 
   it('strips caller-provided execution source and attests public tool calls as user sourced', async () => {

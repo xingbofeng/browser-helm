@@ -66,6 +66,20 @@ describe('toolManifestHash', () => {
     expect(a).not.toBe(b);
   });
 
+  it('produces different hashes for different approval behaviors', () => {
+    const a = toolManifestHash([{
+      ...baseContract,
+      requiresApproval: true,
+      approvalBehavior: 'record_only'
+    }]);
+    const b = toolManifestHash([{
+      ...baseContract,
+      requiresApproval: true,
+      approvalBehavior: 'execute_pending_action'
+    }]);
+    expect(a).not.toBe(b);
+  });
+
   it('produces different hashes for different modes', () => {
     const a = toolManifestHash([baseContract]);
     const b = toolManifestHash([{

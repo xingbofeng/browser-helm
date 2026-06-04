@@ -5,7 +5,7 @@ import type { ToolPromptContract } from './tool-router';
  *
  * The hash covers the security-relevant fields of every tool contract:
  * name, description, argsSchema, risk, readOnly, requiresApproval,
- * modes, and contextVisibility. Tools are sorted by name before hashing
+ * approvalBehavior, modes, and contextVisibility. Tools are sorted by name before hashing
  * so the output is independent of iteration order.
  *
  * Fields NOT included (intentionally): title (display-only).
@@ -26,6 +26,7 @@ export function toolManifestHash(contracts: ToolPromptContract[]): string {
       contract.risk,
       String(contract.readOnly),
       String(contract.requiresApproval),
+      contract.approvalBehavior ?? '',
       contract.modes.slice().sort().join(','),
       contract.contextVisibility
     );

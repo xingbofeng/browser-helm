@@ -555,6 +555,135 @@ describe('task verifier', () => {
     });
   });
 
+  it('accepts post-submit URL change as submit success evidence', () => {
+    expect(verifyTaskCompletionBeforeFinish([
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.TOOL_RESULT,
+        payload: {
+          tool: TOOL_NAMES.PAGE_OBSERVE,
+          ok: true,
+          code: 'OK',
+          summary: 'before',
+          data: { url: 'https://example.com/signup' }
+        }
+      },
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.FORM_SUBMIT_RESULT,
+        payload: {
+          outcome: 'submitted',
+          summary: 'submitted'
+        }
+      },
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.TOOL_RESULT,
+        payload: {
+          tool: TOOL_NAMES.PAGE_OBSERVE,
+          ok: true,
+          code: 'OK',
+          summary: 'after',
+          data: { url: 'https://example.com/welcome' }
+        }
+      }
+    ])).toMatchObject({
+      ok: true,
+      verifier: 'submit',
+      status: 'pass'
+    });
+  });
+
+  it('accepts network 2xx evidence as submit success evidence', () => {
+    expect(verifyTaskCompletionBeforeFinish([
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.FORM_SUBMIT_RESULT,
+        payload: {
+          outcome: 'submitted',
+          summary: 'submitted'
+        }
+      },
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.TOOL_RESULT,
+        payload: {
+          tool: TOOL_NAMES.CDP_GET_NETWORK_EVENTS,
+          ok: true,
+          code: 'OK',
+          summary: 'network',
+          data: {
+            events: [
+              { type: 'response', status: 201, url: 'https://example.com/signup' }
+            ]
+          }
+        }
+      },
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.TOOL_RESULT,
+        payload: {
+          tool: TOOL_NAMES.PAGE_OBSERVE,
+          ok: true,
+          code: 'OK',
+          summary: 'post-submit observe',
+          data: { visibleTextSummary: 'Welcome' }
+        }
+      }
+    ])).toMatchObject({
+      ok: true,
+      verifier: 'submit',
+      status: 'pass'
+    });
+  });
+
+  it('accepts form disappearance as submit success evidence', () => {
+    expect(verifyTaskCompletionBeforeFinish([
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.TOOL_RESULT,
+        payload: {
+          tool: TOOL_NAMES.PAGE_OBSERVE,
+          ok: true,
+          code: 'OK',
+          summary: 'before',
+          data: {
+            structuredPageData: {
+              forms: { status: 'ready', count: 1 }
+            }
+          }
+        }
+      },
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.FORM_SUBMIT_RESULT,
+        payload: {
+          outcome: 'submitted',
+          summary: 'submitted'
+        }
+      },
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.TOOL_RESULT,
+        payload: {
+          tool: TOOL_NAMES.PAGE_OBSERVE,
+          ok: true,
+          code: 'OK',
+          summary: 'after',
+          data: {
+            structuredPageData: {
+              forms: { status: 'empty', count: 0 }
+            }
+          }
+        }
+      }
+    ])).toMatchObject({
+      ok: true,
+      verifier: 'submit',
+      status: 'pass'
+    });
+  });
+
   it('blocks finish after workflow replay without postcondition score evidence', () => {
     expect(verifyTaskCompletionBeforeFinish([
       {

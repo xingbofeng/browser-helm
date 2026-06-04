@@ -8,6 +8,7 @@ import {
   runtimeEventSchema,
   type RuntimeProviderSettings,
   type RuntimeProviderTestResult,
+  type RequestCapabilityInput,
   type RuntimeResponse,
   type RuntimeToolExecutionResult,
   type RunSnapshot,
@@ -137,6 +138,20 @@ export class ExtensionRuntimePort implements RuntimePort {
     }
     if (!isToolResult(response.data)) {
       throw new Error('Runtime approval response is invalid');
+    }
+    return response.data;
+  }
+
+  async requestCapability(input: RequestCapabilityInput): Promise<RuntimeToolExecutionResult> {
+    const response = await sendRuntimeMessage({
+      type: RUNTIME_MESSAGES.REQUEST_CAPABILITY,
+      input
+    });
+    if (!response.ok) {
+      throw new Error(response.message);
+    }
+    if (!isToolResult(response.data)) {
+      throw new Error('Runtime capability request response is invalid');
     }
     return response.data;
   }

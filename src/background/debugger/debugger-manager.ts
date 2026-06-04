@@ -42,6 +42,7 @@ export class DebuggerManager {
     }
     const existing = this.sessions.get(tabId);
     if (existing) {
+      this.scheduleSessionExpiry(tabId);
       return this.attachState(existing);
     }
     this.ensureListener();

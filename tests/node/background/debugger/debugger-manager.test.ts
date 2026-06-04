@@ -227,4 +227,40 @@ describe('DebuggerManager', () => {
       detachReason: 'ttl_expired'
     });
   });
+
+  it('reuses same-tab debugger sessions and refreshes their TTL without reattaching', async () => {
+    vi.useFakeTimers();
+    const attach = vi.fn(async () => undefined);
+    const detach = vi.fn(async () => undefined);
+    vi.stubGlobal('chrome', {
+      debugger: {
+        attach,
+        detach,
+        sendCommand: vi.fn(async () => ({})),
+        onEvent: { addListener: vi.fn() },
+        onDetach: { addListener: vi.fn() }
+      },
+      tabs: {
+        onRemoved: { addListener: vi.fn() }
+      }
+    });
+    const manager = new DebuggerManager({ sessionTtlMs: 1_000 });
+
+    await manager.attach(77);
+    await vi.advanceTimersByTimeAsync(900);
+    await manager.attach(77);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(attach).toHaveBeenCalledTimes(1);
+    expect(manager.isAttached(77)).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(801);
+
+    expect(detach).toHaveBeenCalledWith({ tabId: 77 });
+    expect(manager.sessionState(77)).toMatchObject({
+      tabId: 77,
+      attached: false,
+      detachReason: 'ttl_expired'
+    });
+  });
 });
