@@ -93,11 +93,11 @@
 
 ### 🔌 模型自由
 
-不内置任何模型服务。支持所有 OpenAI 兼容接口，包括 Ollama、vLLM、DeepSeek、通义千问等本地或云端模型。自定义 Base URL；API Key 默认保存在 `chrome.storage.session`，仅在你显式选择可信本地持久化时才写入 `chrome.storage.local`。API Key 不会进入 trace 或发送到 BrowserHelm 自有后端。
+不内置任何模型服务。支持所有 OpenAI 兼容接口，包括 Ollama、vLLM、DeepSeek、通义千问等本地或云端模型。自定义 Base URL；API Key 默认保存在受信任本地扩展存储 `chrome.storage.local`，可在设置中切换为仅当前浏览器会话的 `chrome.storage.session`。API Key 不会进入 trace 或发送到 BrowserHelm 自有后端。
 
 ### 🏠 本地优先
 
-Agent 核心循环、trace、消息和非密 provider 配置基于 `chrome.storage.local` 在浏览器本地运行；API Key 默认使用 `chrome.storage.session`；domain memory、workflow 和 scratchpad 使用 IndexedDB（Dexie）保存。不依赖 BrowserHelm 自有后端服务器，不需要注册 BrowserHelm 服务账号。使用云端模型时，裁剪/脱敏后的页面上下文会发送到你配置的 provider 端点。
+Agent 核心循环、trace、消息和 provider 配置基于 `chrome.storage.local` 在浏览器本地运行；API Key 默认使用受信任本地存储，也可切换为 `chrome.storage.session`；domain memory、workflow 和 scratchpad 使用 IndexedDB（Dexie）保存。不依赖 BrowserHelm 自有后端服务器，不需要注册 BrowserHelm 服务账号。使用云端模型时，裁剪/脱敏后的页面上下文会发送到你配置的 provider 端点。
 
 ### 📦 页面捕获与导出
 

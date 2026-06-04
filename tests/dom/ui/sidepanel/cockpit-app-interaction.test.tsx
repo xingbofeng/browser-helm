@@ -847,6 +847,10 @@ describe('CockpitApp interaction', () => {
       await Promise.resolve();
     });
     await act(async () => {
+      button('大模型设置').click();
+      await Promise.resolve();
+    });
+    await act(async () => {
       changeInput('Base URL', 'https://api.new.example/v1');
       changeInput('Model', 'gpt-new');
       changeInput('API Key', 'sk-new-secret');
@@ -859,7 +863,7 @@ describe('CockpitApp interaction', () => {
       baseUrl: 'https://api.new.example/v1',
       model: 'gpt-new',
       apiKey: 'sk-new-secret',
-      apiKeyPersistence: 'session',
+      apiKeyPersistence: 'local',
       streamingEnabled: true,
       allowLocalProviderEndpoints: false
     });
@@ -890,6 +894,10 @@ describe('CockpitApp interaction', () => {
       await Promise.resolve();
     });
     await act(async () => {
+      button('大模型设置').click();
+      await Promise.resolve();
+    });
+    await act(async () => {
       changeInput('Base URL', 'https://api.next.example/v1');
       changeInput('Model', 'gpt-next');
       button('保存配置').click();
@@ -901,7 +909,7 @@ describe('CockpitApp interaction', () => {
       baseUrl: 'https://api.next.example/v1',
       model: 'gpt-next',
       apiKey: 'sk-existing-secret',
-      apiKeyPersistence: 'session',
+      apiKeyPersistence: 'local',
       streamingEnabled: true,
       allowLocalProviderEndpoints: false
     });

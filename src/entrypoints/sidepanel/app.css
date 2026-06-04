@@ -539,14 +539,30 @@ body.animal-cursor--force *,
 }
 
 .bh-agentMessage-error .bh-agentMessageIcon {
+  width: 58px;
+  height: 58px;
+  align-self: start;
   border-color: #ffc4b6;
   background: #fff1ec;
   color: #b42300;
 }
 
+.bh-agentMessage-error {
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
 .bh-agentMessage-error .bh-agentMessageBody {
   border-color: #ffc4b6;
+  padding: 14px 16px;
   background: #fff8f3;
+}
+
+.bh-agentMessage-error .bh-agentMessageBody h2 {
+  margin-bottom: 8px;
+  font-size: 15px;
+  line-height: 1.3;
 }
 
 .bh-agentMessage-recommendation .bh-agentMessageIcon {
@@ -2173,6 +2189,74 @@ button.bh-visionManifestDownload {
   color: #5c493d;
   font-size: 12px;
   font-weight: 900;
+}
+
+.bh-settingsTabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.bh-settingsTabs button {
+  min-width: 0;
+  border: 1px solid #dccbaa;
+  border-radius: 6px;
+  padding: 7px 6px;
+  background: #fdf6ed;
+  color: #6a5546;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.bh-settingsTabs button.is-selected {
+  border-color: #448a50;
+  background: #dff0d8;
+  color: #1f5a29;
+}
+
+.bh-settingsTabPanel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.bh-shortcutList {
+  display: grid;
+  gap: 7px;
+}
+
+.bh-shortcutRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #ead9bf;
+  border-radius: 6px;
+  padding: 8px 9px;
+  background: #fffaf0;
+  color: #33271f;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.bh-shortcutRow span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.bh-shortcutKey {
+  border: 1px solid #dccbaa;
+  border-radius: 5px;
+  padding: 3px 6px;
+  background: #f8efdf;
+  color: #5c493d;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .bh-modelConfig small,

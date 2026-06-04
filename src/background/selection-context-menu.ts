@@ -1,7 +1,8 @@
 import type { ExecuteToolInput, StartRunInput } from '../runtime/runtime-messages';
 import {
   SELECTION_MARKDOWN_DOWNLOAD_MESSAGE,
-  SELECTION_MARKDOWN_MENU_ID
+  SELECTION_MARKDOWN_MENU_ID,
+  SELECTION_TEXT_READ_MESSAGE
 } from '../shared/constants/selection-markdown';
 import { TOOL_NAMES, type ToolName } from '../shared/constants/tool-names';
 import { downloadVisionToolResult } from './selection-context-download';
@@ -48,8 +49,12 @@ type SelectionClickInfo = {
   frameId?: number | undefined;
 };
 type SelectionClickTab = Pick<chrome.tabs.Tab, 'id'> | undefined;
+type SelectionChromeApi = {
+  tabs?: Partial<Pick<typeof chrome.tabs, 'query' | 'sendMessage'>> | undefined;
+};
 
 type SelectionContextDeps = {
+  chromeApi?: SelectionChromeApi | undefined;
   startRun: (input: StartRunInput) => Promise<{ runId: string }>;
   executeTool?: ((input: ExecuteToolInput) => Promise<unknown>) | undefined;
   downloadToolResult?: ((input: {
@@ -60,6 +65,11 @@ type SelectionContextDeps = {
   }) => Promise<void>) | undefined;
   openSidePanelForTab?: ((tabId: number) => Promise<void>) | undefined;
   openSidePanelForRun: (tabId: number, runId: string) => Promise<void>;
+};
+
+type SelectionCommandDeps = SelectionContextDeps & {
+  activeTab?: Pick<chrome.tabs.Tab, 'id'> | undefined;
+  chromeApi?: SelectionChromeApi | undefined;
 };
 
 const BROWSERHELM_MENU_CONTEXTS: MenuContexts = ['page', 'selection', 'link', 'image'];
@@ -167,7 +177,8 @@ export async function handleSelectionContextMenuClick(
   }
   if (action === 'downloadMarkdown') {
     const options = typeof info.frameId === 'number' ? { frameId: info.frameId } : undefined;
-    await globalThis.chrome?.tabs?.sendMessage?.(
+    const tabsApi = deps.chromeApi?.tabs ?? globalThis.chrome?.tabs;
+    await tabsApi?.sendMessage?.(
       tabId,
       { type: SELECTION_MARKDOWN_DOWNLOAD_MESSAGE },
       options
@@ -212,6 +223,30 @@ export async function handleSelectionContextMenuClick(
   await deps.openSidePanelForRun(tabId, started.runId);
 }
 
+export async function handleSelectionCommand(
+  command: string,
+  deps: SelectionCommandDeps
+): Promise<void> {
+  const menuItemId = menuIdFromCommand(command);
+  if (!menuItemId) {
+    return;
+  }
+  const tab = deps.activeTab ?? await readActiveTab(deps.chromeApi);
+  if (!tab?.id) {
+    return;
+  }
+  if (menuItemId === SELECTION_CONTEXT_MENU_IDS.explain || menuItemId === SELECTION_CONTEXT_MENU_IDS.translate) {
+    const selectionText = await readActiveSelectionText(tab.id, deps.chromeApi);
+    await handleSelectionContextMenuClick(
+      { menuItemId, selectionText },
+      tab,
+      deps
+    );
+    return;
+  }
+  await handleSelectionContextMenuClick({ menuItemId }, tab, deps);
+}
+
 function actionFromMenuId(menuItemId: string | number): SelectionContextAction | undefined {
   if (menuItemId === SELECTION_CONTEXT_MENU_IDS.explain) {
     return 'explain';
@@ -232,6 +267,51 @@ function actionFromMenuId(menuItemId: string | number): SelectionContextAction |
     return 'collectImages';
   }
   return undefined;
+}
+
+function menuIdFromCommand(command: string): string | undefined {
+  if (command === SELECTION_MARKDOWN_MENU_ID) {
+    return SELECTION_MARKDOWN_MENU_ID;
+  }
+  if (command === SELECTION_CONTEXT_MENU_IDS.explain) {
+    return SELECTION_CONTEXT_MENU_IDS.explain;
+  }
+  if (command === SELECTION_CONTEXT_MENU_IDS.translate) {
+    return SELECTION_CONTEXT_MENU_IDS.translate;
+  }
+  if (command === SELECTION_CONTEXT_MENU_IDS.captureViewport) {
+    return SELECTION_CONTEXT_MENU_IDS.captureViewport;
+  }
+  if (command === SELECTION_CONTEXT_MENU_IDS.captureFullPage) {
+    return SELECTION_CONTEXT_MENU_IDS.captureFullPage;
+  }
+  if (command === SELECTION_CONTEXT_MENU_IDS.collectImages) {
+    return SELECTION_CONTEXT_MENU_IDS.collectImages;
+  }
+  return undefined;
+}
+
+async function readActiveTab(input?: SelectionCommandDeps['chromeApi']): Promise<Pick<chrome.tabs.Tab, 'id'> | undefined> {
+  const tabsApi = input?.tabs ?? globalThis.chrome?.tabs;
+  const tabs = await tabsApi?.query?.({ active: true, currentWindow: true }).catch(() => []);
+  return tabs?.[0];
+}
+
+async function readActiveSelectionText(
+  tabId: number,
+  input?: SelectionCommandDeps['chromeApi']
+): Promise<string | undefined> {
+  const tabsApi = input?.tabs ?? globalThis.chrome?.tabs;
+  const response = await tabsApi?.sendMessage?.(
+    tabId,
+    { type: SELECTION_TEXT_READ_MESSAGE },
+    undefined
+  ).catch(() => undefined) as unknown;
+  if (!response || typeof response !== 'object') {
+    return undefined;
+  }
+  const selectionText = (response as Record<string, unknown>).selectionText;
+  return typeof selectionText === 'string' ? selectionText : undefined;
 }
 
 function isVisionAction(action: SelectionContextAction): action is VisionContextAction {

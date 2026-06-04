@@ -6,7 +6,7 @@ BrowserHelm runs in your browser as a Chrome extension. No BrowserHelm-owned bac
 
 **What stays local:**
 - Settings and non-secret provider configuration → `chrome.storage.local`.
-- Provider API keys → `chrome.storage.session` by default; `chrome.storage.local` only when the user explicitly chooses trusted local storage.
+- Provider API keys → trusted local storage in `chrome.storage.local` by default; `chrome.storage.session` only when the user explicitly chooses current browser session storage.
 - Run traces, agent messages, task state → `chrome.storage.local`.
 - DOM observation data → processed in-browser; only trimmed summaries sent to provider.
 
@@ -20,9 +20,9 @@ BrowserHelm runs in your browser as a Chrome extension. No BrowserHelm-owned bac
 
 ## API Key Storage
 
-API keys are session-only by default. BrowserHelm stores the key in `chrome.storage.session` and keeps only non-secret provider settings such as Base URL, model, and persistence mode in `chrome.storage.local`.
+API keys use trusted local storage by default. BrowserHelm stores the key in `chrome.storage.local` so it survives extension reloads, together with provider settings such as Base URL, model, and persistence mode. This local extension storage is unencrypted on disk, so it should only be used on trusted devices.
 
-Trusted local persistence can be enabled by explicit user opt-in. When enabled, the API key is stored in `chrome.storage.local` (unencrypted on disk), so the UI labels it as trusted local storage rather than the default path.
+Users can switch to current browser session storage when they do not want the key written to disk. In that mode BrowserHelm stores the key in `chrome.storage.session`, and extension reloads may require re-entering it.
 
 API keys are:
 - Never written to trace/model context.

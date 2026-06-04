@@ -35,7 +35,7 @@ export class ChromeSettingsStore implements SettingsStore {
     const sessionApiKey = await this.getSessionProviderApiKey();
     return {
       ...withoutApiKey(settings),
-      apiKeyPersistence: settings.apiKeyPersistence ?? 'session',
+      apiKeyPersistence: settings.apiKeyPersistence ?? 'local',
       ...(sessionApiKey ? { apiKey: sessionApiKey } : {})
     };
   }
@@ -44,7 +44,7 @@ export class ChromeSettingsStore implements SettingsStore {
     if (!globalThis.chrome?.storage?.local) {
       return;
     }
-    const persistence = settings.apiKeyPersistence === 'local' ? 'local' : 'session';
+    const persistence = settings.apiKeyPersistence === 'session' ? 'session' : 'local';
     if (persistence === 'session') {
       await this.setSessionProviderApiKey(settings.apiKey);
     } else {

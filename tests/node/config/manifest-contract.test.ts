@@ -110,31 +110,57 @@ describe('manifest 权限契约', () => {
 });
 
 describe('manifest commands 契约', () => {
+  const expectedCommands = {
+    'open-browserhelm-side-panel': 'Alt+Shift+B',
+    'browserhelm-selection-to-markdown': 'Alt+Shift+M',
+    'browserhelm-selection-explain': 'Alt+Shift+E',
+    'browserhelm-selection-translate': 'Alt+Shift+T',
+    'browserhelm-vision-capture-viewport': undefined,
+    'browserhelm-vision-capture-full-page': undefined,
+    'browserhelm-vision-collect-images': undefined
+  } as const;
+
   it('存在 open-browserhelm-side-panel 快捷键命令', () => {
     const commands = manifest.commands as Record<string, unknown>;
     expect(commands).toHaveProperty('open-browserhelm-side-panel');
   });
 
+  it('为右键菜单的六个功能提供快捷键命令', () => {
+    const commands = manifest.commands as Record<string, unknown>;
+
+    expect(Object.keys(commands).sort()).toEqual(Object.keys(expectedCommands).sort());
+  });
+
   it('快捷键命令描述不为空', () => {
     const commands = manifest.commands as Record<string, unknown>;
-    const cmd = commands['open-browserhelm-side-panel'] as Record<string, unknown>;
-    expect(cmd.description).toBeTruthy();
-    expect(typeof cmd.description).toBe('string');
+    for (const commandName of Object.keys(expectedCommands)) {
+      const cmd = commands[commandName] as Record<string, unknown>;
+      expect(cmd.description).toBeTruthy();
+      expect(typeof cmd.description).toBe('string');
+    }
   });
 
-  it('快捷键命令 suggested_key 包含 default (Alt+Shift+B)', () => {
+  it('最多只声明 4 个 suggested_key，避免 Chrome 拒绝加载扩展', () => {
     const commands = manifest.commands as Record<string, unknown>;
-    const cmd = commands['open-browserhelm-side-panel'] as Record<string, unknown>;
-    const suggestedKey = cmd.suggested_key as Record<string, string>;
-    expect(suggestedKey).toBeDefined();
-    expect(suggestedKey.default).toBe('Alt+Shift+B');
+    const commandsWithSuggestedKeys = Object.values(commands).filter((command) =>
+      Boolean((command as Record<string, unknown>).suggested_key)
+    );
+
+    expect(commandsWithSuggestedKeys).toHaveLength(4);
   });
 
-  it('快捷键命令 suggested_key 包含 mac (Alt+Shift+B)', () => {
+  it('快捷键命令 suggested_key 符合 Chrome 4 个默认快捷键上限', () => {
     const commands = manifest.commands as Record<string, unknown>;
-    const cmd = commands['open-browserhelm-side-panel'] as Record<string, unknown>;
-    const suggestedKey = cmd.suggested_key as Record<string, string>;
-    expect(suggestedKey.mac).toBe('Alt+Shift+B');
+    for (const [commandName, shortcut] of Object.entries(expectedCommands)) {
+      const cmd = commands[commandName] as Record<string, unknown>;
+      const suggestedKey = cmd.suggested_key as Record<string, string> | undefined;
+      if (!shortcut) {
+        expect(suggestedKey).toBeUndefined();
+        continue;
+      }
+      expect(suggestedKey?.default).toBe(shortcut);
+      expect(suggestedKey?.mac).toBe(shortcut);
+    }
   });
 });
 

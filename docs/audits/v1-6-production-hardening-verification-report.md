@@ -1,7 +1,7 @@
 # v1.6 Production Hardening Verification Report
 
 > 日期：2026-06-04
-> 范围：`docs/superpowers/plans/2026-06-03-v1-6-production-hardening.md`
+> 范围：v1.6 hardening 任务实现、验证记录与 release gate 证据
 
 ## 结论
 
@@ -13,7 +13,7 @@ BrowserHelm v1.6 当前默认发布状态是 **controlled-beta / release candida
 
 - P0 semantic completion verifier：answer、form、submit、navigation、click、workflow、debug verifier 已集成到 finish evaluation。
 - Runtime capability/source trust：Chrome permission probe、capability fail-closed、public runtime source stripping、background source assignment 已覆盖。
-- Secrets/permissions/domain consent：provider key 默认 session-only，本地持久化需要 UI 显式选择并展示风险；`debugger` 因 Chrome 约束为 required 但 CDP attach 仍走 BrowserHelm approval/session gate；`downloads` 在 controlled-beta 中为 required 以支持右键长图/图片 ZIP 的 background download fallback；未知域名 provider context 需要 consent。
+- Secrets/permissions/domain consent：provider key 默认使用受信任本地存储，可在 UI 中切回当前浏览器会话并展示风险；`debugger` 因 Chrome 约束为 required 但 CDP attach 仍走 BrowserHelm approval/session gate；`downloads` 在 controlled-beta 中为 required 以支持右键长图/图片 ZIP 的 background download fallback；未知域名 provider context 需要 consent。
 - Adapter truthfulness/drift：Domain Adapter 保持 non-executing SiteHints 语义，drift status 基于 signal 生成 `ok` / `drift_suspected` 并保留 generic fallback。
 - Security coverage：security-critical file thresholds 当前通过。
 - P2 hardening：workflow structured invariants、true element screenshot crop、approval transaction/recovery boundary、release profiles 已实现并测试。

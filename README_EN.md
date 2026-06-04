@@ -93,11 +93,11 @@ Custom Agent Kernel drives the complete loop:
 
 ### 🔌 Model Freedom
 
-No built-in model service. Compatible with all OpenAI-compatible APIs including Ollama, vLLM, DeepSeek, Qwen, and more — local or cloud. Custom Base URL is supported; API keys are stored in `chrome.storage.session` by default and are written to `chrome.storage.local` only when you explicitly opt into trusted local persistence.
+No built-in model service. Compatible with all OpenAI-compatible APIs including Ollama, vLLM, DeepSeek, Qwen, and more — local or cloud. Custom Base URL is supported; API keys are stored in trusted local extension storage (`chrome.storage.local`) by default and can be switched to current-session-only `chrome.storage.session` in settings.
 
 ### 🏠 Local-First
 
-Agent core loop, trace, messages, and non-secret provider settings run locally via `chrome.storage.local`; API keys use `chrome.storage.session` by default; domain memory, workflows, and scratchpad data use IndexedDB. Zero BrowserHelm backend dependency, no account registration needed. Page context is sent only to your chosen AI provider endpoint.
+Agent core loop, trace, messages, and provider settings run locally via `chrome.storage.local`; API keys use trusted local storage by default and can be switched to `chrome.storage.session`; domain memory, workflows, and scratchpad data use IndexedDB. Zero BrowserHelm backend dependency, no account registration needed. Page context is sent only to your chosen AI provider endpoint.
 
 ### 📦 Page Capture & Export
 

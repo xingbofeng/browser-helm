@@ -2,7 +2,10 @@ import { ContentRpcHandler } from '../page/messaging/content-rpc-handler';
 import { handleContextMenuDownloadMessage } from '../page/selection/context-menu-downloads';
 import { downloadCurrentSelectionAsMarkdown } from '../page/selection/selection-markdown-controller';
 import { SIDE_PANEL_MESSAGES } from '../shared/constants/event-names';
-import { SELECTION_MARKDOWN_DOWNLOAD_MESSAGE } from '../shared/constants/selection-markdown';
+import {
+  SELECTION_MARKDOWN_DOWNLOAD_MESSAGE,
+  SELECTION_TEXT_READ_MESSAGE
+} from '../shared/constants/selection-markdown';
 import {
   BROWSER_HELM_DOMAIN_POLICY_STORAGE_KEY,
   evaluateBrowserHelmDomainOperationPolicy,
@@ -81,6 +84,13 @@ function installWithDomainPolicy(
         selection: window.getSelection(),
         baseUrl: window.location.href
       }));
+      return false;
+    }
+    if (isSelectionTextReadMessage(message)) {
+      sendResponse({
+        ok: true,
+        selectionText: window.getSelection()?.toString() ?? ''
+      });
       return false;
     }
     void handleContextMenuDownloadMessage({ document, message }).then((result) => {
@@ -623,4 +633,13 @@ function isSelectionMarkdownDownloadMessage(value: unknown): value is {
     return false;
   }
   return (value as Record<string, unknown>).type === SELECTION_MARKDOWN_DOWNLOAD_MESSAGE;
+}
+
+function isSelectionTextReadMessage(value: unknown): value is {
+  type: typeof SELECTION_TEXT_READ_MESSAGE;
+} {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  return (value as Record<string, unknown>).type === SELECTION_TEXT_READ_MESSAGE;
 }

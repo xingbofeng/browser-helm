@@ -650,6 +650,11 @@ describe('agent side panel components', () => {
       await Promise.resolve();
     });
 
+    await act(async () => {
+      button('大模型设置', container).click();
+      await Promise.resolve();
+    });
+
     expect([...document.querySelectorAll('.bh-modelConfig label > span')]
       .map((element) => element.textContent?.trim())
       .filter(Boolean)).toEqual(['Base URL', 'Model', 'API Key']);
@@ -681,9 +686,70 @@ describe('agent side panel components', () => {
     const savedSettings = (onSave.mock.calls as unknown as Array<[unknown]>)[0]?.[0];
     expect(savedSettings).toMatchObject({
       apiKey: 'sk-new-secret',
-      apiKeyPersistence: 'session',
+      apiKeyPersistence: 'local',
       streamingEnabled: true
     });
+    await unmountRoot(root);
+    container.remove();
+  });
+
+  it('splits settings into general, model, and shortcut tabs', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <I18nProvider>
+          <ModelConfigForm
+            settings={{
+              baseUrl: 'https://api.example.com/v1',
+              model: 'gpt-test',
+              apiKeyPersistence: 'local'
+            }}
+            onClose={() => undefined}
+            onSave={() => Promise.resolve()}
+            onTest={() => Promise.resolve({
+              ok: true,
+              code: 'OK',
+              message: '连接正常'
+            })}
+          />
+        </I18nProvider>
+      );
+      await Promise.resolve();
+    });
+
+    const tabNames = [...container.querySelectorAll('[role="tab"]')]
+      .map((tab) => tab.textContent?.trim());
+    expect(tabNames).toEqual(['通用设置', '大模型设置', '快捷键设置']);
+    expect(container.textContent).toContain('界面语言');
+    expect(container.textContent).not.toContain('Base URL');
+
+    await act(async () => {
+      button('大模型设置', container).click();
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain('Base URL');
+    expect(container.textContent).toContain('API Key 存储');
+    expect(container.textContent).not.toContain('Alt+Shift+M');
+
+    await act(async () => {
+      button('快捷键设置', container).click();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('下载选区为 Markdown');
+    expect(container.textContent).toContain('Alt+Shift+M');
+    expect(container.textContent).toContain('解释选中文字');
+    expect(container.textContent).toContain('Alt+Shift+E');
+    expect(container.textContent).toContain('翻译选中文字');
+    expect(container.textContent).toContain('Alt+Shift+T');
+    expect(container.textContent).toContain('截取当前视口');
+    expect(container.textContent).toContain('截取当前页面长图');
+    expect(container.textContent).toContain('获取当前页面全部图片');
+    expect(container.textContent).toContain('未绑定');
+    expect(container.textContent).toContain('最多允许扩展预设 4 个快捷键');
     await unmountRoot(root);
     container.remove();
   });
@@ -715,6 +781,11 @@ describe('agent side panel components', () => {
           />
         </I18nProvider>
       );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      button('大模型设置', container).click();
       await Promise.resolve();
     });
 
@@ -760,6 +831,11 @@ describe('agent side panel components', () => {
           />
         </I18nProvider>
       );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      button('大模型设置', container).click();
       await Promise.resolve();
     });
 

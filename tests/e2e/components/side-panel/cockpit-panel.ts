@@ -150,7 +150,12 @@ export class CockpitPanel {
     if (await baseUrl.isVisible()) {
       return;
     }
-    await this.page.getByRole('button', { name: /^(打开模型配置|Open settings)$/u }).click();
+    const modelTab = this.page.getByRole('tab', { name: /^(大模型设置|Model)$/u });
+    if (!(await modelTab.isVisible())) {
+      await this.page.getByRole('button', { name: /^(打开模型配置|Open settings)$/u }).click();
+      await expect(modelTab).toBeVisible();
+    }
+    await modelTab.click();
     await expect(baseUrl).toBeVisible();
   }
 

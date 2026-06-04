@@ -1,6 +1,7 @@
 import { BackgroundRuntimeHost } from '../background/runtime/background-runtime-host';
 import { RunManager } from '../background/runtime/run-manager';
 import {
+  handleSelectionCommand,
   handleSelectionContextMenuClick,
   registerSelectionContextMenus
 } from '../background/selection-context-menu';
@@ -116,17 +117,23 @@ export default defineBackground(() => {
   });
 
   chrome.commands?.onCommand.addListener((command) => {
-    if (command !== 'open-browserhelm-side-panel') {
+    if (command === 'open-browserhelm-side-panel') {
+      void chrome.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
+        const tabId = tabs[0]?.id;
+        if (!tabId) {
+          return;
+        }
+        void chrome.tabs.sendMessage(tabId, {
+          type: SIDE_PANEL_MESSAGES.FLOATING_PANEL_TOGGLE
+        }).catch(() => undefined);
+      });
       return;
     }
-    void chrome.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
-      const tabId = tabs[0]?.id;
-      if (!tabId) {
-        return;
-      }
-      void chrome.tabs.sendMessage(tabId, {
-        type: SIDE_PANEL_MESSAGES.FLOATING_PANEL_TOGGLE
-      }).catch(() => undefined);
+    void handleSelectionCommand(command, {
+      startRun: (input) => runManager.startRun(input),
+      executeTool: (input) => runManager.executeTool(input),
+      openSidePanelForTab,
+      openSidePanelForRun
     });
   });
 

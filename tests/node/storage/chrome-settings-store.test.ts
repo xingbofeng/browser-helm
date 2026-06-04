@@ -34,20 +34,38 @@ describe('ChromeSettingsStore provider secrets', () => {
     vi.unstubAllGlobals();
   });
 
-  it('stores provider API keys in session storage by default, not chrome.storage.local', async () => {
+  it('stores provider API keys in local storage by default for reload persistence', async () => {
     const store = new ChromeSettingsStore();
 
     await store.setProviderSettings({
       baseUrl: 'https://api.example.com/v1',
       model: 'demo-model',
-      apiKey: 'sk-session-secret'
+      apiKey: 'sk-local-default-secret'
+    });
+
+    expect(JSON.stringify(localData)).toContain('sk-local-default-secret');
+    expect(JSON.stringify(sessionData)).not.toContain('sk-local-default-secret');
+    await expect(store.getProviderSettings()).resolves.toMatchObject({
+      baseUrl: 'https://api.example.com/v1',
+      model: 'demo-model',
+      apiKey: 'sk-local-default-secret',
+      apiKeyPersistence: 'local'
+    });
+  });
+
+  it('stores provider API keys in session storage when explicitly requested', async () => {
+    const store = new ChromeSettingsStore();
+
+    await store.setProviderSettings({
+      baseUrl: 'https://api.example.com/v1',
+      model: 'demo-model',
+      apiKey: 'sk-session-secret',
+      apiKeyPersistence: 'session'
     });
 
     expect(JSON.stringify(localData)).not.toContain('sk-session-secret');
     expect(JSON.stringify(sessionData)).toContain('sk-session-secret');
     await expect(store.getProviderSettings()).resolves.toMatchObject({
-      baseUrl: 'https://api.example.com/v1',
-      model: 'demo-model',
       apiKey: 'sk-session-secret',
       apiKeyPersistence: 'session'
     });
@@ -84,7 +102,7 @@ describe('ChromeSettingsStore provider secrets', () => {
       baseUrl: 'https://api.example.com/v1',
       model: 'demo-model',
       streamingEnabled: true,
-      apiKeyPersistence: 'session'
+      apiKeyPersistence: 'local'
     });
     await expect(store.getProviderSettings()).resolves.toMatchObject({
       baseUrl: 'https://api.example.com/v1',

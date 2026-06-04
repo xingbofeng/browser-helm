@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   buildSelectionContextTask,
+  handleSelectionCommand,
   handleSelectionContextMenuClick,
   registerSelectionContextMenus,
   SELECTION_CONTEXT_MENU_IDS
@@ -246,5 +247,86 @@ describe('selection context menu click handling', () => {
     );
     expect(startRun).not.toHaveBeenCalled();
     expect(openSidePanelForRun).not.toHaveBeenCalled();
+  });
+});
+
+describe('selection keyboard command handling', () => {
+  it('downloads the active tab selection as Markdown without needing right-click info', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ ok: true });
+    const startRun = vi.fn();
+
+    await handleSelectionCommand('browserhelm-selection-to-markdown', {
+      activeTab: { id: 42 },
+      chromeApi: { tabs: { sendMessage } },
+      startRun,
+      openSidePanelForRun: vi.fn()
+    });
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      42,
+      { type: SELECTION_MARKDOWN_DOWNLOAD_MESSAGE },
+      undefined
+    );
+    expect(startRun).not.toHaveBeenCalled();
+  });
+
+  it('reads active tab selection text before starting an explanation run', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({
+      ok: true,
+      selectionText: 'Keyboard selected text'
+    });
+    const startRun = vi.fn(async (_input: StartRunInput) => ({ runId: 'run_keyboard' }));
+    const openSidePanelForTab = vi.fn(async () => undefined);
+    const openSidePanelForRun = vi.fn(async () => undefined);
+
+    await handleSelectionCommand('browserhelm-selection-explain', {
+      activeTab: { id: 42 },
+      chromeApi: { tabs: { sendMessage } },
+      startRun,
+      openSidePanelForTab,
+      openSidePanelForRun
+    });
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      42,
+      { type: 'BH_SELECTION_TEXT_READ' },
+      undefined
+    );
+    expect(openSidePanelForTab).toHaveBeenCalledWith(42);
+    expect(startRun.mock.calls[0]?.[0]).toMatchObject({
+      mode: 'ask',
+      tabId: 42
+    });
+    expect(startRun.mock.calls[0]?.[0].task).toContain('Keyboard selected text');
+    expect(openSidePanelForRun).toHaveBeenCalledWith(42, 'run_keyboard');
+  });
+
+  it.each([
+    ['browserhelm-vision-capture-viewport', TOOL_NAMES.VISION_CAPTURE_VIEWPORT, {}],
+    ['browserhelm-vision-capture-full-page', TOOL_NAMES.VISION_BATCH_CAPTURE_FULL_PAGES, { scope: 'active_tab' }],
+    ['browserhelm-vision-collect-images', TOOL_NAMES.VISION_COLLECT_IMAGES, { scope: 'active_tab' }]
+  ])('executes and downloads the active tab vision command %s', async (command, tool, args) => {
+    const startRun = vi.fn(async (_input: StartRunInput) => ({ runId: 'run_vision_keyboard' }));
+    const executeTool = vi.fn(async (_input: ExecuteToolInput) => ({ ok: true }));
+    const downloadToolResult = vi.fn(async () => undefined);
+
+    await handleSelectionCommand(command, {
+      activeTab: { id: 42 },
+      startRun,
+      executeTool,
+      downloadToolResult,
+      openSidePanelForRun: vi.fn()
+    });
+
+    expect(executeTool).toHaveBeenCalledWith({
+      runId: 'run_vision_keyboard',
+      tool,
+      args
+    });
+    expect(downloadToolResult).toHaveBeenCalledWith({
+      tabId: 42,
+      tool,
+      result: { ok: true }
+    });
   });
 });

@@ -63,6 +63,36 @@ export default defineConfig({
           mac: 'Alt+Shift+B'
         },
         description: 'Toggle BrowserHelm floating panel'
+      },
+      'browserhelm-selection-to-markdown': {
+        suggested_key: {
+          default: 'Alt+Shift+M',
+          mac: 'Alt+Shift+M'
+        },
+        description: 'Download selected page content as Markdown'
+      },
+      'browserhelm-selection-explain': {
+        suggested_key: {
+          default: 'Alt+Shift+E',
+          mac: 'Alt+Shift+E'
+        },
+        description: 'Explain selected page text with BrowserHelm'
+      },
+      'browserhelm-selection-translate': {
+        suggested_key: {
+          default: 'Alt+Shift+T',
+          mac: 'Alt+Shift+T'
+        },
+        description: 'Translate selected page text with BrowserHelm'
+      },
+      'browserhelm-vision-capture-viewport': {
+        description: 'Download a screenshot of the current viewport'
+      },
+      'browserhelm-vision-capture-full-page': {
+        description: 'Download a full-page screenshot of the current page'
+      },
+      'browserhelm-vision-collect-images': {
+        description: 'Download all images from the current page'
       }
     },
     // BrowserHelm keeps eligible high-risk capabilities optional. Chrome does

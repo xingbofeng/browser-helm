@@ -44,4 +44,38 @@ describe('Cockpit CSS', () => {
     expect(css).toContain('.bh-dataTableWrap');
     expect(css).toContain('overflow-x: hidden');
   });
+
+  it('keeps error message cards visually aligned with a stable icon rail', () => {
+    const css = readFileSync(
+      join(process.cwd(), 'src/entrypoints/sidepanel/app.css'),
+      'utf8'
+    );
+    const errorMessageRule = css.match(/\.bh-agentMessage-error\s*\{[^}]+\}/)?.[0] ?? '';
+    const errorIconRule = css.match(/\.bh-agentMessage-error \.bh-agentMessageIcon\s*\{[^}]+\}/)?.[0] ?? '';
+    const errorBodyRule = css.match(/\.bh-agentMessage-error \.bh-agentMessageBody\s*\{[^}]+\}/)?.[0] ?? '';
+    const errorTitleRule = css.match(/\.bh-agentMessage-error \.bh-agentMessageBody h2\s*\{[^}]+\}/)?.[0] ?? '';
+
+    expect(errorMessageRule).toContain('grid-template-columns: 58px minmax(0, 1fr)');
+    expect(errorMessageRule).toContain('align-items: start');
+    expect(errorIconRule).toContain('width: 58px');
+    expect(errorIconRule).toContain('height: 58px');
+    expect(errorIconRule).toContain('align-self: start');
+    expect(errorBodyRule).toContain('padding: 14px 16px');
+    expect(errorTitleRule).toContain('font-size: 15px');
+  });
+
+  it('styles settings tabs and shortcut rows with stable widths', () => {
+    const css = readFileSync(
+      join(process.cwd(), 'src/entrypoints/sidepanel/app.css'),
+      'utf8'
+    );
+    const tabsRule = css.match(/\.bh-settingsTabs\s*\{[^}]+\}/)?.[0] ?? '';
+    const shortcutRowRule = css.match(/\.bh-shortcutRow\s*\{[^}]+\}/)?.[0] ?? '';
+    const shortcutKeyRule = css.match(/\.bh-shortcutKey\s*\{[^}]+\}/)?.[0] ?? '';
+
+    expect(tabsRule).toContain('grid-template-columns: repeat(3, minmax(0, 1fr))');
+    expect(shortcutRowRule).toContain('grid-template-columns: minmax(0, 1fr) auto');
+    expect(shortcutKeyRule).toContain('font-family: ui-monospace');
+    expect(shortcutKeyRule).toContain('white-space: nowrap');
+  });
 });

@@ -488,7 +488,7 @@
 
 ### v1.6 Production hardening 收口 - 2026-06-03
 
-**目标**：按 `docs/superpowers/plans/2026-06-03-v1-6-production-hardening.md` 收口语义完成验证、运行时能力、source trust、密钥持久化、权限、domain consent、安全覆盖、adapter 真实性、截图 fallback、workflow/postcondition 和 release profile gate。
+**目标**：按 v1.6 production hardening 任务收口语义完成验证、运行时能力、source trust、密钥持久化、权限、domain consent、安全覆盖、adapter 真实性、截图 fallback、workflow/postcondition 和 release profile gate。
 
 **设计决策**：完成 verifier family 与 `TerminationEvaluator` 集成，finish 需要 answer/form/submit/navigation/click/workflow/debug 的语义证据；Chrome 能力来自 real probe，缺失能力 fail closed；公开 runtime 消息不再信任 caller-provided source，background/agent/approval/replay 路径显式标注 source；provider key 默认 session-only，持久化需显式 opt-in；默认 manifest 只保留基础权限，高风险能力进 optional，E2E profile 才提升 required；未知域名 provider context 需显式 consent；adapter 仅声明 non-executing hints；release check 报告 controlled-beta profile。
 

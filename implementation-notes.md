@@ -252,9 +252,17 @@ v1.4 Vision/Screenshot、v1.5 Advanced Browser Tools、Floating Panel 稳定性�
 
 **目标**：解释并修复刷新扩展后需要重新配置 API Key 的问题。
 
-**设计决策**：默认仍使用 `chrome.storage.session` 保存 API Key，避免无提示写入磁盘；当用户在模型配置中显式选择“受信任本地存储”时，`ChromeSettingsStore` 现在真正把 API Key 写入 `chrome.storage.local`，刷新扩展后可继续使用。同步更新中英文 UI 错误提示、安全文档和 README。
+**设计决策**：按用户反馈把默认 API Key 存储改为“受信任本地存储”，`ModelConfigForm` 默认选择 `local`，`ChromeSettingsStore` 未显式传入 persistence 时也写入 `chrome.storage.local`；用户仍可手动切回 `chrome.storage.session`。同步更新中英文 UI 错误提示、安全文档和 README。
 
-**验证结果**：TDD RED/GREEN 覆盖显式 local persistence；相关 storage/UI/runtime 测试 3 files / 93 tests 通过。
+**验证结果**：TDD RED/GREEN 覆盖默认 local persistence、显式 session persistence；相关 storage/UI/runtime 测试通过。
+
+## 错误卡排版对齐修复 - 2026-06-04
+
+**目标**：修复 provider 配置缺失错误卡中图标与文字视觉不齐、正文显得歪的问题。
+
+**设计决策**：为 `.bh-agentMessage-error` 增加专用 grid 轨道，固定 58px 图标 rail，图标与正文都 top-align；错误正文增加更稳定的 padding，标题字号与行高单独调优，减少错误卡在长中文/英文混排时的视觉偏移。
+
+**验证结果**：TDD RED/GREEN 覆盖错误卡 CSS 规则；相关 UI/CSS 测试通过。
 
 ## v1.6 审核意见硬化收口 - 2026-06-04
 
@@ -275,3 +283,11 @@ v1.4 Vision/Screenshot、v1.5 Advanced Browser Tools、Floating Panel 稳定性�
 **偏差说明**：本轮未把 `debugger/downloads` 改回 optional，因为 Chrome manifest 约束和右键下载核心路径都要求它们作为 required 权限；E2E 中 CDP 审批 flow 同步修复了空观察时过早停止轮询的问题。
 
 **验证结果**：目标 Vitest 8 files / 145 tests 通过；`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm test -- --reporter=dot`（1514 passed / 1 skipped）、`npm run build`、`npm run check:release`、`npm run test:e2e`（62 passed / 37 skipped）均通过。`npm test` 仍输出既有 React `act(...)` warning，但测试通过。
+
+## 设置页 Tab 与右键功能快捷键 - 2026-06-04
+
+**目标**：把设置抽屉拆成通用设置、大模型设置、快捷键设置，并为右键菜单功能提供 Chrome 快捷键入口。
+
+**设计决策**：快捷键走 Manifest `commands`，但 Chrome 最多允许扩展预设 4 个 `suggested_key`，因此只为 side panel、Markdown、解释、翻译提供默认键位；截图类命令继续注册但不预设键位，设置页显示“未绑定”并引导到 `chrome://extensions/shortcuts` 手动设置。命令处理复用 `selection-context-menu` 既有右键动作，解释/翻译通过 content script 只读读取当前选区文本。
+
+**验证结果**：TDD RED/GREEN 覆盖 Chrome 4 个 suggested_key 上限、manifest commands、快捷键命令分发、设置页三 tab 和快捷键 CSS；目标 Vitest、`npm run typecheck`、`npm run lint -- --max-warnings=0`、`git diff --check`、`npm run build`、`npm test -- --reporter=dot`（1524 passed / 1 skipped）通过。`cockpit-ui.spec.ts` E2E 因设置页默认 tab 迁移先暴露 POM 失败，修复后单独运行 11 passed。
