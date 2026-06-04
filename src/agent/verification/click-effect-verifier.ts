@@ -9,6 +9,7 @@ import {
   latestToolStartedArgsBefore,
   pass,
   stringField,
+  structuredPassedEvidence,
   subsequentSuccessfulObservation,
   textIncludes
 } from './verifier-utils';
@@ -31,6 +32,14 @@ export function verifyClickEffectCompletion(input: VerificationInput): TaskVerif
       return pass('click_effect', 'Click result includes explicit effect evidence.', [
         { kind: 'click_result', summary: stringField(event.payload, 'summary') ?? 'effectObserved', tool: event.payload.tool }
       ]);
+    }
+    const structuredEvidence = structuredPassedEvidence(
+      event.payload,
+      ['effectEvidence', 'domEffectEvidence', 'stateEvidence'],
+      event.payload.tool
+    );
+    if (structuredEvidence.length > 0) {
+      return pass('click_effect', 'Click result includes structured DOM effect evidence.', structuredEvidence);
     }
     const args = latestToolStartedArgsBefore(input.trace, index, event.payload.tool);
     const expectedEffectText = stringField(args, 'expectedEffectText');

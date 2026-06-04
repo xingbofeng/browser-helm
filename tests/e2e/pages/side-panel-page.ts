@@ -36,10 +36,16 @@ export class SidePanelPage {
   }): Promise<void> {
     const page = this.pageObject;
     await page.evaluate(async (providerSettings) => {
+      const { apiKey, ...storedSettings } = providerSettings;
+      if (apiKey?.trim()) {
+        await chrome.storage.session.set({ providerApiKey: apiKey });
+      } else {
+        await chrome.storage.session.remove('providerApiKey');
+      }
       await chrome.storage.local.set({
         providerSettings: {
-          ...providerSettings,
-          apiKeyPersistence: 'local'
+          ...storedSettings,
+          apiKeyPersistence: 'session'
         }
       });
     }, settings);

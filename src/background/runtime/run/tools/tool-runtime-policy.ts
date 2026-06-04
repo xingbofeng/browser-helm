@@ -1,6 +1,5 @@
-import { PolicyEngine } from '../../../../agent/policy/policy-engine';
 import type { RunMode } from '../../../../shared/schemas/tool.schema';
-import type { ToolRisk } from '../../../../shared/schemas/tool-result.schema';
+import { tZh } from '../../../../i18n/t';
 
 export type PolicyCheckResult = {
   allow: boolean;
@@ -10,14 +9,14 @@ export type PolicyCheckResult = {
 };
 
 export class ToolRuntimePolicy {
-  private readonly engine = new PolicyEngine();
-
   evaluate(risk: string, _runMode?: RunMode): PolicyCheckResult {
-    const policy = this.engine.evaluate({ risk: risk as ToolRisk, wouldRequireApproval: false });
+    const requiresApproval = risk === 'high';
     return {
-      allow: policy.allow,
-      requiresApproval: policy.requiresApproval,
-      reason: policy.reason,
+      allow: !requiresApproval,
+      requiresApproval,
+      reason: requiresApproval
+        ? tZh('policy.approvalRequired')
+        : tZh('policy.allowed'),
       risk
     };
   }

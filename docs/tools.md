@@ -42,6 +42,8 @@ scratchpad_write
 
 当前工具通过 `src/tools/index.ts` 自动发现并注册。只有注册表中的工具会进入 ToolRouter 和模型可见 tool contract。
 
+Domain Adapter 工具只提供非执行型站点提示：guidance、workflow template、locator hint 和 failure report。真实页面动作仍必须通过通用 `bh_` 工具、runtime authorization、domain policy、approval flow 和 verifier。
+
 ### Agent control
 
 ```txt
@@ -198,7 +200,8 @@ bh_action_check_readiness
 | `bh_form_verify` | `low` | 否 | 否 |
 | `bh_form_submit_with_approval` | `high` | 否，创建审批请求 | 用户批准后真实提交并重新 observe |
 | `bh_debug_collect_page_health` | `safe` | 否 | 否 |
-| `bh_cdp_attach` / `bh_cdp_detach` | `medium` | 否，仅改变扩展 debugger attach 状态 | 否 |
+| `bh_cdp_attach` | `medium` | 否，仅改变扩展 debugger attach 状态 | 用户批准后才连接 debugger |
+| `bh_cdp_detach` | `medium` | 否，仅断开扩展 debugger attach 状态 | 否 |
 | `bh_cdp_get_*` / `bh_cdp_capture_dom_snapshot` | `safe` | 否 | 否 |
 | `bh_vision_capture_*` / `bh_vision_describe_viewport` / `bh_vision_detect_*` | `safe` | 否 | 否 |
 | `bh_pointer_click` | `medium`，敏感场景升级为 approval required | 是，点击视口坐标 | 是 |

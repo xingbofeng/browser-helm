@@ -5,7 +5,8 @@
 BrowserHelm runs in your browser as a Chrome extension. No BrowserHelm-owned backend exists.
 
 **What stays local:**
-- Settings, provider configuration, API keys → `chrome.storage.local` (unencrypted; WebCrypto encryption planned).
+- Settings and non-secret provider configuration → `chrome.storage.local`.
+- Provider API keys → session storage by default; local persistence is only used when a trusted storage policy explicitly enables it.
 - Run traces, agent messages, task state → `chrome.storage.local`.
 - DOM observation data → processed in-browser; only trimmed summaries sent to provider.
 
@@ -19,7 +20,11 @@ BrowserHelm runs in your browser as a Chrome extension. No BrowserHelm-owned bac
 
 ## API Key Storage
 
-API keys are stored in `chrome.storage.local` (unencrypted on disk). They are:
+API keys are session-only by default. BrowserHelm stores the key in `chrome.storage.session` and keeps only non-secret provider settings such as Base URL, model, and persistence mode in `chrome.storage.local`.
+
+Trusted local persistence can be enabled by explicit storage policy opt-in. When enabled, the API key is stored in `chrome.storage.local` (unencrypted on disk), so the UI labels it as trusted local storage rather than the default path.
+
+API keys are:
 - Never written to trace/model context.
 - Never leaked in debug output (masked as `[MASKED]`).
 - Not shared with any service other than your configured provider endpoint.
@@ -41,12 +46,12 @@ This hook:
 
 ## DevTools / CDP Debugging
 
-v1.3 deep debugging uses Chrome's `debugger` permission. `bh_cdp_attach` attaches to the current tab only when invoked in Debug/Full mode and enables CDP Network, Runtime, and Performance collectors.
+v1.3 deep debugging uses Chrome's `debugger` permission. `bh_cdp_attach` attaches to the current tab only when invoked in Debug/Full mode after BrowserHelm approval, then enables CDP Network, Runtime, and Performance collectors.
 
 CDP data handling:
 - Request and response headers are redacted by default. `Authorization`, `Cookie`, `Set-Cookie`, token, secret, password, and API key headers are shown as `[MASKED]`.
 - URLs, response bodies, console text, and request bodies pass through best-effort redaction/truncation before entering UI, trace, or model context.
-- Attach failure, permission/API unavailability, and response-body unavailability are returned as explicit tool errors.
+- Attach requests are BrowserHelm approval-gated before `chrome.debugger.attach`; attach failure, permission/API unavailability, and response-body unavailability are returned as explicit tool errors.
 - Detach with `bh_cdp_detach` when deep inspection is no longer needed.
 
 ## Vision / Screenshot Handling
@@ -80,6 +85,7 @@ Screenshot data handling:
 | `scripting` | Inject content scripts for page observation |
 | `sidePanel` | Open BrowserHelm in Chrome side panel |
 | `webNavigation` | Detect page navigations for side panel updates |
+| `contextMenus` | Add selection-only explain/translate shortcuts that start read-only Ask runs from user-selected text |
 | `debugger` | Attach to the active tab for explicit Debug/Full CDP deep inspection |
 | `downloads` | List recent download metadata for v1.5 advanced file tools; BrowserHelm redacts local paths and URL query/fragment before traces/model context |
 | `offscreen` | Host the MV3 offscreen clipboard bridge; it is created only for approved clipboard read/write operations |

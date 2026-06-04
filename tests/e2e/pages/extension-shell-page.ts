@@ -23,7 +23,17 @@ export class ExtensionShellPage {
   async activeTabId(): Promise<number> {
     const worker = await this.worker();
     return await worker.evaluate<number>(async () => {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tabs = await chrome.tabs.query({ currentWindow: true });
+      const pageTabs = tabs.filter((tab) =>
+        tab.id !== undefined &&
+        typeof tab.url === 'string' &&
+        !tab.url.startsWith('chrome-extension://') &&
+        !tab.url.startsWith('chrome://') &&
+        tab.url !== 'about:blank'
+      );
+      const [tab] = pageTabs.sort((left, right) =>
+        (right.lastAccessed ?? 0) - (left.lastAccessed ?? 0)
+      );
       if (!tab?.id) {
         throw new Error('No active tab');
       }

@@ -6,6 +6,12 @@ import { useT, useLocale } from '../../i18n/context';
 
 import type { RunSnapshot, RuntimeEvent } from '../../runtime/runtime-messages';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
+import {
+  batchFullPageScreenshotResultSchema,
+  batchImageCollectionResultSchema,
+  type BatchFullPageScreenshotResult,
+  type BatchImageCollectionResult
+} from '../../shared/schemas/page-media';
 import { cdpAttachStateSchema, cdpConsoleEventSchema, cdpPerformanceSnapshotSchema } from '../../shared/schemas/cdp-event';
 import { networkRequestRecordSchema, requestDetailSchema } from '../../shared/schemas/network-request';
 import { screenshotCaptureSchema, visionObservationSchema, type ScreenshotCapture } from '../../shared/schemas/vision';
@@ -30,7 +36,11 @@ type AdvancedDebugDrawerProps = {
   visionBusy?: boolean | undefined;
   visionMessage?: string | undefined;
   visionError?: string | undefined;
+  batchCapture?: BatchFullPageScreenshotResult | undefined;
+  imageCollection?: BatchImageCollectionResult | undefined;
   onCaptureViewport?: (() => void) | undefined;
+  onCaptureFullPages?: (() => void) | undefined;
+  onCollectImages?: (() => void) | undefined;
   onDetectOverlay?: (() => void) | undefined;
 };
 
@@ -79,7 +89,11 @@ export function AdvancedDebugDrawer({
   visionBusy,
   visionMessage,
   visionError,
+  batchCapture,
+  imageCollection,
   onCaptureViewport,
+  onCaptureFullPages,
+  onCollectImages,
   onDetectOverlay
 }: AdvancedDebugDrawerProps) {
   const t = useT();
@@ -119,7 +133,11 @@ export function AdvancedDebugDrawer({
           visionBusy={visionBusy}
           visionMessage={visionMessage}
           visionError={visionError}
+          batchCapture={batchCapture}
+          imageCollection={imageCollection}
           onCaptureViewport={onCaptureViewport}
+          onCaptureFullPages={onCaptureFullPages}
+          onCollectImages={onCollectImages}
           onDetectOverlay={onDetectOverlay}
         />
       ) : null}
@@ -137,7 +155,11 @@ export function AdvancedDebugPanel({
   visionBusy,
   visionMessage,
   visionError,
+  batchCapture,
+  imageCollection,
   onCaptureViewport,
+  onCaptureFullPages,
+  onCollectImages,
   onDetectOverlay
 }: AdvancedDebugDrawerProps & {
   activeTab: DebugTabKey;
@@ -184,7 +206,11 @@ export function AdvancedDebugPanel({
           visionBusy={visionBusy}
           visionMessage={visionMessage}
           visionError={visionError}
+          batchCapture={batchCapture}
+          imageCollection={imageCollection}
           onCaptureViewport={onCaptureViewport}
+          onCaptureFullPages={onCaptureFullPages}
+          onCollectImages={onCollectImages}
           onDetectOverlay={onDetectOverlay}
         />
       ) : null}
@@ -273,7 +299,11 @@ function VisionTab({
   visionBusy,
   visionMessage,
   visionError,
+  batchCapture,
+  imageCollection,
   onCaptureViewport,
+  onCaptureFullPages,
+  onCollectImages,
   onDetectOverlay
 }: {
   snapshot?: RunSnapshot | undefined;
@@ -281,11 +311,17 @@ function VisionTab({
   visionBusy?: boolean | undefined;
   visionMessage?: string | undefined;
   visionError?: string | undefined;
+  batchCapture?: BatchFullPageScreenshotResult | undefined;
+  imageCollection?: BatchImageCollectionResult | undefined;
   onCaptureViewport?: (() => void) | undefined;
+  onCaptureFullPages?: (() => void) | undefined;
+  onCollectImages?: (() => void) | undefined;
   onDetectOverlay?: (() => void) | undefined;
 }) {
   const view = readVisionView(snapshot?.toolResult);
   const screenshot = visionPreview ?? view.screenshot;
+  const nextBatchCapture = batchCapture ?? view.batchCapture;
+  const nextImageCollection = imageCollection ?? view.imageCollection;
   return (
     <div className="bh-debugTab">
       <VisionPanel
@@ -294,7 +330,11 @@ function VisionTab({
         busy={visionBusy}
         message={visionMessage}
         error={visionError}
+        batchCapture={nextBatchCapture}
+        imageCollection={nextImageCollection}
         onCaptureViewport={onCaptureViewport}
+        onCaptureFullPages={onCaptureFullPages}
+        onCollectImages={onCollectImages}
         onDetectOverlay={onDetectOverlay}
       />
     </div>
@@ -670,9 +710,13 @@ function readVisionView(toolResult: RunSnapshot['toolResult']) {
   const data = readToolData(toolResult);
   const observation = visionObservationSchema.safeParse(data.observation);
   const screenshot = readVisionScreenshot(data.screenshot);
+  const batchCapture = batchFullPageScreenshotResultSchema.safeParse(data.batchCapture);
+  const imageCollection = batchImageCollectionResultSchema.safeParse(data.imageCollection);
   return {
     observation: observation.success ? observation.data : undefined,
-    screenshot
+    screenshot,
+    batchCapture: batchCapture.success ? batchCapture.data : undefined,
+    imageCollection: imageCollection.success ? imageCollection.data : undefined
   };
 }
 

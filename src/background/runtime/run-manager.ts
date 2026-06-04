@@ -206,11 +206,18 @@ export class RunManager {
     return Promise.resolve(this.lifecycle.reviseGoal(input));
   }
 
+  refreshCapabilities(runId: string): Promise<RunSnapshot> {
+    return this.lifecycle.refreshCapabilities(runId).then(() => this.getSnapshot(runId));
+  }
+
   executeTool(input: ExecuteToolInput): Promise<ToolResult> {
     return this.executeToolWithAdapterSettings(input);
   }
 
   private async executeToolWithAdapterSettings(input: ExecuteToolInput): Promise<ToolResult> {
+    if (toolUsesRuntimeCapability(input.tool)) {
+      await this.lifecycle.refreshCapabilities(input.runId);
+    }
     return await this.toolExecution.execute(input);
   }
 
@@ -393,4 +400,13 @@ function isCurrentRunReplyMessage(message: AgentMessage): boolean {
 function runIdFromMessageId(id: string): string {
   const index = id.indexOf(':');
   return index >= 0 ? id.slice(0, index) : id;
+}
+
+function toolUsesRuntimeCapability(tool: string): boolean {
+  return tool === TOOL_NAMES.DEBUG_COLLECT_PAGE_HEALTH ||
+    tool.startsWith('bh_cdp_') ||
+    tool.startsWith('bh_clipboard_') ||
+    tool.startsWith('bh_download_') ||
+    tool.startsWith('bh_file_') ||
+    tool.startsWith('bh_storage_');
 }

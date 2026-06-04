@@ -49,7 +49,15 @@ describe('BrowserHelm domain policy', () => {
       allowed: false,
       reason: 'DOMAIN_NOT_ENABLED'
     });
+    expect(evaluateBrowserHelmDomainOperationPolicy('https://docs.example.com', undefined, 'provider_context')).toMatchObject({
+      allowed: false,
+      reason: 'DOMAIN_NOT_ENABLED'
+    });
     expect(evaluateBrowserHelmDomainOperationPolicy('http://127.0.0.1:3000', undefined, 'storage_read')).toMatchObject({
+      allowed: true,
+      hostname: '127.0.0.1'
+    });
+    expect(evaluateBrowserHelmDomainOperationPolicy('http://127.0.0.1:3000', undefined, 'provider_context')).toMatchObject({
       allowed: true,
       hostname: '127.0.0.1'
     });

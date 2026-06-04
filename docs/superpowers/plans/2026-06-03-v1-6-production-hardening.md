@@ -349,6 +349,23 @@
 
 ---
 
+## 2026-06-04 Follow-up Audit Task List
+
+Latest static audit moved the project to controlled beta / release candidate, but listed remaining P1/P2 hardening work. These items are tracked separately here so they do not disappear behind the older completion matrix.
+
+- [x] P1 Permission Broker lifecycle: add `PermissionBroker`, real `chrome.permissions.contains()` checks, optional permission request path, and capability refresh before capability-bound tools.
+- [x] P1 CDP attach approval: mark `bh_cdp_attach` as approval-gated and high-risk in runtime/tool tests.
+- [x] P1 Provider context consent split: add `provider_context` domain operation so unknown-domain observation may stay local while provider prompt page context is withheld.
+- [x] P1 Verifier heuristics: add structured evidence support for click and submit verification before regex fallback.
+- [x] P1 PolicyEngine thin abstraction: remove the redundant runtime `PolicyEngine` wrapper and keep approval/risk decisions in the execution authorization path.
+- [x] P1 Action target risk regex gaps: expand high-risk action text coverage for accept/authorize/connect/continue/confirm/enable/grant/merge/publish/subscribe and Chinese equivalents.
+- [x] P1 Release/security gate gaps: include `npm run test:security` in `npm run check:release` and include provider settings secret tests in the security suite meta list.
+- [x] P1 Local API key persistence risk: keep session storage as default, require explicit trusted policy for local persistence, show UI warning, and update security docs/tests.
+- [x] P1 Domain Adapter truthfulness: show non-executing hints boundary in UI and docs.
+- [x] P2 Submit/click evidence quality: support structured `successEvidence` / `effectEvidence` assertions and keep old text heuristics as fallback only.
+- [x] P2 CDP response body minimization: keep sensitive, binary, and oversized response bodies unavailable, and return redacted/truncated previews for allowed text bodies.
+- [x] P2 Real-site / real-model release evidence: final release report separates controlled-beta evidence from opt-in real-site/real-model production evidence.
+
 
 ## Current Verification Notes - 2026-06-03
 

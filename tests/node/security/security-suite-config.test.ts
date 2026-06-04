@@ -17,6 +17,7 @@ const requiredSecurityRegressionFiles = [
   'tests/dom/ui/streaming-markdown.test.tsx',
   'tests/node/entrypoints/content-page-health.test.ts',
   'tests/node/storage/memory-repo.test.ts',
+  'tests/node/storage/chrome-settings-store.test.ts',
   'tests/node/runtime/run/workflow-replay-approval-flow.test.ts',
   'tests/node/runtime/run/prompt-builder.test.ts'
 ] as const;

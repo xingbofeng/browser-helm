@@ -79,7 +79,8 @@ export class ContextAssembler {
       snapshot: input.snapshot,
       toolsContracts,
       locale: input.record.locale ?? 'zh',
-      domainPolicy
+      domainPolicy,
+      requireProviderContextConsent: this.deps.getDomainPolicy !== undefined
     });
     return {
       domainPolicy,

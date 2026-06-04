@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  bhVisionBatchCaptureFullPages,
   bhVisionCaptureElement,
   bhVisionCaptureViewport,
+  bhVisionCollectImages,
   bhVisionDescribeViewport,
   bhVisionDetectOverlay,
   bhVisionDetectLayoutIssues
@@ -254,9 +256,167 @@ describe('vision tools', () => {
     expect(prompt).toContain('layout issues');
   });
 
+  it('batch captures full-page screenshots without exposing image data to model context', async () => {
+    installCanvasStubs('data:image/png;base64,stitched-batch');
+    vi.stubGlobal('chrome', {
+      tabs: {
+        query: vi.fn(async () => [
+          { id: 41, windowId: 5, url: 'https://example.com/a', title: 'A' },
+          { id: 42, windowId: 5, url: 'https://example.com/b', title: 'B' }
+        ]),
+        captureVisibleTab: vi.fn(async () => 'data:image/png;base64,batchfullpage-tile')
+      },
+      scripting: {
+        executeScript: vi.fn(async (input: { args?: unknown[] }) => {
+          if (input.args?.[0] === 'metrics') {
+            return [{
+              result: {
+                scrollX: 0,
+                scrollY: 0,
+                viewportWidth: 800,
+                viewportHeight: 600,
+                documentWidth: 800,
+                documentHeight: 1400,
+                devicePixelRatio: 1
+              }
+            }];
+          }
+          if (input.args?.[0] === 'scroll') {
+            const scrollY = Number(input.args[2]);
+            return [{
+              result: {
+                scrollX: 0,
+                scrollY,
+                viewportWidth: 800,
+                viewportHeight: 600,
+                documentWidth: 800,
+                documentHeight: 1400,
+                devicePixelRatio: 1
+              }
+            }];
+          }
+          if (input.args?.[0] === 'restore') {
+            return [{
+              result: {
+                scrollX: 0,
+                scrollY: 0,
+                viewportWidth: 800,
+                viewportHeight: 600,
+                documentWidth: 800,
+                documentHeight: 1400,
+                devicePixelRatio: 1
+              }
+            }];
+          }
+          return [{
+            result: {
+              attempted: true,
+              steps: 3,
+              initialScrollHeight: 1000,
+              finalScrollHeight: 2000,
+              restoredScrollX: 0,
+              restoredScrollY: 0
+            }
+          }];
+        })
+      }
+    });
+
+    const result = await bhVisionBatchCaptureFullPages(rpc()).execute(
+      { scope: 'current_window', maxTabs: 8 },
+      { runId: 'run_1', stepId: 'step_1', runMode: 'debug', tabId: 41 }
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      context: { visibility: 'summary' },
+      data: {
+        batchCapture: {
+          requestedTabCount: 2,
+          succeededCount: 2,
+          failedCount: 0
+        }
+      }
+    });
+    expect(result.summary).toContain('Captured 2 full-page screenshots');
+    expect(JSON.stringify(result.context)).not.toContain('base64');
+    const snapshot = snapshotToolResult(TOOL_NAMES.VISION_BATCH_CAPTURE_FULL_PAGES, result);
+    expect(JSON.stringify(snapshot.detail)).toContain('[MASKED_IMAGE_DATA]');
+    expect(JSON.stringify(snapshot.detail)).not.toContain('data:image/png;base64,batchfullpage');
+  });
+
+  it('collects page image URLs after lazy-load scrolling', async () => {
+    vi.stubGlobal('chrome', {
+      tabs: {
+        query: vi.fn(async () => [
+          { id: 51, windowId: 6, url: 'https://example.com/gallery', title: 'Gallery' }
+        ])
+      },
+      scripting: {
+        executeScript: vi.fn(async () => [{
+          result: {
+            lazyLoad: {
+              attempted: true,
+              steps: 6,
+              initialScrollHeight: 800,
+              finalScrollHeight: 3000,
+              restoredScrollX: 0,
+              restoredScrollY: 0
+            },
+            images: [
+              {
+                url: 'https://example.com/hero.jpg',
+                rawUrl: '/hero.jpg',
+                source: 'img',
+                alt: 'Hero'
+              }
+            ]
+          }
+        }])
+      }
+    });
+
+    const result = await bhVisionCollectImages(rpc()).execute(
+      { scope: 'current_window', maxTabs: 8, maxImagesPerTab: 50, includeCssBackgrounds: true },
+      { runId: 'run_1', stepId: 'step_1', runMode: 'debug', tabId: 51 }
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      changedPage: false,
+      requiresObserve: false,
+      data: {
+        imageCollection: {
+          requestedTabCount: 1,
+          succeededCount: 1,
+          totalImageCount: 1,
+          pages: [
+            {
+              tabId: 51,
+              imageCount: 1,
+              lazyLoad: {
+                attempted: true,
+                steps: 6
+              },
+              images: [
+                {
+                  url: 'https://example.com/hero.jpg',
+                  source: 'img'
+                }
+              ]
+            }
+          ]
+        }
+      }
+    });
+    expect(result.summary).toContain('Collected 1 images');
+  });
+
   it('registers stable v1.4 tool names', () => {
     expect(bhVisionCaptureViewport(rpc()).name).toBe(TOOL_NAMES.VISION_CAPTURE_VIEWPORT);
     expect(bhVisionDescribeViewport(rpc()).name).toBe(TOOL_NAMES.VISION_DESCRIBE_VIEWPORT);
+    expect(bhVisionBatchCaptureFullPages(rpc()).name).toBe(TOOL_NAMES.VISION_BATCH_CAPTURE_FULL_PAGES);
+    expect(bhVisionCollectImages(rpc()).name).toBe(TOOL_NAMES.VISION_COLLECT_IMAGES);
   });
 });
 
@@ -343,4 +503,34 @@ function chromeWithViewportCapture(dataUrl: string) {
       }])
     }
   };
+}
+
+function installCanvasStubs(outputDataUrl: string) {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
+    blob: async () => new Blob([url])
+  })));
+  vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 800, height: 600 })));
+  vi.stubGlobal('OffscreenCanvas', class {
+    width: number;
+    height: number;
+    constructor(width: number, height: number) {
+      this.width = width;
+      this.height = height;
+    }
+    getContext() {
+      return { drawImage: vi.fn() };
+    }
+    async convertToBlob() {
+      return new Blob(['stitched'], { type: 'image/png' });
+    }
+  });
+  vi.stubGlobal('FileReader', class {
+    result: string | ArrayBuffer | null = null;
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    readAsDataURL() {
+      this.result = outputDataUrl;
+      this.onload?.();
+    }
+  });
 }

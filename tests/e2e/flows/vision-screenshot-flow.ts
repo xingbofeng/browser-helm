@@ -49,7 +49,7 @@ export class VisionScreenshotFlow {
       args: { prompt: '说明遮挡层、可见文本和布局风险。' }
     }));
     expect(describe.ok).toBe(false);
-    expect(describe.code).toBe(ERROR_CODES.VISION_UNAVAILABLE);
+    expect(describe.code, JSON.stringify(describe)).toBe(ERROR_CODES.VISION_UNAVAILABLE);
     expect(readNestedString(describe.data, 'observation', 'fallback')).toBe('dom_a11y');
     expect(readNestedString(describe.data, 'screenshot', 'mode')).toBe('viewport');
 
@@ -131,6 +131,60 @@ export class VisionScreenshotFlow {
     )).toBe(0);
   }
 
+  async expectBatchMediaToolsTriggerLazyLoading(): Promise<void> {
+    const fixture = await this.flowContext.fixturePage();
+    await fixture.goto('lazy-load-page.html');
+    await expectLazyMediaState(fixture.page, false);
+    const tabId = await this.flowContext.shell().activeTabId();
+    const sidePanel = this.flowContext.sidePanel();
+    const snapshot = await sidePanel.runOnTab({
+      tabId,
+      task: '批量截取当前页面长图并触发懒加载',
+      mode: 'debug',
+      runKind: 'observe_only'
+    });
+
+    const batchCapture = await executeToolResult(sidePanel.executeTool({
+      runId: snapshot.runId,
+      tool: TOOL_NAMES.VISION_BATCH_CAPTURE_FULL_PAGES,
+      args: { scope: 'active_tab', maxTabs: 1 }
+    }));
+    expect(batchCapture.ok, JSON.stringify(batchCapture)).toBe(true);
+    expect(readNestedNumber(batchCapture.data, 'batchCapture', 'requestedTabCount')).toBe(1);
+    expect(readNestedNumber(batchCapture.data, 'batchCapture', 'succeededCount')).toBe(1);
+    expect(JSON.stringify(batchCapture.data)).toContain('"mode":"full_page"');
+    expect(JSON.stringify(batchCapture.data)).toMatch(/data:image\/png;base64,/u);
+    await expectLazyMediaState(fixture.page, true);
+
+    await fixture.goto('lazy-load-page.html');
+    await expectLazyMediaState(fixture.page, false);
+    const imageSnapshot = await sidePanel.runOnTab({
+      tabId,
+      task: '批量获取当前页面所有图片并触发懒加载',
+      mode: 'debug',
+      runKind: 'observe_only'
+    });
+    const imageCollection = await executeToolResult(sidePanel.executeTool({
+      runId: imageSnapshot.runId,
+      tool: TOOL_NAMES.VISION_COLLECT_IMAGES,
+      args: {
+        scope: 'active_tab',
+        maxTabs: 1,
+        maxImagesPerTab: 20,
+        includeCssBackgrounds: true
+      }
+    }));
+
+    expect(imageCollection.ok, JSON.stringify(imageCollection)).toBe(true);
+    expect(readNestedNumber(imageCollection.data, 'imageCollection', 'requestedTabCount')).toBe(1);
+    expect(readNestedNumber(imageCollection.data, 'imageCollection', 'totalImageCount')).toBeGreaterThanOrEqual(2);
+    const serialized = JSON.stringify(imageCollection.data);
+    expect(serialized).toContain('/media/lazy-product.png');
+    expect(serialized).toContain('/media/lazy-background.png');
+    expect(serialized).toContain('"steps":');
+    await expectLazyMediaState(fixture.page, true);
+  }
+
   async close(): Promise<void> {
     await this.flowContext.close();
   }
@@ -185,8 +239,28 @@ function readNestedString(value: unknown, parent: string, key: string): string {
   return typeof field === 'string' ? field : '';
 }
 
+function readNestedNumber(value: unknown, parent: string, key: string): number {
+  const record = readRecord(value);
+  const nested = record ? readRecord(record[parent]) : undefined;
+  const field = nested ? nested[key] : undefined;
+  return typeof field === 'number' ? field : Number.NaN;
+}
+
 function readRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null
     ? value as Record<string, unknown>
     : undefined;
+}
+
+async function expectLazyMediaState(
+  page: { evaluate: <T>(fn: () => T | Promise<T>) => Promise<T> },
+  loaded: boolean
+): Promise<void> {
+  await expect.poll(async () => await page.evaluate(() => {
+    const state = window as unknown as {
+      __lazyImageLoaded?: boolean;
+      __lazyBackgroundLoaded?: boolean;
+    };
+    return state.__lazyImageLoaded === true && state.__lazyBackgroundLoaded === true;
+  })).toBe(loaded);
 }

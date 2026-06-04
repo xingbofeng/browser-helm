@@ -12,6 +12,12 @@ import type { AgentMessage } from '../../shared/schemas/agent-message.schema';
 import type { RunMode } from '../../shared/schemas/tool.schema';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
+import {
+  batchFullPageScreenshotResultSchema,
+  batchImageCollectionResultSchema,
+  type BatchFullPageScreenshotResult,
+  type BatchImageCollectionResult
+} from '../../shared/schemas/page-media';
 import { useT } from '../../i18n/context';
 import { useLocale } from '../../i18n/context';
 import { readLocale, writeLocale } from '../../i18n/locale';
@@ -79,6 +85,8 @@ export function CockpitApp({
   const [visionBusy, setVisionBusy] = useState(false);
   const [visionMessage, setVisionMessage] = useState<string>();
   const [visionError, setVisionError] = useState<string>();
+  const [batchCapture, setBatchCapture] = useState<BatchFullPageScreenshotResult>();
+  const [imageCollection, setImageCollection] = useState<BatchImageCollectionResult>();
   const [conversationMessages, setConversationMessages] = useState<AgentMessage[]>([]);
   const [memoryEntries, setMemoryEntries] = useState<MemoryEntry[]>([]);
   const unsubscribeRunRef = useRef<(() => void) | undefined>(undefined);
@@ -334,6 +342,8 @@ export function CockpitApp({
     setVisionBusy(false);
     setVisionMessage(undefined);
     setVisionError(undefined);
+    setBatchCapture(undefined);
+    setImageCollection(undefined);
     setConversationMessages([]);
     agentStore.getState().reset();
     pageDataStore.getState().clearSnapshot();
@@ -583,6 +593,14 @@ export function CockpitApp({
       if (nextPreview) {
         setVisionPreview(nextPreview);
       }
+      const nextBatchCapture = readBatchCaptureFromToolResult(result);
+      if (nextBatchCapture) {
+        setBatchCapture(nextBatchCapture);
+      }
+      const nextImageCollection = readImageCollectionFromToolResult(result);
+      if (nextImageCollection) {
+        setImageCollection(nextImageCollection);
+      }
       setVisionMessage(result.summary);
       setVisionError(result.ok || result.code === ERROR_CODES.VISION_UNAVAILABLE ? undefined : result.summary);
       const nextSnapshot = await runtime.getRunSnapshot(panelSnapshot.runId);
@@ -794,8 +812,16 @@ export function CockpitApp({
                 visionBusy={visionBusy}
                 visionMessage={visionMessage}
                 visionError={visionError}
+                batchCapture={batchCapture}
+                imageCollection={imageCollection}
                 onCaptureViewport={() => {
                   void runVisionPanelTool(TOOL_NAMES.VISION_CAPTURE_VIEWPORT);
+                }}
+                onCaptureFullPages={() => {
+                  void runVisionPanelTool(TOOL_NAMES.VISION_BATCH_CAPTURE_FULL_PAGES);
+                }}
+                onCollectImages={() => {
+                  void runVisionPanelTool(TOOL_NAMES.VISION_COLLECT_IMAGES);
                 }}
                 onDetectOverlay={() => {
                   void runVisionPanelTool(TOOL_NAMES.VISION_DETECT_OVERLAY);
@@ -855,6 +881,18 @@ function readVisionPreviewFromToolResult(result: RuntimeToolExecutionResult): Vi
     ...(bounds ? { bounds } : {}),
     ...(dataUrl ? { dataUrl } : {})
   };
+}
+
+function readBatchCaptureFromToolResult(result: RuntimeToolExecutionResult): BatchFullPageScreenshotResult | undefined {
+  const data = isRecord(result.data) ? result.data : undefined;
+  const parsed = batchFullPageScreenshotResultSchema.safeParse(data?.batchCapture);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function readImageCollectionFromToolResult(result: RuntimeToolExecutionResult): BatchImageCollectionResult | undefined {
+  const data = isRecord(result.data) ? result.data : undefined;
+  const parsed = batchImageCollectionResultSchema.safeParse(data?.imageCollection);
+  return parsed.success ? parsed.data : undefined;
 }
 
 function readScreenshotMode(value: unknown): VisionPreview['mode'] | undefined {

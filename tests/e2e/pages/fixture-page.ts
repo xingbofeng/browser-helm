@@ -8,6 +8,8 @@ export class FixturePage {
 
   async goto(path: string): Promise<void> {
     await this.page.goto(`${this.origin}/${path}`);
+    await this.page.waitForLoadState('domcontentloaded');
+    await this.page.bringToFront();
   }
 
   async removeElement(selector: string): Promise<void> {

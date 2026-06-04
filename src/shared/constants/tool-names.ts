@@ -71,6 +71,8 @@ export const TOOL_NAMES = {
   VISION_CAPTURE_VIEWPORT: 'bh_vision_capture_viewport',
   VISION_CAPTURE_FULL_PAGE: 'bh_vision_capture_full_page',
   VISION_CAPTURE_ELEMENT: 'bh_vision_capture_element',
+  VISION_BATCH_CAPTURE_FULL_PAGES: 'bh_vision_batch_capture_full_pages',
+  VISION_COLLECT_IMAGES: 'bh_vision_collect_images',
   VISION_DESCRIBE_VIEWPORT: 'bh_vision_describe_viewport',
   VISION_DETECT_OVERLAY: 'bh_vision_detect_overlay',
   VISION_DETECT_LAYOUT_ISSUES: 'bh_vision_detect_layout_issues',

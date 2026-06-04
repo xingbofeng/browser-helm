@@ -81,4 +81,36 @@ describe('click effect semantic verifier', () => {
       verifier: 'click_effect'
     });
   });
+
+  it('passes when the click result carries structured DOM effect evidence', () => {
+    const trace: RuntimeEvent[] = [
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.TOOL_RESULT,
+        payload: {
+          tool: TOOL_NAMES.ACTION_CLICK,
+          ok: true,
+          code: 'OK',
+          summary: 'Clicked Open settings',
+          changedPage: true,
+          requiresObserve: false,
+          data: {
+            effectEvidence: [
+              {
+                kind: 'dom_diff',
+                passed: true,
+                summary: 'Settings dialog became visible'
+              }
+            ]
+          }
+        }
+      }
+    ];
+
+    expect(verifyTaskCompletionBeforeFinish(trace)).toMatchObject({
+      ok: true,
+      status: 'pass',
+      verifier: 'click_effect'
+    });
+  });
 });

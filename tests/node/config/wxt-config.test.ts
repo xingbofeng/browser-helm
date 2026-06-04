@@ -78,19 +78,20 @@ describe('wxt config permission profile', () => {
       'scripting',
       'sidePanel',
       'webNavigation',
-      'debugger'
+      'contextMenus',
+      'debugger',
+      'downloads'
     ]));
     expect(manifest.permissions ?? []).not.toEqual(expect.arrayContaining([
-      'downloads',
       'clipboardRead',
       'clipboardWrite'
     ]));
     expect(manifest.optional_permissions ?? []).toEqual(expect.arrayContaining([
-      'downloads',
       'offscreen',
       'clipboardRead',
       'clipboardWrite'
     ]));
+    expect(manifest.optional_permissions ?? []).not.toContain('downloads');
     expect(manifest.optional_permissions ?? []).not.toContain('debugger');
     expect(manifest.optional_host_permissions ?? []).not.toContain('<all_urls>');
   });

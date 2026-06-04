@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../../src/i18n/context';
 import { VisionPanel } from '../../../../src/ui/components/vision-panel';
@@ -194,6 +194,220 @@ describe('VisionPanel', () => {
     expect(container.textContent).toContain('800 x 600');
     await unmountRoot(root);
     container.remove();
+  });
+
+  it('offers batch long screenshot and image collection actions with summarized results', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    let batchCaptures = 0;
+    let imageCollections = 0;
+
+    act(() => {
+      root.render(
+        <I18nProvider initialLocale="zh">
+          <VisionPanel
+            batchCapture={{
+              scope: 'current_window',
+              requestedTabCount: 2,
+              succeededCount: 2,
+              failedCount: 0,
+              screenshots: [
+                {
+                  tabId: 31,
+                  tabTitle: '产品页',
+                  pageUrl: 'https://example.com/product',
+                  screenshot: {
+                    id: 'shot_31_full_page',
+                    tabId: 31,
+                    mode: 'full_page',
+                    mimeType: 'image/png',
+                    dataUrl: 'data:image/png;base64,batch31',
+                    width: 1200,
+                    height: 2800,
+                    captureSource: 'cdp_capture_screenshot',
+                    truncated: false,
+                    sensitivity: 'unknown',
+                    capturedAt: 1,
+                    traceSafe: false
+                  }
+                },
+                {
+                  tabId: 32,
+                  tabTitle: '列表页',
+                  pageUrl: 'https://example.com/list',
+                  screenshot: {
+                    id: 'shot_32_full_page',
+                    tabId: 32,
+                    mode: 'full_page',
+                    mimeType: 'image/png',
+                    dataUrl: 'data:image/png;base64,batch32',
+                    width: 1000,
+                    height: 2200,
+                    captureSource: 'cdp_capture_screenshot',
+                    truncated: false,
+                    sensitivity: 'unknown',
+                    capturedAt: 1,
+                    traceSafe: false
+                  }
+                }
+              ],
+              failures: []
+            }}
+            imageCollection={{
+              scope: 'current_window',
+              requestedTabCount: 1,
+              succeededCount: 1,
+              failedCount: 0,
+              totalImageCount: 2,
+              pages: [
+                {
+                  tabId: 31,
+                  pageUrl: 'https://example.com/product',
+                  tabTitle: '产品页',
+                  imageCount: 2,
+                  lazyLoad: {
+                    attempted: true,
+                    steps: 4,
+                    initialScrollHeight: 900,
+                    finalScrollHeight: 3000,
+                    restoredScrollX: 0,
+                    restoredScrollY: 0
+                  },
+                  images: [
+                    { url: 'https://example.com/hero.jpg', rawUrl: '/hero.jpg', source: 'img', alt: 'Hero' },
+                    { url: 'https://cdn.example.com/bg.png', rawUrl: 'https://cdn.example.com/bg.png', source: 'css_background' }
+                  ]
+                }
+              ],
+              failures: []
+            }}
+            onCaptureFullPages={() => {
+              batchCaptures += 1;
+            }}
+            onCollectImages={() => {
+              imageCollections += 1;
+            }}
+          />
+        </I18nProvider>
+      );
+    });
+
+    const batchButton = [...container.querySelectorAll('button')]
+      .find((button) => button.getAttribute('aria-label') === '批量截取长图');
+    const imageButton = [...container.querySelectorAll('button')]
+      .find((button) => button.getAttribute('aria-label') === '批量获取图片');
+    expect(batchButton).toBeInstanceOf(HTMLButtonElement);
+    expect(imageButton).toBeInstanceOf(HTMLButtonElement);
+
+    act(() => {
+      batchButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      imageButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(batchCaptures).toBe(1);
+    expect(imageCollections).toBe(1);
+    expect(container.textContent).toContain('长图 2/2');
+    expect(container.textContent).toContain('产品页');
+    expect(container.textContent).toContain('列表页');
+    expect(container.textContent).toContain('图片 2 张');
+    expect(container.textContent).toContain('https://example.com/hero.jpg');
+    expect(container.textContent).toContain('懒加载滚动 4 次');
+    const batchPreviewImages = [...container.querySelectorAll<HTMLImageElement>('.bh-visionBatchPreview img')]
+      .map((image) => image.getAttribute('src'));
+    expect(batchPreviewImages).toEqual([
+      'data:image/png;base64,batch31',
+      'data:image/png;base64,batch32'
+    ]);
+    expect(container.querySelector('button[aria-label="下载图片 ZIP"]')).toBeInstanceOf(HTMLButtonElement);
+    expect(container.querySelectorAll('a[download]').length).toBeGreaterThanOrEqual(3);
+    await unmountRoot(root);
+    container.remove();
+  });
+
+  it('downloads collected page images as a zip with image files and a manifest', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const createdUrls: Blob[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
+      ok: true,
+      headers: new Headers({ 'content-type': url.endsWith('.png') ? 'image/png' : 'image/jpeg' }),
+      blob: async () => new Blob([url.endsWith('.png') ? 'png-bytes' : 'jpg-bytes'], {
+        type: url.endsWith('.png') ? 'image/png' : 'image/jpeg'
+      })
+    })));
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn((blob: Blob) => {
+        createdUrls.push(blob);
+        return 'blob:browserhelm-images';
+      }),
+      revokeObjectURL: vi.fn()
+    });
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+
+    act(() => {
+      root.render(
+        <I18nProvider initialLocale="zh">
+          <VisionPanel
+            imageCollection={{
+              scope: 'current_window',
+              requestedTabCount: 1,
+              succeededCount: 1,
+              failedCount: 0,
+              totalImageCount: 2,
+              pages: [
+                {
+                  tabId: 31,
+                  pageUrl: 'https://example.com/gallery',
+                  tabTitle: '图库',
+                  imageCount: 2,
+                  lazyLoad: {
+                    attempted: true,
+                    steps: 2,
+                    initialScrollHeight: 900,
+                    finalScrollHeight: 1400,
+                    restoredScrollX: 0,
+                    restoredScrollY: 0
+                  },
+                  images: [
+                    { url: 'https://example.com/hero.jpg', source: 'img', alt: 'Hero' },
+                    { url: 'https://cdn.example.com/bg.png', source: 'css_background' }
+                  ]
+                }
+              ],
+              failures: []
+            }}
+          />
+        </I18nProvider>
+      );
+    });
+
+    const zipButton = container.querySelector<HTMLButtonElement>('button[aria-label="下载图片 ZIP"]');
+    expect(zipButton).toBeInstanceOf(HTMLButtonElement);
+    await act(async () => {
+      zipButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith('https://example.com/hero.jpg');
+    expect(globalThis.fetch).toHaveBeenCalledWith('https://cdn.example.com/bg.png');
+    expect(createdUrls).toHaveLength(1);
+    const zipBlob = createdUrls[0];
+    expect(zipBlob?.type).toBe('application/zip');
+    if (!zipBlob) {
+      throw new Error('zip blob was not created');
+    }
+    const zipText = Buffer.from(await zipBlob.arrayBuffer()).toString('latin1');
+    expect(zipText).toContain('images/tab-31/001-hero.jpg');
+    expect(zipText).toContain('images/tab-31/002-bg.png');
+    expect(zipText).toContain('manifest.json');
+    expect(clickSpy).toHaveBeenCalled();
+
+    await unmountRoot(root);
+    container.remove();
+    clickSpy.mockRestore();
+    vi.unstubAllGlobals();
   });
 });
 

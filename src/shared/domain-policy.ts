@@ -34,6 +34,7 @@ export type BrowserHelmDomainPolicyDecision = {
 
 export type BrowserHelmDomainPolicyOperation =
   | 'observe'
+  | 'provider_context'
   | 'debug_hook'
   | 'form_fill'
   | 'submit'

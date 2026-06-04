@@ -1463,6 +1463,115 @@ body.animal-cursor--force *,
   overflow-wrap: anywhere;
 }
 
+.bh-visionBatchList {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid #ead6c0;
+  border-radius: 8px;
+  padding: 9px;
+  background: #fffdf9;
+}
+
+.bh-visionBatchHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.bh-visionBatchHeader h4,
+.bh-visionImagePages h5 {
+  margin: 0;
+  color: #6a5546;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.bh-visionManifestDownload,
+.bh-visionInlineDownload {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(231, 201, 137, 0.92);
+  border-radius: 999px;
+  background: #fff5e8;
+  color: #7a5127;
+  text-decoration: none;
+}
+
+button.bh-visionManifestDownload {
+  cursor: pointer;
+}
+
+.bh-visionBatchPreview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 7px;
+  min-width: 0;
+}
+
+.bh-visionBatchPreview img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border: 1px solid #ead6c0;
+  border-radius: 6px;
+  background: #f9efe1;
+  object-fit: cover;
+}
+
+.bh-visionBatchList > ul,
+.bh-visionImagePages ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bh-visionBatchList > ul > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  border-top: 1px solid #f0dfcc;
+  padding-top: 7px;
+}
+
+.bh-visionBatchList li div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bh-visionBatchList li span,
+.bh-visionImagePages p,
+.bh-visionImagePages a,
+.bh-visionImagePages li span {
+  color: #5c493b;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.bh-visionImagePages {
+  display: grid;
+  gap: 9px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.bh-visionImagePages section {
+  display: grid;
+  gap: 5px;
+}
+
 .bh-dataTableWrap {
   max-width: 100%;
   overflow-x: hidden;

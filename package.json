@@ -19,7 +19,7 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "test:node": "vitest run tests/node",
-    "test:security": "vitest run tests/node/security/security-suite-config.test.ts tests/node/runtime/run/security/prompt-injection-mutation.test.ts tests/node/runtime/run/tools/tool-runtime-policy.test.ts tests/dom/page/messaging/content-rpc-handler.test.ts tests/node/runtime/run/approval/approval-coordinator.test.ts tests/node/runtime/run/security/authorization-service.test.ts tests/dom/ui/streaming-markdown.test.tsx tests/node/entrypoints/content-page-health.test.ts tests/node/storage/memory-repo.test.ts tests/node/runtime/run/workflow-replay-approval-flow.test.ts tests/node/runtime/run/prompt-builder.test.ts && npm run build && playwright test tests/e2e/specs/extension/security",
+    "test:security": "vitest run tests/node/security/security-suite-config.test.ts tests/node/runtime/run/security/prompt-injection-mutation.test.ts tests/node/runtime/run/tools/tool-runtime-policy.test.ts tests/dom/page/messaging/content-rpc-handler.test.ts tests/node/runtime/run/approval/approval-coordinator.test.ts tests/node/runtime/run/security/authorization-service.test.ts tests/dom/ui/streaming-markdown.test.tsx tests/node/entrypoints/content-page-health.test.ts tests/node/storage/memory-repo.test.ts tests/node/storage/chrome-settings-store.test.ts tests/node/runtime/run/workflow-replay-approval-flow.test.ts tests/node/runtime/run/prompt-builder.test.ts && npm run build && playwright test tests/e2e/specs/extension/security",
     "test:e2e": "BROWSER_HELM_E2E_REQUIRED_PERMISSIONS=1 npm run build && playwright test",
     "test:e2e:no-build": "playwright test",
     "test:e2e:real": "npm run test:e2e:real:model",
@@ -31,7 +31,7 @@
     "check:tool-docs": "npx tsx scripts/check-tool-docs.ts",
     "check:release-hygiene": "npx tsx scripts/check-release-hygiene.ts",
     "check:manifest-permissions": "npx tsx scripts/check-manifest-permissions.ts",
-    "check:release": "npm run check:tool-docs && npm run check:release-hygiene && npm run check:manifest-permissions"
+    "check:release": "npm run check:tool-docs && npm run test:security && npm run check:release-hygiene && npm run check:manifest-permissions"
   },
   "dependencies": {
     "@wxt-dev/module-react": "1.2.2",

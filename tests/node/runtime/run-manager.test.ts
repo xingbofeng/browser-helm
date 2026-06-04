@@ -247,6 +247,69 @@ describe('RunManager', () => {
     )).toBe(true);
   });
 
+  it('refreshes stale capability snapshots before executing capability-bound tools', async () => {
+    vi.stubGlobal('chrome', {
+      debugger: {
+        getTargets: vi.fn(async () => [])
+      }
+    });
+    const probeRuntimeCapabilities = vi.fn()
+      .mockResolvedValueOnce({
+        capabilities: {
+          hasActiveTab: true,
+          hasDebuggerPermission: false,
+          hasClipboardPermission: false,
+          hasDownloadsPermission: false,
+          hasStorageInspection: true,
+          hostPermissions: ['http://127.0.0.1/*'],
+          shallowDebugAvailable: true,
+          cdp: 'unavailable'
+        },
+        limitations: ['Debugger capability is unavailable']
+      })
+      .mockResolvedValueOnce({
+        capabilities: {
+          hasActiveTab: true,
+          hasDebuggerPermission: true,
+          hasClipboardPermission: false,
+          hasDownloadsPermission: false,
+          hasStorageInspection: true,
+          hostPermissions: ['http://127.0.0.1/*'],
+          shallowDebugAvailable: true,
+          cdp: 'available'
+        },
+        limitations: []
+      });
+    const manager = new RunManager({
+      getActiveTabId: async () => 42,
+      createContentRpcClient: () => rpcClient(async () => observationResponse()),
+      probeRuntimeCapabilities
+    });
+
+    const started = await manager.startRun({ task: '检查 CDP target', mode: 'debug', runKind: 'observe_only' });
+    await waitForSnapshot(manager, started.runId, 'observed');
+    const result = await manager.executeTool({
+      runId: started.runId,
+      tool: TOOL_NAMES.CDP_GET_TARGETS,
+      args: {}
+    });
+    const snapshot = manager.getSnapshot(started.runId);
+
+    expect(result).toMatchObject({
+      ok: true,
+      code: ERROR_CODES.OK,
+      summary: 'Listed debugger targets.'
+    });
+    expect(snapshot.capabilities).toMatchObject({
+      hasDebuggerPermission: true,
+      cdp: 'available'
+    });
+    expect(snapshot.trace?.filter((event) =>
+      event.type === TRACE_EVENT_NAMES.CAPABILITIES_RESOLVED
+    )).toHaveLength(2);
+    expect(probeRuntimeCapabilities).toHaveBeenCalledTimes(2);
+  });
+
   it('blocks high-risk iframe tools before ToolRouter execution', async () => {
     const calls: string[] = [];
     const manager = new RunManager({
@@ -5328,7 +5391,7 @@ describe('RunManager', () => {
         expect.objectContaining({
           kind: 'error',
           title: '运行出错',
-          content: '模型配置缺少 Base URL、Model 或 API Key。请在设置中重新输入 API Key 并保存；如果调试扩展会频繁重载，可选择本机持久化保存。'
+          content: '模型配置缺少 Base URL、Model 或 API Key。请在设置中重新输入 API Key 并保存；生产构建默认只使用会话存储保存密钥。'
         })
       ])
     );
@@ -5354,7 +5417,7 @@ describe('RunManager', () => {
     const snapshot = await waitForSubscribedSnapshot(manager, started.runId, (nextSnapshot) =>
       nextSnapshot.messages?.some((message) =>
         message.kind === 'error' &&
-        message.content === '模型配置缺少 Base URL、Model 或 API Key。请在设置中重新输入 API Key 并保存；如果调试扩展会频繁重载，可选择本机持久化保存。'
+        message.content === '模型配置缺少 Base URL、Model 或 API Key。请在设置中重新输入 API Key 并保存；生产构建默认只使用会话存储保存密钥。'
       ) === true
     );
 
@@ -5362,7 +5425,7 @@ describe('RunManager', () => {
       expect.arrayContaining([
         expect.objectContaining({
           kind: 'error',
-          content: '模型配置缺少 Base URL、Model 或 API Key。请在设置中重新输入 API Key 并保存；如果调试扩展会频繁重载，可选择本机持久化保存。'
+          content: '模型配置缺少 Base URL、Model 或 API Key。请在设置中重新输入 API Key 并保存；生产构建默认只使用会话存储保存密钥。'
         })
       ])
     );

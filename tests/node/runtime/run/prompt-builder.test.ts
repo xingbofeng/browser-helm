@@ -176,7 +176,9 @@ describe('runtime prompt builder', () => {
     });
 
     const prompt = messages.at(-1)?.content ?? '';
-    const parsed = JSON.parse(prompt) as {
+    const jsonStart = prompt.indexOf('{');
+    expect(jsonStart).toBeGreaterThanOrEqual(0);
+    const parsed = JSON.parse(prompt.slice(jsonStart)) as {
       structuredPageData: {
         interactive: {
           count: number;
@@ -270,7 +272,9 @@ describe('runtime prompt builder', () => {
     });
 
     const prompt = messages.at(-1)?.content ?? '';
-    const parsed = JSON.parse(prompt) as {
+    const jsonStart = prompt.indexOf('{');
+    expect(jsonStart).toBeGreaterThanOrEqual(0);
+    const parsed = JSON.parse(prompt.slice(jsonStart)) as {
       visionEvidence?: {
         summary: string;
         screenshot: { mode: string; width: number; height: number };
@@ -542,6 +546,111 @@ describe('runtime prompt builder', () => {
     expect(prompt).toContain('DOMAIN_NOT_ENABLED');
     expect(prompt).not.toContain('Policy gated billing memory');
     expect(prompt).not.toContain('打开账单');
+  });
+
+  it('withholds observed page context from provider prompts without provider-context consent', () => {
+    const messages = buildMessages({
+      record: recordWithTrace([
+        ...toolRead(TOOL_NAMES.PAGE_READ_ARTICLE, { includeHeadings: true }, 'Read article: private checkout token')
+      ]),
+      snapshot: {
+        ...snapshotWithLastToolResult(TOOL_NAMES.PAGE_READ_ARTICLE),
+        observation: {
+          url: 'https://docs.example.com/private',
+          title: 'Private account page',
+          currentDomain: 'docs.example.com',
+          origin: 'https://docs.example.com',
+          visibleTextSummary: 'Private checkout token abc-123 and user email secret@example.com',
+          pageStateSummary: 'Sensitive account page ready',
+          interactiveCount: 3,
+          warnings: []
+        },
+        structuredPageData: {
+          observation: tabData('private observation', [{
+            url: 'https://docs.example.com/private',
+            title: 'Private account page',
+            currentDomain: 'docs.example.com',
+            origin: 'https://docs.example.com',
+            pageStateSummary: 'Sensitive account page ready',
+            visibleTextSummary: 'secret@example.com'
+          }]),
+          refs: tabData('private refs', [{
+            refId: 'ref_secret',
+            role: 'button',
+            name: 'Reveal API key',
+            tagName: 'button',
+            visible: true
+          }]),
+          interactive: tabData('private interactive', [{
+            refId: 'ref_secret',
+            role: 'button',
+            name: 'Reveal API key',
+            tagName: 'button',
+            visible: true,
+            disabled: false,
+            warnings: []
+          }]),
+          forms: tabData('private forms', [{
+            refId: 'field_secret',
+            label: 'Recovery email secret@example.com',
+            type: 'email',
+            required: false,
+            disabled: false,
+            sensitive: false,
+            valuePreview: 'secret@example.com',
+            validation: { valid: true },
+            warnings: []
+          }])
+        },
+        toolResult: {
+          tool: TOOL_NAMES.PAGE_READ_ARTICLE,
+          ok: true,
+          code: 'OK',
+          summary: 'Read article: private checkout token',
+          detail: {
+            data: {
+              text: 'Private checkout token abc-123 and user email secret@example.com',
+              contentSource: 'article'
+            }
+          },
+          changedPage: false,
+          requiresObserve: false
+        }
+      },
+      toolsContracts: [toolContract(TOOL_NAMES.PAGE_READ_ARTICLE)],
+      locale: 'zh',
+      requireProviderContextConsent: true
+    });
+
+    const prompt = messages.at(-1)?.content ?? '';
+    const jsonStart = prompt.indexOf('{');
+    expect(jsonStart).toBeGreaterThanOrEqual(0);
+    const parsed = JSON.parse(prompt.slice(jsonStart)) as {
+      providerContextPolicy?: {
+        allowed: boolean;
+        operation: string;
+        reason?: string;
+      };
+      observation?: unknown;
+      structuredPageData?: unknown;
+      priorityPageReadText?: unknown;
+      recentActions?: unknown;
+      lastToolResult?: unknown;
+    };
+
+    expect(parsed.providerContextPolicy).toMatchObject({
+      allowed: false,
+      operation: 'provider_context',
+      reason: 'DOMAIN_NOT_ENABLED'
+    });
+    expect(parsed.observation).toBeUndefined();
+    expect(parsed.structuredPageData).toBeUndefined();
+    expect(parsed.priorityPageReadText).toBeUndefined();
+    expect(parsed.recentActions).toBeUndefined();
+    expect(parsed.lastToolResult).toBeUndefined();
+    expect(prompt).not.toContain('secret@example.com');
+    expect(prompt).not.toContain('Private checkout token');
+    expect(prompt).not.toContain('Reveal API key');
   });
 });
 

@@ -19,6 +19,15 @@ afterEach(() => {
 });
 
 describe('CDP tools', () => {
+  it('requires BrowserHelm approval before attaching debugger sessions', () => {
+    expect(bhCdpAttach(rpc())).toMatchObject({
+      risk: 'medium',
+      readOnly: false,
+      requiresApproval: true
+    });
+    expect(bhCdpDetach(rpc()).requiresApproval).toBe(false);
+  });
+
   it('returns an actionable failure when debugger permission/API is unavailable', async () => {
     vi.stubGlobal('chrome', {});
 

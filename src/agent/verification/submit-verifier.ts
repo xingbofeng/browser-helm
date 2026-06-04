@@ -7,6 +7,7 @@ import {
   latestPayload,
   pass,
   stringField,
+  structuredPassedEvidence,
   subsequentSuccessfulObservation
 } from './verifier-utils';
 
@@ -33,6 +34,14 @@ export function verifySubmitCompletion(input: VerificationInput): TaskVerificati
     return fail('submit', 'fail', 'Post-submit page evidence shows an error.', ['submit_success_evidence'], [
       { kind: 'post_submit_observation', summary: text.slice(0, 160), tool: TOOL_NAMES.PAGE_OBSERVE }
     ], TOOL_NAMES.FORM_SUBMIT_WITH_APPROVAL);
+  }
+  const structuredEvidence = structuredPassedEvidence(
+    submit.payload,
+    ['successEvidence', 'postSubmitEvidence', 'evidence'],
+    TOOL_NAMES.FORM_SUBMIT_WITH_APPROVAL
+  );
+  if (structuredEvidence.length > 0) {
+    return pass('submit', 'Submit result includes structured success evidence and post-submit observation.', structuredEvidence);
   }
   if (hasSuccessEvidence(text) || outcome === 'success' || outcome === 'redirected' || outcome === 'form_reset') {
     return pass('submit', 'Submit result and post-submit evidence show success.', [

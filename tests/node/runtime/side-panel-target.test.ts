@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   bindSidePanelToTab,
+  bindSidePanelToRun,
   bindSidePanelToActiveTab,
   floatingPanelPathForTab,
+  sidePanelPathForRun,
   notifySidePanelsTargetTabChanged,
   sidePanelPathForTab,
   sidePanelSurfaceFromSender,
@@ -27,6 +29,16 @@ describe('sidePanelPathForTab', () => {
     expect(a).not.toBe(b);
     expect(a).toContain('tabId=1');
     expect(b).toContain('tabId=999');
+  });
+});
+
+describe('sidePanelPathForRun', () => {
+  it('生成带 runId 的 side panel 路径', () => {
+    expect(sidePanelPathForRun(42, 'run_1')).toBe('sidepanel.html?target=active&tabId=42&runId=run_1');
+  });
+
+  it('对 runId 进行 URL 编码', () => {
+    expect(sidePanelPathForRun(42, 'run a/b')).toBe('sidepanel.html?target=active&tabId=42&runId=run%20a%2Fb');
   });
 });
 
@@ -76,6 +88,15 @@ describe('targetTabChangedMessage', () => {
     expect(msg.type).toBe(SIDE_PANEL_MESSAGES.TARGET_TAB_CHANGED);
     expect(msg.tabId).toBe(100);
   });
+
+  it('可携带 runId，让已打开 side panel 切到指定 run', () => {
+    const msg = targetTabChangedMessage(100, 'run_2');
+    expect(msg).toEqual({
+      type: SIDE_PANEL_MESSAGES.TARGET_TAB_CHANGED,
+      tabId: 100,
+      runId: 'run_2'
+    });
+  });
 });
 
 describe('bindSidePanelToTab', () => {
@@ -98,6 +119,23 @@ describe('bindSidePanelToTab', () => {
     expect(setOptions).toHaveBeenCalledWith({
       tabId: 42,
       path: 'sidepanel.html?target=active&tabId=42',
+      enabled: true
+    });
+  });
+});
+
+describe('bindSidePanelToRun', () => {
+  it('调用 chrome.sidePanel.setOptions 并传入 runId 路径', async () => {
+    const setOptions = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('chrome', {
+      sidePanel: { setOptions }
+    });
+
+    await bindSidePanelToRun(42, 'run_1');
+
+    expect(setOptions).toHaveBeenCalledWith({
+      tabId: 42,
+      path: 'sidepanel.html?target=active&tabId=42&runId=run_1',
       enabled: true
     });
   });

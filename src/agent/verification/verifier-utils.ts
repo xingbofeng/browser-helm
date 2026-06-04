@@ -107,6 +107,39 @@ export function booleanField(record: Record<string, unknown> | undefined, key: s
   return typeof value === 'boolean' ? value : undefined;
 }
 
+export function structuredPassedEvidence(
+  payload: Record<string, unknown>,
+  keys: string[],
+  tool?: string
+): SemanticEvidence[] {
+  const containers = [
+    payload,
+    isRecord(payload.data) ? payload.data : undefined
+  ].filter((value): value is Record<string, unknown> => value !== undefined);
+  return containers.flatMap((container) =>
+    keys.flatMap((key) => {
+      const evidence = container[key];
+      if (!Array.isArray(evidence)) {
+        return [];
+      }
+      return evidence.flatMap((item): SemanticEvidence[] => {
+        if (!isRecord(item) || item.passed !== true) {
+          return [];
+        }
+        const kind = stringField(item, 'kind') ?? key;
+        const summary = stringField(item, 'summary') ??
+          stringField(item, 'value') ??
+          kind;
+        return [{
+          kind,
+          summary,
+          ...(tool ? { tool } : {})
+        }];
+      });
+    })
+  );
+}
+
 export function numberField(record: Record<string, unknown> | undefined, key: string): number | undefined {
   if (!record) return undefined;
   const value = record[key];

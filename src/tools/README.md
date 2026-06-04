@@ -4,6 +4,8 @@
 
 `title` 字段旁的代码注释用于说明工具在 Agent 语义里的用途：它不是 UI 文案替代品，而是维护者阅读工具清单时的快速定位。
 
+Domain Adapter 工具只提供 guidance、workflow template、locator hint 和 failure report；adapter 自身不执行页面动作，也不能绕过通用 ToolRouter、runtime authorization、domain policy、approval flow 或 verifier。
+
 ## 已实现工具
 
 | 工具名 | Title | 目录 | 模式 | 风险 | 参数 | 含义 |
@@ -51,6 +53,8 @@
 | `bh_cdp_capture_dom_snapshot` | CDP DOM Snapshot | `cdp/` | `debug` | `safe` | `tabId?` | 捕获 CDP DOMSnapshot 诊断载荷。 |
 | `bh_vision_capture_viewport` | Capture Viewport Screenshot | `vision/` | `debug`, `vision` | `safe` | `windowId?` | 截取当前视口截图；原始 dataUrl 仅在工具结果内短暂使用，snapshot detail 会脱敏。 |
 | `bh_vision_capture_full_page` | Capture Full Page Screenshot | `vision/` | `debug`, `vision` | `safe` | `windowId?` | 通过 CDP full-page capture 截取完整页面视觉参考，失败时才回退可见视口。 |
+| `bh_vision_batch_capture_full_pages` | Batch Capture Full Page Screenshots | `vision/` | `debug`, `vision` | `safe` | `scope?`, `maxTabs?` | 批量截取当前窗口页面长图；每页截图前滚动触发懒加载，结果原始图片仍会在 snapshot detail 中脱敏。 |
+| `bh_vision_collect_images` | Batch Collect Page Images | `vision/` | `debug`, `vision` | `safe` | `scope?`, `maxTabs?`, `maxImagesPerTab?`, `includeCssBackgrounds?` | 批量获取当前窗口页面图片 URL 清单；先滚动触发懒加载，不下载图片二进制。 |
 | `bh_vision_capture_element` | Capture Element Screenshot | `vision/` | `debug`, `vision` | `safe` | `selector`, `windowId?` | 截取指定元素并返回 bounds metadata，用于视觉/DOM 对照。 |
 | `bh_vision_describe_viewport` | Describe Viewport With Vision | `vision/` | `debug`, `vision` | `safe` | `prompt?`, `windowId?` | 请求 vision-capable provider 生成视口摘要；不可用时返回 DOM/a11y fallback。 |
 | `bh_vision_detect_overlay` | Detect Visual Overlay | `vision/` | `debug`, `vision` | `safe` | `prompt?`, `windowId?` | 聚焦检测浮层、弹窗、sticky header 或 banner 遮挡。 |

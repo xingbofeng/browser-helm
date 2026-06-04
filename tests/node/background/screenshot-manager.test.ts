@@ -7,6 +7,39 @@ afterEach(() => {
 });
 
 describe('ScreenshotManager', () => {
+  function installCanvasStubs(outputDataUrl = 'data:image/png;base64,stitched') {
+    const drawImage = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
+      blob: async () => new Blob([url])
+    })));
+    vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 800, height: 600 })));
+    class FakeOffscreenCanvas {
+      width: number;
+      height: number;
+      constructor(width: number, height: number) {
+        this.width = width;
+        this.height = height;
+      }
+      getContext() {
+        return { drawImage };
+      }
+      async convertToBlob() {
+        return new Blob(['stitched'], { type: 'image/png' });
+      }
+    }
+    vi.stubGlobal('OffscreenCanvas', FakeOffscreenCanvas);
+    vi.stubGlobal('FileReader', class {
+      result: string | ArrayBuffer | null = null;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      readAsDataURL() {
+        this.result = outputDataUrl;
+        this.onload?.();
+      }
+    });
+    return { drawImage };
+  }
+
   it('captures a redacted viewport screenshot from the active window', async () => {
     vi.stubGlobal('chrome', {
       tabs: {
@@ -195,6 +228,46 @@ describe('ScreenshotManager', () => {
     expect(detach).toHaveBeenCalledWith({ tabId: 42 });
   });
 
+  it('falls back to CDP screenshot when captureVisibleTab hits Chrome quota', async () => {
+    const sendCommand = vi.fn(async (_target: unknown, method: string) => {
+      if (method === 'Runtime.evaluate') {
+        return {
+          result: {
+            value: {
+              width: 1280,
+              height: 720
+            }
+          }
+        };
+      }
+      expect(method).toBe('Page.captureScreenshot');
+      return { data: 'quota-fallback' };
+    });
+    vi.stubGlobal('chrome', {
+      tabs: {
+        captureVisibleTab: vi.fn(async () => {
+          throw new Error('This request exceeds the MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND quota.');
+        })
+      },
+      debugger: {
+        attach: vi.fn(async () => undefined),
+        detach: vi.fn(async () => undefined),
+        sendCommand,
+        onEvent: { addListener: vi.fn() },
+        onDetach: { addListener: vi.fn() }
+      }
+    });
+
+    const manager = new ScreenshotManager();
+    const screenshot = await manager.captureViewport({ tabId: 42 });
+
+    expect(screenshot.dataUrl).toBe('data:image/png;base64,quota-fallback');
+    expect(screenshot).toMatchObject({
+      captureSource: 'cdp_capture_screenshot',
+      fallbackReason: 'tabs_capture_visible_tab_unavailable'
+    });
+  });
+
   it('uses available debugger API without requesting optional permission from the background', async () => {
     const request = vi.fn(async (
       _request: unknown,
@@ -246,39 +319,81 @@ describe('ScreenshotManager', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it('captures full-page screenshots with CDP content bounds instead of viewport fallback', async () => {
-    const captureVisibleTab = vi.fn(async () => {
-      throw new Error('captureVisibleTab should not be used for full-page screenshots');
-    });
-    const sendCommand = vi.fn(async (_target: unknown, method: string, params?: Record<string, unknown>) => {
+  it('captures full-page screenshots by scrolling visible tiles and stitching them', async () => {
+    const { drawImage } = installCanvasStubs();
+    const scrollPositions: number[] = [];
+    const captureVisibleTab = vi.fn(async () => `data:image/png;base64,tile-${captureVisibleTab.mock.calls.length}`);
+    const sendCommand = vi.fn(async (_target: unknown, method: string) => {
       if (method === 'Page.getLayoutMetrics') {
         return {
           contentSize: {
             x: 0,
             y: 0,
-            width: 1440,
+            width: 2880,
             height: 2400
+          },
+          cssVisualViewport: {
+            clientWidth: 1440,
+            clientHeight: 900,
+            pageX: 0,
+            pageY: 0
           }
         };
       }
       if (method === 'Page.captureScreenshot') {
-        expect(params).toMatchObject({
-          format: 'png',
-          captureBeyondViewport: true,
-          clip: {
-            x: 0,
-            y: 0,
-            width: 1440,
-            height: 2400,
-            scale: 1
-          }
-        });
         return { data: 'fullpage' };
       }
       return {};
     });
+    const executeScript = vi.fn(async (input: { args?: unknown[] }) => {
+      if (input.args?.[0] === 'metrics') {
+        return [{
+          result: {
+            scrollX: 0,
+            scrollY: 0,
+            viewportWidth: 800,
+            viewportHeight: 600,
+            documentWidth: 800,
+            documentHeight: 1400,
+            devicePixelRatio: 1
+          }
+        }];
+      }
+      if (input.args?.[0] === 'scroll') {
+        const scrollY = Number(input.args[2]);
+        scrollPositions.push(scrollY);
+        return [{
+          result: {
+            scrollX: 0,
+            scrollY,
+            viewportWidth: 800,
+            viewportHeight: 600,
+            documentWidth: 800,
+            documentHeight: 1400,
+            devicePixelRatio: 1
+          }
+        }];
+      }
+      if (input.args?.[0] === 'restore') {
+        scrollPositions.push(Number(input.args[2]));
+        return [{ result: undefined }];
+      }
+      return [{
+        result: {
+          attempted: true,
+          steps: 4,
+          initialScrollHeight: 1200,
+          finalScrollHeight: 2400,
+          restoredScrollX: 0,
+          restoredScrollY: 0
+        }
+      }];
+    });
     vi.stubGlobal('chrome', {
       tabs: { captureVisibleTab },
+      scripting: {
+        executeScript
+      },
       debugger: {
         attach: vi.fn(async () => undefined),
         detach: vi.fn(async () => undefined),
@@ -291,13 +406,18 @@ describe('ScreenshotManager', () => {
     const manager = new ScreenshotManager();
     const screenshot = await manager.captureFullPage({ tabId: 42 });
 
-    expect(captureVisibleTab).not.toHaveBeenCalled();
+    expect(sendCommand).not.toHaveBeenCalledWith(expect.anything(), 'Page.captureScreenshot', expect.anything());
+    expect(captureVisibleTab).toHaveBeenCalledTimes(3);
+    expect(scrollPositions).toEqual([0, 600, 800, 0]);
+    expect(drawImage).toHaveBeenCalledTimes(3);
     expect(screenshot).toMatchObject({
       id: 'shot_42_full_page',
       mode: 'full_page',
-      width: 1440,
-      height: 2400,
-      dataUrl: 'data:image/png;base64,fullpage'
+      width: 800,
+      height: 1400,
+      dataUrl: 'data:image/png;base64,stitched',
+      captureSource: 'tabs_capture_visible_tab',
+      truncated: false
     });
   });
 

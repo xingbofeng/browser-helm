@@ -10,7 +10,10 @@ import { buildRecentToolActions } from './recent-tool-actions';
 import { compactTaskState, createInitialTaskState } from './runtime-task-state';
 import type { Locale } from '../../i18n/types';
 import { buildMemoryPromptContext } from '../memory/memory-summary-builder';
-import type { BrowserHelmDomainPolicy } from '../../shared/domain-policy';
+import {
+  evaluateBrowserHelmDomainOperationPolicy,
+  type BrowserHelmDomainPolicy
+} from '../../shared/domain-policy';
 import { defaultMemoryRepo } from '../../storage/memory-repo';
 import { defaultScratchpadRepo } from '../../storage/scratchpad-repo';
 import { defaultWorkflowRepo } from '../../storage/workflow-repo';
@@ -43,6 +46,7 @@ export type BuildMessagesInput = {
   toolsContracts: ToolPromptContract[];
   locale: Locale;
   domainPolicy?: BrowserHelmDomainPolicy | undefined;
+  requireProviderContextConsent?: boolean | undefined;
 };
 
 // ── Internal tool contracts ──
@@ -76,6 +80,10 @@ const REQUEST_ACT_MODE_CONTRACT: ToolPromptContract = {
 export function buildMessages(input: BuildMessagesInput): ModelMessage[] {
   const { record, snapshot, toolsContracts, locale } = input;
   const redactedTask = redactTextForModelContext(record.task);
+  const providerContextPolicy = buildProviderContextPolicy(input);
+  const pageContextAllowed = providerContextPolicy?.allowed !== false;
+  const providerSnapshot = pageContextAllowed ? snapshot : withholdProviderPageContext(snapshot);
+  const providerTrace = pageContextAllowed ? record.trace : [];
 
   // ── Stable prefix: system policy + tool manifest ──
   const systemMessage = new SystemPolicyBuilder().build({
@@ -85,43 +93,46 @@ export function buildMessages(input: BuildMessagesInput): ModelMessage[] {
   });
 
   // ── Dynamic suffix: user task, page context, history, trace ──
-  const lastToolResult = snapshot.toolResult ? compactToolResult(snapshot.toolResult) : undefined;
-  const visionEvidence = snapshot.toolResult ? compactVisionEvidence(snapshot.toolResult) : undefined;
-  const priorityPageReadText = snapshot.toolResult ? pageReadTextFromToolResult(snapshot.toolResult) : undefined;
+  const lastToolResult = pageContextAllowed && snapshot.toolResult ? compactToolResult(snapshot.toolResult) : undefined;
+  const visionEvidence = pageContextAllowed && snapshot.toolResult ? compactVisionEvidence(snapshot.toolResult) : undefined;
+  const priorityPageReadText = pageContextAllowed && snapshot.toolResult ? pageReadTextFromToolResult(snapshot.toolResult) : undefined;
   const hasPageReadText = Boolean(priorityPageReadText);
   const observation = compactObservation(
-    snapshot.observation,
+    providerSnapshot.observation,
     hasPageReadText ? MAX_OBSERVATION_CHARS_WITH_PAGE_READ : MAX_OBSERVATION_CHARS
   );
   const structuredPageData = hasPageReadText
-    ? compactStructuredPageDataSummary(snapshot.structuredPageData)
-    : compactStructuredPageData(snapshot.structuredPageData);
-  const decisionGuidance = buildDecisionGuidance(snapshot.toolResult);
-  const recentActions = buildRecentToolActions(record.trace);
+    ? compactStructuredPageDataSummary(providerSnapshot.structuredPageData)
+    : compactStructuredPageData(providerSnapshot.structuredPageData);
+  const decisionGuidance = pageContextAllowed ? buildDecisionGuidance(snapshot.toolResult) : undefined;
+  const recentActions = buildRecentToolActions(providerTrace);
   const loopGuard = buildLoopGuard(recentActions);
   const taskState = compactTaskState(record.taskState ?? createInitialTaskState(redactedTask));
   const sessionSummary = buildSessionSummary({
     sessionId: snapshot.runId,
     taskGoal: redactedTask,
-    trace: record.trace,
-    snapshot
+    trace: providerTrace,
+    snapshot: providerSnapshot
   });
-  const memoryContext = buildMemoryPromptContext({
-    domain: readObservationDomain(snapshot),
-    task: redactedTask,
-    runId: snapshot.runId,
-    domainPolicy: input.domainPolicy,
-    memoryRepo: defaultMemoryRepo,
-    workflowRepo: defaultWorkflowRepo,
-    scratchpadRepo: defaultScratchpadRepo
-  });
-  const domainAdapter = buildDomainAdapterContext(snapshot);
+  const memoryContext = pageContextAllowed
+    ? buildMemoryPromptContext({
+        domain: readObservationDomain(snapshot),
+        task: redactedTask,
+        runId: snapshot.runId,
+        domainPolicy: input.domainPolicy,
+        memoryRepo: defaultMemoryRepo,
+        workflowRepo: defaultWorkflowRepo,
+        scratchpadRepo: defaultScratchpadRepo
+      })
+    : undefined;
+  const domainAdapter = pageContextAllowed ? buildDomainAdapterContext(snapshot) : undefined;
 
   // Dynamic user content: all untrusted / page-derived data
   const userContent = {
     task: redactedTask,
     locale,
     taskState,
+    ...(providerContextPolicy ? { providerContextPolicy } : {}),
     ...(lastToolResult ? { lastToolResult } : {}),
     ...(visionEvidence ? { visionEvidence } : {}),
     ...(priorityPageReadText ? { priorityPageReadText: redactTextForModelContext(priorityPageReadText) } : {}),
@@ -149,6 +160,52 @@ export function buildMessages(input: BuildMessagesInput): ModelMessage[] {
   ];
 
   return messages;
+}
+
+function buildProviderContextPolicy(input: BuildMessagesInput): {
+  operation: 'provider_context';
+  allowed: boolean;
+  restricted: boolean;
+  hostname?: string | undefined;
+  reason?: string | undefined;
+  withheld?: string[] | undefined;
+} | undefined {
+  if (input.requireProviderContextConsent !== true || !input.snapshot.observation) {
+    return undefined;
+  }
+  const decision = evaluateBrowserHelmDomainOperationPolicy(
+    input.snapshot.observation.url || input.snapshot.observation.origin || input.snapshot.observation.currentDomain,
+    input.domainPolicy,
+    'provider_context'
+  );
+  return {
+    operation: 'provider_context',
+    allowed: decision.allowed,
+    restricted: decision.restricted,
+    ...(decision.hostname ? { hostname: decision.hostname } : {}),
+    ...(decision.reason ? { reason: decision.reason } : {}),
+    ...(!decision.allowed
+      ? {
+          withheld: [
+            'observation',
+            'structuredPageData',
+            'pageReadText',
+            'visionEvidence',
+            'recentPageToolActions',
+            'domainAdapter',
+            'memoryContext'
+          ]
+        }
+      : {})
+  };
+}
+
+function withholdProviderPageContext(snapshot: RunSnapshot): RunSnapshot {
+  const providerSnapshot: RunSnapshot = { ...snapshot, refs: [] };
+  delete providerSnapshot.observation;
+  delete providerSnapshot.structuredPageData;
+  delete providerSnapshot.toolResult;
+  return providerSnapshot;
 }
 
 // ── Conversation history ──

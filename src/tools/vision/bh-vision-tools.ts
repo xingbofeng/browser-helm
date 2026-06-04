@@ -1,10 +1,16 @@
 import { z } from 'zod';
 
+import { defaultPageMediaManager } from '../../background/page-media-manager';
 import { defaultScreenshotManager } from '../../background/screenshot-manager';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { TOOL_NAMES } from '../../shared/constants/tool-names';
 import type { ContentRpcClient } from '../../page/messaging/content-rpc-client';
 import { screenshotCaptureSchema, visionObservationSchema } from '../../shared/schemas/vision';
+import {
+  batchFullPageScreenshotResultSchema,
+  batchImageCollectionResultSchema,
+  batchMediaScopeSchema
+} from '../../shared/schemas/page-media';
 import { toolResultSchema, type ToolResult } from '../../shared/schemas/tool-result.schema';
 import type { ToolContext } from '../core/tool-context';
 import type { ToolSpec } from '../core/tool-spec';
@@ -14,6 +20,16 @@ import { normalizeVisionObservation } from './vision-result-normalizer';
 const captureArgsSchema = z.object({
   windowId: z.number().int().nonnegative().optional()
 }).strict();
+
+const batchArgsSchema = z.object({
+  scope: batchMediaScopeSchema.default('current_window'),
+  maxTabs: z.number().int().min(1).max(20).default(8)
+}).strict();
+
+const imageCollectArgsSchema = batchArgsSchema.extend({
+  maxImagesPerTab: z.number().int().min(1).max(1000).default(250),
+  includeCssBackgrounds: z.boolean().default(true)
+});
 
 const elementArgsSchema = captureArgsSchema.extend({
   selector: z.string().min(1)
@@ -62,6 +78,62 @@ export function bhVisionCaptureFullPage(_rpc: ContentRpcClient): ToolSpec<z.infe
       const tabId = requireTabId(ctx);
       const screenshot = await defaultScreenshotManager.captureFullPage({ tabId, windowId: normalizeWindowId(args.windowId) });
       return ok(`Captured full-page screenshot ${screenshot.id}.`, { screenshot: screenshotCaptureSchema.parse(screenshot) });
+    }
+  });
+}
+
+/**
+ * 批量截取当前窗口页面长图。
+ *
+ * Agent 语义：Debug/Vision 只读批量视觉工具，面向用户显式要求批量长截图时使用。
+ * 默认扫描当前窗口 http/https tabs，每页截图前会滚动以触发 lazy-load 图片。滚动后恢复
+ * 原视口，不点击/输入/提交，风险 safe，不触发 approval。参数 scope/maxTabs 控制范围；
+ * 结果包含每页 screenshot metadata 和 dataUrl，model context 仅暴露成功/失败摘要。
+ */
+export function bhVisionBatchCaptureFullPages(_rpc: ContentRpcClient): ToolSpec<z.infer<typeof batchArgsSchema>, ToolResult> {
+  return visionTool({
+    name: TOOL_NAMES.VISION_BATCH_CAPTURE_FULL_PAGES,
+    title: 'Batch Capture Full Page Screenshots',
+    description: 'Batch captures full-page screenshots for current-window pages after lazy-load scrolling.',
+    argsSchema: batchArgsSchema,
+    execute: async (args, ctx) => {
+      const tabId = requireTabId(ctx);
+      const batchCapture = await defaultPageMediaManager.captureFullPageBatch({
+        sourceTabId: tabId,
+        scope: args.scope,
+        maxTabs: args.maxTabs
+      });
+      const summary = `Captured ${batchCapture.succeededCount} full-page screenshots across ${batchCapture.requestedTabCount} tabs; ${batchCapture.failedCount} failed.`;
+      return ok(summary, { batchCapture: batchFullPageScreenshotResultSchema.parse(batchCapture) });
+    }
+  });
+}
+
+/**
+ * 批量获取当前窗口页面图片清单。
+ *
+ * Agent 语义：Debug/Vision 只读页面媒体清单工具，面向用户要求获取页面所有图片时使用。
+ * 默认扫描当前窗口 http/https tabs，并先滚动页面触发 lazy-load；返回 img/srcset/picture、
+ * icon/open graph 和 CSS background URL 清单。不会下载图片二进制，不修改业务状态，风险
+ * safe，不触发 approval。参数控制范围、每页图片上限和是否包含 CSS background。
+ */
+export function bhVisionCollectImages(_rpc: ContentRpcClient): ToolSpec<z.infer<typeof imageCollectArgsSchema>, ToolResult> {
+  return visionTool({
+    name: TOOL_NAMES.VISION_COLLECT_IMAGES,
+    title: 'Batch Collect Page Images',
+    description: 'Collects page image URLs across current-window pages after lazy-load scrolling.',
+    argsSchema: imageCollectArgsSchema,
+    execute: async (args, ctx) => {
+      const tabId = requireTabId(ctx);
+      const imageCollection = await defaultPageMediaManager.collectImagesBatch({
+        sourceTabId: tabId,
+        scope: args.scope,
+        maxTabs: args.maxTabs,
+        maxImagesPerTab: args.maxImagesPerTab,
+        includeCssBackgrounds: args.includeCssBackgrounds
+      });
+      const summary = `Collected ${imageCollection.totalImageCount} images across ${imageCollection.succeededCount}/${imageCollection.requestedTabCount} tabs; ${imageCollection.failedCount} failed.`;
+      return ok(summary, { imageCollection: batchImageCollectionResultSchema.parse(imageCollection) });
     }
   });
 }

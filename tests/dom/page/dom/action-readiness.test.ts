@@ -116,6 +116,23 @@ describe('action-readiness', () => {
       });
   });
 
+  it.each([
+    'Authorize payment',
+    'Approve transfer',
+    'Confirm subscription',
+    '同意服务条款'
+  ])('upgrades consent-like click target "%s" to high-risk approval prediction', (label) => {
+    document.body.innerHTML = `<button>${label}</button>`;
+    const { refMap, refId } = createRefFromCurrentDocument('button');
+
+    expect(checkActionReadiness(refMap, { kind: 'click', refId, source: 'agent' }))
+      .toMatchObject({
+        canAct: true,
+        risk: 'high',
+        wouldRequireApproval: true
+      });
+  });
+
   it('upgrades sensitive type targets to high-risk approval prediction', () => {
     document.body.innerHTML = '<input type="password" aria-label="密码" />';
     const { refMap, refId } = createRefFromCurrentDocument('input');

@@ -218,12 +218,16 @@ export class DebuggerManager {
     };
   }
 
-  async evaluate(tabId: number, expression: string): Promise<CdpCommandResult> {
+  async evaluate(
+    tabId: number,
+    expression: string,
+    options: { awaitPromise?: boolean | undefined } = {}
+  ): Promise<CdpCommandResult> {
     return this.withAttachedTarget(tabId, async () =>
       await this.sendCommand({ tabId }, 'Runtime.evaluate', {
         expression,
         returnByValue: true,
-        awaitPromise: false
+        awaitPromise: options.awaitPromise === true
       })
     );
   }
@@ -422,11 +426,37 @@ function readContentSize(value: Record<string, unknown> | undefined): { width: n
   if (typeof contentSize !== 'object' || contentSize === null || Array.isArray(contentSize)) {
     return undefined;
   }
-  const width = (contentSize as Record<string, unknown>).width;
+  const contentWidth = (contentSize as Record<string, unknown>).width;
   const height = (contentSize as Record<string, unknown>).height;
-  return typeof width === 'number' && width > 0 && typeof height === 'number' && height > 0
-    ? { width, height }
+  const viewportWidth = readViewportWidth(value);
+  if (typeof contentWidth !== 'number' || contentWidth <= 0 || typeof height !== 'number' || height <= 0) {
+    return undefined;
+  }
+  const width = viewportWidth === undefined
+    ? contentWidth
+    : Math.min(contentWidth, viewportWidth);
+  return width > 0
+    ? { width: Math.round(width), height: Math.round(height) }
     : undefined;
+}
+
+function readViewportWidth(value: Record<string, unknown> | undefined): number | undefined {
+  const candidates = [
+    value?.cssVisualViewport,
+    value?.cssLayoutViewport,
+    value?.visualViewport,
+    value?.layoutViewport
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'object' || candidate === null || Array.isArray(candidate)) {
+      continue;
+    }
+    const clientWidth = (candidate as Record<string, unknown>).clientWidth;
+    if (typeof clientWidth === 'number' && clientWidth > 0) {
+      return clientWidth;
+    }
+  }
+  return undefined;
 }
 
 function parseListener(value: unknown): CdpEventListener[] {

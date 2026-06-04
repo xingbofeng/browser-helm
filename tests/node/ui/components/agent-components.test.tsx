@@ -718,10 +718,10 @@ describe('agent side panel components', () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain('API key storage');
-    expect(container.textContent).toContain('Current browser session');
-    expect(container.textContent).toContain('Persist on this device');
-    expect(container.textContent).toContain('Local persistence keeps the key in extension storage');
+    expect(container.textContent).toContain('API Key 存储');
+    expect(container.textContent).toContain('当前浏览器会话');
+    expect(container.textContent).toContain('受信任本地存储');
+    expect(container.textContent).toContain('生产构建默认只使用会话存储保存密钥');
 
     await act(async () => {
       button('保存配置', container).click();

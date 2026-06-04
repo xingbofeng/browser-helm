@@ -1,0 +1,235 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import {
+  buildSelectionContextTask,
+  handleSelectionContextMenuClick,
+  registerSelectionContextMenus,
+  SELECTION_CONTEXT_MENU_IDS
+} from '../../../src/background/selection-context-menu';
+import {
+  SELECTION_MARKDOWN_DOWNLOAD_MESSAGE,
+  SELECTION_MARKDOWN_MENU_ID
+} from '../../../src/shared/constants/selection-markdown';
+import { TOOL_NAMES } from '../../../src/shared/constants/tool-names';
+import type { ExecuteToolInput, StartRunInput } from '../../../src/runtime/runtime-messages';
+
+const CAPTURE_VIEWPORT_MENU_ID = 'browserhelm-vision-capture-viewport';
+const CAPTURE_FULL_PAGE_MENU_ID = 'browserhelm-vision-capture-full-page';
+const COLLECT_IMAGES_MENU_ID = 'browserhelm-vision-collect-images';
+
+describe('selection context menu task builder', () => {
+  it('builds a Chinese explanation task from selected text', () => {
+    const task = buildSelectionContextTask('explain', ' Progressive enhancement ');
+
+    expect(task).toContain('请用中文解释以下选中文本');
+    expect(task).toContain('Progressive enhancement');
+    expect(task).toContain('选中文本开始');
+  });
+
+  it('builds a Chinese translation task from selected text', () => {
+    const task = buildSelectionContextTask('translate', 'Hello browser agent');
+
+    expect(task).toContain('请把以下选中文本翻译成中文');
+    expect(task).toContain('Hello browser agent');
+    expect(task).toContain('保留专有名词、代码、URL 和原始格式');
+  });
+
+  it('returns undefined for empty selected text', () => {
+    expect(buildSelectionContextTask('explain', '   \n\t  ')).toBeUndefined();
+    expect(buildSelectionContextTask('translate', undefined)).toBeUndefined();
+  });
+});
+
+describe('selection context menu registration', () => {
+  const create = vi.fn();
+  const remove = vi.fn((_id: string, callback?: () => void) => callback?.());
+  const addListener = vi.fn();
+
+  beforeEach(() => {
+    create.mockClear();
+    remove.mockClear();
+    addListener.mockClear();
+  });
+
+  it('registers BrowserHelm parent and child menu items with the expected contexts', () => {
+    const onClick = vi.fn();
+
+    registerSelectionContextMenus({
+      contextMenus: {
+        create,
+        remove,
+        onClicked: { addListener }
+      },
+      onClick
+    });
+
+    expect(remove).toHaveBeenCalledWith(SELECTION_CONTEXT_MENU_IDS.root, expect.any(Function));
+    expect(remove).toHaveBeenCalledWith(SELECTION_MARKDOWN_MENU_ID, expect.any(Function));
+    expect(remove).toHaveBeenCalledWith(SELECTION_CONTEXT_MENU_IDS.explain, expect.any(Function));
+    expect(remove).toHaveBeenCalledWith(SELECTION_CONTEXT_MENU_IDS.translate, expect.any(Function));
+    expect(remove).toHaveBeenCalledWith(CAPTURE_VIEWPORT_MENU_ID, expect.any(Function));
+    expect(remove).toHaveBeenCalledWith(CAPTURE_FULL_PAGE_MENU_ID, expect.any(Function));
+    expect(remove).toHaveBeenCalledWith(COLLECT_IMAGES_MENU_ID, expect.any(Function));
+    expect(create).toHaveBeenCalledWith({
+      id: SELECTION_CONTEXT_MENU_IDS.root,
+      title: 'BrowserHelm',
+      contexts: ['page', 'selection', 'link', 'image']
+    });
+    expect(create).toHaveBeenCalledWith({
+      id: SELECTION_MARKDOWN_MENU_ID,
+      title: '下载选区为 Markdown',
+      contexts: ['selection'],
+      parentId: SELECTION_CONTEXT_MENU_IDS.root
+    });
+    expect(create).toHaveBeenCalledWith({
+      id: SELECTION_CONTEXT_MENU_IDS.explain,
+      title: '解释选中文字',
+      contexts: ['selection'],
+      parentId: SELECTION_CONTEXT_MENU_IDS.root
+    });
+    expect(create).toHaveBeenCalledWith({
+      id: SELECTION_CONTEXT_MENU_IDS.translate,
+      title: '翻译选中文字',
+      contexts: ['selection'],
+      parentId: SELECTION_CONTEXT_MENU_IDS.root
+    });
+    for (const id of [CAPTURE_VIEWPORT_MENU_ID, CAPTURE_FULL_PAGE_MENU_ID, COLLECT_IMAGES_MENU_ID]) {
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({
+        id,
+        contexts: ['page', 'selection', 'link', 'image'],
+        parentId: SELECTION_CONTEXT_MENU_IDS.root
+      }));
+    }
+    expect(addListener).toHaveBeenCalledWith(onClick);
+  });
+});
+
+describe('selection context menu click handling', () => {
+  it('ignores unknown menu ids and empty selections', async () => {
+    const startRun = vi.fn();
+    const openSidePanelForRun = vi.fn();
+
+    await handleSelectionContextMenuClick(
+      { menuItemId: 'other-menu', selectionText: 'hello' },
+      { id: 9 },
+      { startRun, openSidePanelForRun }
+    );
+    await handleSelectionContextMenuClick(
+      { menuItemId: SELECTION_CONTEXT_MENU_IDS.explain, selectionText: ' ' },
+      { id: 9 },
+      { startRun, openSidePanelForRun }
+    );
+
+    expect(startRun).not.toHaveBeenCalled();
+    expect(openSidePanelForRun).not.toHaveBeenCalled();
+  });
+
+  it('starts an ask run for explanation and opens the side panel for the run', async () => {
+    const startRun = vi.fn(async (_input: StartRunInput) => ({ runId: 'run_explain' }));
+    const openSidePanelForRun = vi.fn(async () => undefined);
+
+    await handleSelectionContextMenuClick(
+      {
+        menuItemId: SELECTION_CONTEXT_MENU_IDS.explain,
+        selectionText: 'Shadow DOM'
+      },
+      { id: 42 },
+      { startRun, openSidePanelForRun }
+    );
+
+    expect(startRun).toHaveBeenCalledTimes(1);
+    expect(startRun.mock.calls[0]?.[0].mode).toBe('ask');
+    expect(startRun.mock.calls[0]?.[0].tabId).toBe(42);
+    expect(startRun.mock.calls[0]?.[0].task).toContain('请用中文解释以下选中文本');
+    expect(startRun.mock.calls[0]?.[0].task).toContain('Shadow DOM');
+    expect(openSidePanelForRun).toHaveBeenCalledWith(42, 'run_explain');
+  });
+
+  it('starts an ask run for translation and opens the side panel for the run', async () => {
+    const startRun = vi.fn(async (_input: StartRunInput) => ({ runId: 'run_translate' }));
+    const openSidePanelForRun = vi.fn(async () => undefined);
+
+    await handleSelectionContextMenuClick(
+      {
+        menuItemId: SELECTION_CONTEXT_MENU_IDS.translate,
+        selectionText: 'Accessibility tree'
+      },
+      { id: 7 },
+      { startRun, openSidePanelForRun }
+    );
+
+    expect(startRun).toHaveBeenCalledTimes(1);
+    expect(startRun.mock.calls[0]?.[0].mode).toBe('ask');
+    expect(startRun.mock.calls[0]?.[0].tabId).toBe(7);
+    expect(startRun.mock.calls[0]?.[0].task).toContain('请把以下选中文本翻译成中文');
+    expect(startRun.mock.calls[0]?.[0].task).toContain('Accessibility tree');
+    expect(openSidePanelForRun).toHaveBeenCalledWith(7, 'run_translate');
+  });
+
+  it.each([
+    [CAPTURE_VIEWPORT_MENU_ID, TOOL_NAMES.VISION_CAPTURE_VIEWPORT, '右键截取当前视口', {}],
+    [CAPTURE_FULL_PAGE_MENU_ID, TOOL_NAMES.VISION_BATCH_CAPTURE_FULL_PAGES, '右键截取当前页面长图', { scope: 'active_tab' }],
+    [COLLECT_IMAGES_MENU_ID, TOOL_NAMES.VISION_COLLECT_IMAGES, '右键获取当前页面全部图片', { scope: 'active_tab' }]
+  ])('starts a debug observe-only run, executes %s, and downloads the result', async (menuItemId, tool, task, args) => {
+    const startRun = vi.fn(async (_input: StartRunInput) => ({ runId: 'run_vision' }));
+    const toolResult = {
+      ok: true,
+      code: 'OK',
+      summary: 'ok'
+    };
+    const executeTool = vi.fn(async (_input: ExecuteToolInput) => toolResult);
+    const downloadToolResult = vi.fn(async () => undefined);
+    const openSidePanelForRun = vi.fn(async () => undefined);
+    const deps = { startRun, executeTool, downloadToolResult, openSidePanelForRun };
+
+    await handleSelectionContextMenuClick(
+      { menuItemId, frameId: 9 },
+      { id: 23 },
+      deps
+    );
+
+    expect(startRun).toHaveBeenCalledWith({
+      task,
+      mode: 'debug',
+      runKind: 'observe_only',
+      tabId: 23
+    });
+    expect(executeTool).toHaveBeenCalledWith({
+      runId: 'run_vision',
+      tool,
+      args
+    });
+    expect(downloadToolResult).toHaveBeenCalledWith({
+      tabId: 23,
+      frameId: 9,
+      tool,
+      result: toolResult
+    });
+    expect(openSidePanelForRun).not.toHaveBeenCalled();
+  });
+
+  it('downloads selected Markdown through the clicked tab frame without opening the side panel', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('chrome', {
+      tabs: {
+        sendMessage
+      }
+    });
+    const startRun = vi.fn();
+    const openSidePanelForRun = vi.fn();
+
+    await handleSelectionContextMenuClick(
+      { menuItemId: SELECTION_MARKDOWN_MENU_ID, frameId: 7, selectionText: 'ignored' },
+      { id: 42 },
+      { startRun, openSidePanelForRun }
+    );
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      42,
+      { type: SELECTION_MARKDOWN_DOWNLOAD_MESSAGE },
+      { frameId: 7 }
+    );
+    expect(startRun).not.toHaveBeenCalled();
+    expect(openSidePanelForRun).not.toHaveBeenCalled();
+  });
+});

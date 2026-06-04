@@ -56,6 +56,11 @@ describe('manifest 权限契约', () => {
     expect(permissions).toContain('webNavigation');
   });
 
+  it('包含 contextMenus 权限，用于选中文字后一键解释和翻译', () => {
+    const permissions = manifest.permissions as string[];
+    expect(permissions).toContain('contextMenus');
+  });
+
   it('包含 storage 权限', () => {
     const permissions = manifest.permissions as string[];
     expect(permissions).toContain('storage');
@@ -69,17 +74,12 @@ describe('manifest 权限契约', () => {
     expect(optionalPermissions).not.toContain('debugger');
   });
 
-  it('默认产物不授予 downloads；E2E 产物仅在测试 profile 中提升为 required', () => {
+  it('默认产物授予 downloads，用于右键长图等大文件自动下载', () => {
     const permissions = manifest.permissions as string[];
     const optionalPermissions = manifest.optional_permissions as string[];
-    if (isE2eRequiredPermissionManifest()) {
-      expect(permissions).toContain('downloads');
-      expect(optionalPermissions).not.toContain('downloads');
-      return;
-    }
 
-    expect(permissions).not.toContain('downloads');
-    expect(optionalPermissions).toContain('downloads');
+    expect(permissions).toContain('downloads');
+    expect(optionalPermissions).not.toContain('downloads');
   });
 
   it('默认产物不授予 clipboard；E2E 产物仅在测试 profile 中提升为 required', () => {

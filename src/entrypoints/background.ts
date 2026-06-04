@@ -1,10 +1,16 @@
 import { BackgroundRuntimeHost } from '../background/runtime/background-runtime-host';
+import { RunManager } from '../background/runtime/run-manager';
+import {
+  handleSelectionContextMenuClick,
+  registerSelectionContextMenus
+} from '../background/selection-context-menu';
 import {
   isFloatingPanelOpenNativeMessage,
   isFloatingPanelUrlMessage,
   parseRunSubscription
 } from '../background/runtime/background-message-guards';
 import {
+  bindSidePanelToRun,
   bindSidePanelToActiveTab,
   bindSidePanelToTab,
   floatingPanelPathForTab,
@@ -17,7 +23,8 @@ import {
 import { RUNTIME_MESSAGES, SIDE_PANEL_MESSAGES } from '../shared/constants/event-names';
 
 export default defineBackground(() => {
-  const host = new BackgroundRuntimeHost();
+  const runManager = new RunManager();
+  const host = new BackgroundRuntimeHost(runManager);
   const sidePanelPorts = new Set<chrome.runtime.Port>();
   const sidePanelPortTargets = new Map<chrome.runtime.Port, {
     surface: SidePanelSurface;
@@ -31,6 +38,19 @@ export default defineBackground(() => {
       void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
     })
     .catch(() => undefined);
+
+  if (globalThis.chrome?.contextMenus) {
+    registerSelectionContextMenus({
+      contextMenus: chrome.contextMenus,
+      onClick: (info, tab) => {
+        void handleSelectionContextMenuClick(info, tab, {
+          startRun: (input) => runManager.startRun(input),
+          executeTool: (input) => runManager.executeTool(input),
+          openSidePanelForRun
+        });
+      }
+    });
+  }
 
   chrome.runtime.onConnect.addListener((port) => {
     if (port.name === RUNTIME_MESSAGES.SUBSCRIBE_RUN) {
@@ -194,6 +214,15 @@ export default defineBackground(() => {
         reason: error instanceof Error ? error.message : 'side_panel_open_failed'
       };
     }
+  }
+
+  async function openSidePanelForRun(tabId: number, runId: string): Promise<void> {
+    if (!globalThis.chrome?.sidePanel?.open) {
+      return;
+    }
+    await bindSidePanelToRun(tabId, runId);
+    notifySidePanelsTargetTabChanged(sidePanelPorts, tabId, runId);
+    await chrome.sidePanel.open({ tabId });
   }
 
   async function readActiveTabId(): Promise<number | undefined> {

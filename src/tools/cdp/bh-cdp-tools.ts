@@ -29,9 +29,10 @@ const MAX_EVENT_LISTENERS_RETURNED = 50;
 /**
  * Attach Chrome debugger to the current tab and enable Network/Runtime/Performance collectors.
  *
- * Agent semantics: Debug/Full only, mutates extension debugger state but not page state. Medium risk:
- * Chrome may show a debugging banner; no approval is triggered by BrowserHelm. Args: optional tabId
- * and protocolVersion. Returns attached state or a clear reason when permission/API attach fails.
+ * Agent semantics: Debug/Full only, mutates extension debugger session state but not page state. Medium
+ * risk with BrowserHelm approval required because CDP attach grants deep inspection of the current tab.
+ * Args: optional tabId and protocolVersion. Returns attached state or a clear reason when permission/API
+ * attach fails.
  */
 export function bhCdpAttach(_rpc: ContentRpcClient): ToolSpec<z.infer<typeof attachArgsSchema>, ToolResult> {
   return cdpTool({
@@ -41,6 +42,7 @@ export function bhCdpAttach(_rpc: ContentRpcClient): ToolSpec<z.infer<typeof att
     argsSchema: attachArgsSchema,
     risk: 'medium',
     readOnly: false,
+    requiresApproval: true,
     execute: async (args, ctx) => {
       const tabId = await resolveTabId(args.tabId, ctx);
       if (!tabId) return unavailable('No active tab is available for CDP attach');

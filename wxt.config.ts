@@ -23,13 +23,12 @@ function stripInlineScripts(): Plugin {
 }
 
 const optionalHighRiskPermissions = [
-  'downloads',
   'offscreen',
   'clipboardRead',
   'clipboardWrite'
 ] as const;
 
-const basePermissions = ['activeTab', 'storage', 'tabs', 'scripting', 'sidePanel', 'webNavigation', 'debugger'] as const;
+const basePermissions = ['activeTab', 'storage', 'tabs', 'scripting', 'sidePanel', 'webNavigation', 'debugger', 'contextMenus', 'downloads'] as const;
 const e2eRequiredHighRiskPermissions = process.env.BROWSER_HELM_E2E_REQUIRED_PERMISSIONS === '1';
 
 export default defineConfig({
@@ -68,8 +67,10 @@ export default defineConfig({
     },
     // BrowserHelm keeps eligible high-risk capabilities optional. Chrome does
     // not allow "debugger" as optional, so CDP capture declares it up front.
-    // Downloads, offscreen clipboard access, and host access are still
-    // requested only when a feature needs them and runtime authorization applies.
+    // Offscreen clipboard access and host access are still requested only when
+    // a feature needs them and runtime authorization applies. Downloads are
+    // required because right-click long screenshots can exceed extension
+    // message payload limits and must be saved directly from the background.
     permissions: [
       ...basePermissions,
       ...(e2eRequiredHighRiskPermissions ? optionalHighRiskPermissions : [])

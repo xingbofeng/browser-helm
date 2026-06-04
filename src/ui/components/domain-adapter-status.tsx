@@ -38,6 +38,11 @@ export function DomainAdapterStatus({ adapter, onSetEnabled }: DomainAdapterStat
               })
             : state.reason}
         </div>
+        {state.enabled ? (
+          <div className="bh-domainAdapterMeta">
+            {t('adapter.nonExecutingBoundary')}
+          </div>
+        ) : null}
       </div>
       {state.enabled && state.approvalEnforced ? (
         <span className="bh-domainAdapterPolicy">

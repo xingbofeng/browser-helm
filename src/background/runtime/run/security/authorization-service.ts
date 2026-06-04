@@ -65,7 +65,11 @@ export class AuthorizationService {
       };
     }
 
-    if (context.requiresApproval && context.bypassPolicyApproval !== true) {
+    if (
+      context.requiresApproval &&
+      context.bypassPolicyApproval !== true &&
+      !isUserTriggeredNonMutatingExecution(context)
+    ) {
       return {
         allow: false,
         requiresApproval: true,
@@ -102,6 +106,10 @@ export class AuthorizationService {
       risk: context.risk
     };
   }
+}
+
+function isUserTriggeredNonMutatingExecution(context: ToolAuthorizationContext): boolean {
+  return context.source === 'user' && context.changedPageExpected !== true;
 }
 
 export function buildActionPreview(context: Pick<

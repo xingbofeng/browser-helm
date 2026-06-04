@@ -189,6 +189,36 @@ export class RunLifecycleService {
     return { runId };
   }
 
+  async refreshCapabilities(runId: string): Promise<RunSnapshot> {
+    const record = this.deps.store.getRecord(runId);
+    const current = this.deps.store.getSnapshot(runId);
+    if (!record?.tabId) {
+      return current;
+    }
+
+    const capabilities = await (this.deps.probeRuntimeCapabilities ?? probeRuntimeCapabilities)({
+      tabId: record.tabId
+    });
+    this.deps.store.appendTrace(record, {
+      runId,
+      type: TRACE_EVENT_NAMES.CAPABILITIES_RESOLVED,
+      payload: {
+        capabilities: capabilities.capabilities,
+        limitations: capabilities.limitations,
+        reason: 'refresh'
+      }
+    });
+    const nextSnapshot: RunSnapshot = {
+      ...current,
+      capabilities: capabilities.capabilities,
+      capabilityLimitations: capabilities.limitations,
+      trace: record.trace
+    };
+    this.deps.store.setSnapshot(runId, nextSnapshot);
+    this.deps.store.notifySnapshotUpdated(runId);
+    return nextSnapshot;
+  }
+
   async observeInitial(
     runId: string,
     record: RunRecord & { tabId: number },

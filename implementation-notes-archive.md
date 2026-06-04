@@ -354,3 +354,87 @@
 ## 2026-06-03 主文件第五次瘦身归档摘要
 
 从 `implementation-notes.md` 主文件移出 2026-06-01/02 的 P0 执行层授权与 verifier、Approval Coordinator 幂等/generation、Approval Request 恢复、Approval audit 收敛、Tool manifest allowlist、Approval request 创建收敛、Milestone 0 completion matrix 条目。主文件继续保留维护规则、归档索引和 2026-06-02 之后仍高频参考的 v1.1-v1.6 任务要点。
+
+## 2026-06-04 主文件第七次瘦身归档
+
+### v1.5 Task 6.2 高级可变动作边界 - 2026-06-03
+
+**目标**：让 iframe/pointer/click approval preview 带上 origin/frame/ref 上下文，并强制 cross-origin iframe mutation 同时满足显式用户意图与 approval。
+
+**设计决策**：`AuthorizationService` 统一用 `buildActionPreview()` 生成审批预览，附加 target、frame、ref、origin、pageOrigin 和 crossOrigin。cross-origin iframe mutation 即使目标文本已在用户任务中显式出现，也会进入 approval；若没有显式意图则先 fail closed 为 `USER_INTENT_MISMATCH`。隐藏内部 `bh_iframe_click/type` 继续不进入公开工具集，直调时只创建审批请求，不执行 content RPC。
+
+**偏差说明**：计划里的 `tests/e2e/specs/extension/iframe-action-policy.spec.ts` 当前不存在；本轮使用现有 `page-observation.spec.ts` 覆盖 iframe 读取、普通 iframe click、高风险内部 iframe tool 审批边界。
+
+**验证结果**：TDD RED 覆盖 approval preview 缺少 frame/ref/origin、cross-origin 显式意图仍直跑、hidden iframe tool preview 贫瘠；GREEN 后 `npx vitest run tests/node/runtime/run/security/advanced-action-policy.test.ts tests/node/runtime/run/security/authorization-service.test.ts tests/node/runtime/run/tools/tool-execution-service.test.ts tests/node/tools/action/action-tools.test.ts tests/dom/page/messaging/content-rpc-handler.test.ts --reporter=dot` 通过：5 files / 60 tests；`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm run build && npx playwright test tests/e2e/specs/extension/page-observation.spec.ts` 通过。
+
+### v1.5 Task 6.3 File/Download/Doc/PDF 边界 - 2026-06-03
+
+**目标**：补齐下载元数据脱敏、PDF/doc page range / scanned / unavailable / truncation metadata，以及复杂 PDF 支持边界说明。
+
+**设计决策**：`DownloadManager` 对下载 URL path 和 basename 也走模型上下文脱敏，避免 email、provider key 或下载 token 出现在 tool data/context。`DocumentManager` 保持内置 PDF 文本扫描器，不引入新 parser 依赖；当选中页面内容流带 `/Filter` 且无可抽取文本时，返回 `unavailableReason: pdf_filter_unsupported` 和 parser limitation，明确复杂/压缩 PDF 不在当前支持范围。
+
+**偏差说明**：本轮选择显式记录复杂 PDF 限制，而不是引入完整 PDF parser 依赖；后者会扩大 bundle 和测试面，留待用户确认真实需求后再做。
+
+**验证结果**：TDD RED 覆盖下载 URL/path secret 泄漏和 filtered PDF 缺少 unavailable reason；GREEN 后 `npx vitest run tests/node/background/download-manager.test.ts tests/node/background/document-manager.test.ts tests/node/tools/file/file-tools.test.ts tests/node/tools/doc/doc-tools.test.ts --reporter=dot` 通过：4 files / 14 tests；`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm run build && npx playwright test tests/e2e/specs/extension/advanced-file-tools.spec.ts tests/e2e/specs/extension/advanced-doc-tools.spec.ts` 通过。
+
+### v1.5 Task 6.4 Clipboard/Storage approval UX - 2026-06-03
+
+**目标**：补齐剪贴板和 Web Storage 敏感动作的 approval UX，确保审批前不读写、预览不泄露原始 text/value，拒绝或 stale approval 不改变浏览器状态。
+
+**设计决策**：保留 pending action 内部原始参数用于批准后执行，但执行层 `argsPreview` 和 approval `actionPreview` 只暴露长度、area/key 与 masked preview。剪贴板读取批准后的 `ToolResult.data.sensitiveText` 仍给受控调用链使用，模型上下文和 snapshot detail 改为长度摘要与 sanitizer mask，避免 raw clipboard text 进入持久化或上下文压缩。
+
+**验证结果**：TDD RED 覆盖 clipboard read 原文进入 `context.summary`；GREEN 后 `npx vitest run tests/node/runtime/run/clipboard-approval-flow.test.ts tests/node/runtime/run/storage-approval-flow.test.ts tests/node/runtime/run/tools/tool-execution-service.test.ts tests/node/tools/clipboard/clipboard-tools.test.ts tests/node/tools/storage/storage-tools.test.ts tests/node/tools/core/tool-args-redaction.test.ts --reporter=dot` 通过：6 files / 44 tests；`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm run build && npx playwright test tests/e2e/specs/extension/advanced-clipboard-tools.spec.ts tests/e2e/specs/extension/advanced-storage-tools.spec.ts` 通过。
+
+### v1.6 Task 7.1 DomainAdapter 范围决策 - 2026-06-03
+
+**目标**：确认 v1.6 adapter 的产品边界，避免把 guidance/workflow/locator hints 误读为可直接执行动作或绕过审批的站点执行器。
+
+**设计决策**：保留 `DomainAdapter` 名称，但定义为非执行型站点增强；类型层新增 `DOMAIN_ADAPTER_RUNTIME_CONTRACT`，明确 execution model 为 `non_executing_hints`，并列出后续必须实现的 versioning、locator verification、drift detection、failure reporting 和 policy composition。UI 文案改为 workflow/locator hints，并强调全局 approval policy 仍强制执行。
+
+**验证结果**：TDD RED 覆盖缺少 adapter runtime contract 和 UI 文案夸大；GREEN 后 `npx vitest run tests/node/adapters/adapter-types.test.ts tests/node/adapters/registry.test.ts tests/node/tools/adapter/adapter-tools.test.ts tests/node/ui/components/domain-adapter-status.test.tsx tests/node/i18n/t.test.ts --reporter=dot` 通过。
+
+### v1.6 Task 7.2 Adapter version/drift metadata - 2026-06-03
+
+**目标**：补齐 adapter version、verified date、URL pattern、required signals、drift checks 和 locator failure metadata，让 adapter 失败可追踪并能明确 generic fallback。
+
+**设计决策**：`createSiteAdapter()` 统一给首批 skeleton 注入 `1.0.0`、`2026-06-03`、`https://domain/*`、`url_domain_match` 和默认 drift check；`detect()` 返回 `driftStatus: not_checked` 与 generic fallback reason，后续 fixture/page signal 测试再把 drift check 从 metadata 升级为实测 pass/fail。locator/workflow failure report 现在记录 adapter version 与 matched URL pattern。
+
+**验证结果**：TDD RED 覆盖缺少 version/drift status 和 locator failure metadata；GREEN 后 `npx vitest run tests/node/adapters/registry.test.ts tests/node/tools/adapter/adapter-tools.test.ts --reporter=verbose` 通过；`npm run typecheck`、`npm run lint -- --max-warnings=0` 通过。
+
+### v1.6 Task 7.3 per-adapter fixture tests - 2026-06-03
+
+**目标**：为 GitHub、Gmail、Notion、Linear、Jira、Stripe、Vercel、Supabase 建立 fixture 级回归，证明 adapter 检测、guidance/workflow/locator、禁用、failure fallback 和 approval invariant 都不是单一 happy path。
+
+**设计决策**：新增 8 个 `tests/fixtures/adapters/*/index.html` 和 8 个 `tests/node/adapters/*-adapter.test.ts`，共用 fixture contract helper。测试直接读取落盘 fixture，匹配 locator candidate，空候选触发 versioned failure report；禁用 adapter 时验证 runtime snapshot 和 prompt 只保留 generic fallback，不注入 workflow/guidance。`approvalRequiredResult()` 补充 `changedPage:false` 和 `requiresObserve:false`，adapter workflow preview 不会伪装成页面动作。
+
+**验证结果**：TDD RED 覆盖 fixture 缺失、snapshot 缺少 version、adapter workflow approval result 未声明页面不变更；GREEN 后 `npx vitest run tests/node/adapters/*.test.ts tests/node/tools/adapter/adapter-tools.test.ts tests/node/runtime/run/prompt-builder.test.ts tests/node/ui/components/domain-adapter-status.test.tsx --reporter=dot` 通过：13 files / 70 tests；`npm run typecheck`、`npm run lint -- --max-warnings=0` 通过。
+
+### v1.6 Task 7.4 Adapter UI failure visibility - 2026-06-03
+
+**目标**：补齐 Cockpit adapter 状态卡，让 drift fallback 和最近一次 adapter failure 对用户可见，同时保留禁用/重新启用路径。
+
+**设计决策**：runtime adapter snapshot 现在带 `driftStatus` 与 `lastFailure`；`DomainAdapterStatus` 在启用状态下展示 drift 状态、generic fallback reason、最近失败错误码和 locator/workflow id。最近失败来自 `defaultAdapterFailureReporter` 的同 adapter 最新 report，仍只作为可见诊断，不改变工具执行策略。
+
+**验证结果**：TDD RED 覆盖 UI 不显示 drift/last failure、snapshot 缺少 lastFailure；GREEN 后 `npx vitest run tests/node/adapters/*.test.ts tests/node/tools/adapter/adapter-tools.test.ts tests/node/runtime/run/prompt-builder.test.ts tests/node/ui/components/domain-adapter-status.test.tsx tests/node/i18n/t.test.ts --reporter=dot` 通过：14 files / 84 tests；`npm run typecheck`、`npm run lint -- --max-warnings=0` 通过。
+
+## 截图 debugger 权限申请 - 2026-06-04
+
+**目标**：修复截图时 "chrome.debugger permission or API is unavailable" 错误，向用户主动申请 debugger 可选权限。
+
+**设计决策**：三层防御
+1. **主防线 (sidepanel UI)**：`cockpit-app.tsx` 的 `runVisionPanelTool` 执行前，调用 `chrome.permissions.request({ permissions: ['debugger'] })` 弹窗申请。sidepanel 有用户手势，弹窗可正常展示。
+2. **次防线 (screenshot-manager)**：`captureVisible()` 和 `captureFullPage()` 在回退到 CDP 前调用 `ensureDebuggerPermission()`。background SW 可能无用户手势，但作为防御措施。
+3. **底防线 (debugger-manager)**：`attach()` 检测 API 不可用时最后一搏请求权限，try-catch 包裹静默失败。
+
+**关键决策**：
+- `chrome.permissions.request()` 需要用户手势，所以主要权限弹窗必须在 sidepanel 发起，不能依赖 background SW
+- `ensureDebuggerPermission()` 返回 `boolean` 而非抛异常：UI 层拿到 false 后显示友好 i18n 提示
+- `debugger` 在 manifest 中已是 `optional_permissions`，无需修改 manifest
+
+**修改文件**：
+- `src/ui/sidepanel/cockpit-app.tsx` — 新增 `ensureDebuggerPermission()`
+- `src/background/screenshot-manager.ts` — 新增 `captureWithDebugger()` / `ensureDebuggerPermission()`
+- `src/background/debugger/debugger-manager.ts` — 新增 `requestDebuggerPermissionIfNeeded()`
+- `src/i18n/locales/zh.ts` / `en.ts` — 新增 `vision.panel.debuggerPermissionDenied`
+
+**验证**：tsc 编译通过，1424 测试全绿。

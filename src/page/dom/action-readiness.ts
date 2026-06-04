@@ -7,6 +7,51 @@ import type { ResolvedRefElement } from '../a11y/ref-resolver';
 import { resolveRef } from '../a11y/ref-resolver';
 import type { RefMap } from '../a11y/ref-map';
 
+const HIGH_RISK_ACTION_TEXT_PATTERN = new RegExp([
+  'delete',
+  'remove',
+  'destroy',
+  'payment',
+  'pay',
+  'purchase',
+  'transfer',
+  'subscribe',
+  'send',
+  'submit',
+  'upload',
+  'clipboard',
+  'execute_js',
+  'password',
+  'token',
+  'secret',
+  'otp',
+  'api key',
+  'authorize',
+  'approve',
+  'confirm',
+  'consent',
+  'accept\\s+(terms|agreement|policy)',
+  '删除',
+  '移除',
+  '支付',
+  '付款',
+  '购买',
+  '转账',
+  '订阅',
+  '发送',
+  '提交',
+  '上传',
+  '剪贴板',
+  '密码',
+  '令牌',
+  '密钥',
+  '验证码',
+  '授权',
+  '批准',
+  '确认',
+  '同意'
+].join('|'), 'iu');
+
 export function checkActionReadiness(
   refMap: RefMap,
   intent: ActionIntent
@@ -123,9 +168,7 @@ function riskForAction(
     .filter(Boolean)
     .join(' ')
     .toLowerCase();
-  if (
-    /delete|remove|destroy|payment|pay|purchase|send|submit|upload|clipboard|execute_js|password|token|secret|otp|api key|删除|移除|支付|付款|购买|发送|提交|上传|剪贴板|密码|令牌|密钥|验证码/.test(text)
-  ) {
+  if (HIGH_RISK_ACTION_TEXT_PATTERN.test(text)) {
     return 'high';
   }
   return defaultRiskForAction(intent.kind);

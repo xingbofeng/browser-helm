@@ -74,6 +74,8 @@ export const TOOL_DESCRIPTION_KEYS: Record<ToolName, TranslationKey> = {
   [TOOL_NAMES.FLOW_SCORE]: 'tool.description.bh_flow_score',
   [TOOL_NAMES.VISION_CAPTURE_VIEWPORT]: 'tool.description.bh_vision_capture_viewport',
   [TOOL_NAMES.VISION_CAPTURE_FULL_PAGE]: 'tool.description.bh_vision_capture_full_page',
+  [TOOL_NAMES.VISION_BATCH_CAPTURE_FULL_PAGES]: 'tool.description.bh_vision_batch_capture_full_pages',
+  [TOOL_NAMES.VISION_COLLECT_IMAGES]: 'tool.description.bh_vision_collect_images',
   [TOOL_NAMES.VISION_CAPTURE_ELEMENT]: 'tool.description.bh_vision_capture_element',
   [TOOL_NAMES.VISION_DESCRIBE_VIEWPORT]: 'tool.description.bh_vision_describe_viewport',
   [TOOL_NAMES.VISION_DETECT_OVERLAY]: 'tool.description.bh_vision_detect_overlay',

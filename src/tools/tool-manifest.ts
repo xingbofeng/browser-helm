@@ -86,9 +86,11 @@ import { bhTabFocus, bhTabGetActive, bhTabList } from './tab/bh-tab-tools';
 import { bhViewportGetInfo } from './viewport/bh-viewport-get-info';
 import { bhViewportScroll } from './viewport/bh-viewport-scroll';
 import {
+  bhVisionBatchCaptureFullPages,
   bhVisionCaptureElement,
   bhVisionCaptureFullPage,
   bhVisionCaptureViewport,
+  bhVisionCollectImages,
   bhVisionDescribeViewport,
   bhVisionDetectLayoutIssues,
   bhVisionDetectOverlay
@@ -156,6 +158,6 @@ export const TOOL_MANIFEST: ToolManifestEntry[] = [
   { module: './tab/bh-tab-tools.ts', tools: [bhTabList, bhTabGetActive, bhTabFocus] },
   { module: './viewport/bh-viewport-get-info.ts', tools: [bhViewportGetInfo] },
   { module: './viewport/bh-viewport-scroll.ts', tools: [bhViewportScroll] },
-  { module: './vision/bh-vision-tools.ts', tools: [bhVisionCaptureViewport, bhVisionCaptureFullPage, bhVisionCaptureElement, bhVisionDescribeViewport, bhVisionDetectOverlay, bhVisionDetectLayoutIssues] },
+  { module: './vision/bh-vision-tools.ts', tools: [bhVisionCaptureViewport, bhVisionCaptureFullPage, bhVisionBatchCaptureFullPages, bhVisionCollectImages, bhVisionCaptureElement, bhVisionDescribeViewport, bhVisionDetectOverlay, bhVisionDetectLayoutIssues] },
   { module: './workflow/bh-flow-tools.ts', tools: [bhFlowLookup, bhFlowPreview, bhFlowRunWithApproval, bhFlowStep, bhFlowStop, bhFlowSave, bhFlowUpdate, bhFlowDelete, bhFlowScore] }
 ];

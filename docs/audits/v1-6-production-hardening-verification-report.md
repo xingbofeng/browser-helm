@@ -5,9 +5,9 @@
 
 ## 结论
 
-BrowserHelm v1.6 满足 **production release gate**。所有 P0/P1/P2 任务完成，安全关键覆盖率达标，真实模型 E2E 已运行验证。
+BrowserHelm v1.6 当前默认发布状态是 **controlled-beta / release candidate**。P0/P1/P2 hardening 项已收口，安全关键覆盖率达标，默认 `check:release` 通过；但这不等同于默认可对外宣称 production-grade。production profile 需要在发布当次重新提供 real-model E2E、real-site E2E 和 profile 环境变量证据，未提供时不得把默认 release note 写成生产级发布。
 
-## Production-Verified
+## Controlled-Beta Verified
 
 以下项目有当前自动化证据：
 
@@ -18,12 +18,13 @@ BrowserHelm v1.6 满足 **production release gate**。所有 P0/P1/P2 任务完�
 - Security coverage：security-critical file thresholds 当前通过。
 - P2 hardening：workflow structured invariants、true element screenshot crop、approval transaction/recovery boundary、release profiles 已实现并测试。
 
-## Opt-In Verified
+## Opt-In / Production Profile Evidence
 
 - `npm run test:e2e` 当前通过，real-sites / real-model 用例默认 skipped。
 - `npm run test:e2e:real:model` 已运行。首次运行：21 passed / 4 failed（30.1m）。
   - 4 个失败经逐个重跑验证：BBC News（flaky，重跑通过）、Shadow DOM（flaky，重跑通过）、Web Storage（flaky，重跑通过）、Multi-tab（maxSteps 不足，已修复并重跑通过）。
   - 全部 4 个失败根因已定位并修复/确认为 flaky。
+- production profile 不是默认 gate；发布当次必须重新跑真实模型/真实站点 opt-in E2E，并在 release note 中列出日期、命令、provider preflight 和 skipped/failed 项。
 
 ## 本轮修复 (2026-06-04)
 
@@ -46,4 +47,4 @@ BrowserHelm v1.6 满足 **production release gate**。所有 P0/P1/P2 任务完�
 - `npm run test:e2e`：60 passed / 37 skipped。
 - `npm run test:e2e:real:model`：首次 21/25，4 个失败全部修复/重跑通过。
 - `npm run check:release`：controlled-beta 通过。
-- `BROWSER_HELM_RELEASE_PROFILE=production BROWSER_HELM_REAL_MODEL_E2E_VERIFIED=1 npm run check:release`：**production 通过**。
+- `BROWSER_HELM_RELEASE_PROFILE=production BROWSER_HELM_REAL_MODEL_E2E_VERIFIED=1 npm run check:release`：production profile 可在显式真实模型证据齐备时通过；这条命令不是默认 release gate。

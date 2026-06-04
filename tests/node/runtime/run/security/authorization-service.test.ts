@@ -60,6 +60,29 @@ describe('AuthorizationService', () => {
     });
   });
 
+  it('allows user-triggered non-mutating debug tools that declare approval metadata', () => {
+    const service = new AuthorizationService(policy({
+      allow: true,
+      requiresApproval: false,
+      reason: 'allowed',
+      risk: 'medium'
+    }));
+
+    expect(service.authorize({
+      ...baseContext,
+      risk: 'medium',
+      readOnly: false,
+      requiresApproval: true,
+      changedPageExpected: false,
+      source: 'user'
+    })).toMatchObject({
+      allow: true,
+      requiresApproval: false,
+      reason: 'allowed',
+      risk: 'medium'
+    });
+  });
+
   it('allows safe read-only tools when policy allows them', () => {
     const service = new AuthorizationService(policy({
       allow: true,

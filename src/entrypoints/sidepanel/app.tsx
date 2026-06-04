@@ -14,9 +14,11 @@ export function App() {
   const runtime = useMemo<RuntimePort>(() => new ExtensionRuntimePort(), []);
   const search = readCurrentSearch();
   const initialTargetTabId = readNumberSearchParam('tabId');
+  const initialRunId = readStringSearchParam('runId');
   const targetMode = resolveTargetModeFromSearch(search);
   const [target, setTarget] = useState({
     tabId: initialTargetTabId,
+    runId: initialRunId,
     revision: 0
   });
   const [locale, setLocale] = useState<Locale>();
@@ -35,8 +37,10 @@ export function App() {
       if (!tabId) {
         return;
       }
+      const runId = readTargetTabChangedRunId(message);
       setTarget((current) => ({
         tabId,
+        runId,
         revision: current.revision + 1
       }));
     };
@@ -57,7 +61,7 @@ export function App() {
         runtime={runtime}
         targetTabId={target.tabId}
         targetRevision={target.revision}
-        initialRunId={readStringSearchParam('runId')}
+        initialRunId={target.runId}
       />
     </I18nProvider>
   );
@@ -84,6 +88,9 @@ function readStringSearchParam(name: string): string | undefined {
 
 export function resolveTargetModeFromSearch(search: string): 'active' | 'pinned' {
   const params = new URLSearchParams(search);
+  if (params.has('runId')) {
+    return 'pinned';
+  }
   if (params.get('target') === 'active') {
     return 'active';
   }
@@ -96,4 +103,11 @@ export function readTargetTabChangedTabId(message: unknown): number | undefined 
   if (msg.type !== SIDE_PANEL_MESSAGES.TARGET_TAB_CHANGED) return undefined;
   const tabId = msg.tabId;
   return typeof tabId === 'number' && Number.isFinite(tabId) ? tabId : undefined;
+}
+
+export function readTargetTabChangedRunId(message: unknown): string | undefined {
+  if (!message || typeof message !== 'object') return undefined;
+  const msg = message as Record<string, unknown>;
+  if (msg.type !== SIDE_PANEL_MESSAGES.TARGET_TAB_CHANGED) return undefined;
+  return typeof msg.runId === 'string' && msg.runId.length > 0 ? msg.runId : undefined;
 }

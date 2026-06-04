@@ -68,6 +68,45 @@ describe('submit semantic verifier', () => {
     });
   });
 
+  it('passes when submit result has structured success evidence and a post-submit observation', () => {
+    const trace: RuntimeEvent[] = [
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.FORM_SUBMIT_RESULT,
+        payload: {
+          outcome: 'unknown',
+          summary: 'Submitted',
+          data: {
+            successEvidence: [
+              {
+                kind: 'dom_state',
+                passed: true,
+                summary: 'Confirmation dialog rendered'
+              }
+            ]
+          }
+        }
+      },
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.TOOL_RESULT,
+        payload: {
+          tool: TOOL_NAMES.PAGE_OBSERVE,
+          ok: true,
+          code: 'OK',
+          summary: 'Observed neutral page',
+          data: { visibleTextSummary: 'Contact form' }
+        }
+      }
+    ];
+
+    expect(verifyTaskCompletionBeforeFinish(trace)).toMatchObject({
+      ok: true,
+      status: 'pass',
+      verifier: 'submit'
+    });
+  });
+
   it('fails when post-submit page evidence shows an error', () => {
     const trace: RuntimeEvent[] = [
       {

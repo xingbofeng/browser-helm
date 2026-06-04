@@ -23,6 +23,7 @@ describe('DomainAdapterStatus', () => {
 
     expect(html).toContain('GitHub adapter');
     expect(html).toContain('1 workflow hint');
+    expect(html).toContain('Hints only; page actions still run through generic tools.');
     expect(html).toContain('Global approval policy still enforced');
   });
 

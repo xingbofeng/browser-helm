@@ -6,6 +6,10 @@ export function sidePanelPathForTab(tabId: number): string {
   return `sidepanel.html?target=active&tabId=${tabId}`;
 }
 
+export function sidePanelPathForRun(tabId: number, runId: string): string {
+  return `${sidePanelPathForTab(tabId)}&runId=${encodeURIComponent(runId)}`;
+}
+
 export function floatingPanelPathForTab(tabId: number): string {
   return `sidepanel.html?target=active&tabId=${tabId}&surface=floating`;
 }
@@ -49,6 +53,18 @@ export async function bindSidePanelToTab(tabId: number): Promise<void> {
   });
 }
 
+export async function bindSidePanelToRun(tabId: number, runId: string): Promise<void> {
+  if (!globalThis.chrome?.sidePanel?.setOptions) {
+    return;
+  }
+
+  await chrome.sidePanel.setOptions({
+    tabId,
+    path: sidePanelPathForRun(tabId, runId),
+    enabled: true
+  });
+}
+
 export async function bindSidePanelToActiveTab(): Promise<void> {
   if (!globalThis.chrome?.tabs?.query) {
     return;
@@ -63,21 +79,24 @@ export async function bindSidePanelToActiveTab(): Promise<void> {
   }
 }
 
-export function targetTabChangedMessage(tabId: number): {
+export function targetTabChangedMessage(tabId: number, runId?: string): {
   type: string;
   tabId: number;
+  runId?: string;
 } {
   return {
     type: SIDE_PANEL_MESSAGES.TARGET_TAB_CHANGED,
-    tabId
+    tabId,
+    ...(runId ? { runId } : {})
   };
 }
 
 export function notifySidePanelsTargetTabChanged(
   ports: Iterable<chrome.runtime.Port>,
-  tabId: number
+  tabId: number,
+  runId?: string
 ): void {
-  const message = targetTabChangedMessage(tabId);
+  const message = targetTabChangedMessage(tabId, runId);
   for (const port of ports) {
     try {
       port.postMessage(message);

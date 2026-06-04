@@ -20,4 +20,8 @@ describe('package scripts', () => {
   it('includes manifest permission audit in the release check gate', () => {
     expect(packageJson.scripts?.['check:release']).toContain('npm run check:manifest-permissions');
   });
+
+  it('includes security regression suite in the release check gate', () => {
+    expect(packageJson.scripts?.['check:release']).toContain('npm run test:security');
+  });
 });
