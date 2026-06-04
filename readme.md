@@ -97,6 +97,16 @@
 
 Agent 核心循环、trace、消息和 provider 配置基于 `chrome.storage.local` 在浏览器本地运行；domain memory、workflow 和 scratchpad 使用 IndexedDB（Dexie）保存。不依赖 BrowserHelm 自有后端服务器，不需要注册 BrowserHelm 服务账号。使用云端模型时，裁剪/脱敏后的页面上下文会发送到你配置的 provider 端点。
 
+### 📦 页面捕获与导出
+
+右键选中文字或页面空白处，一键触发 AI 理解与内容导出：
+
+- **🔍 解释选中文字**：选中任意网页文本，右键「解释选中文字」，Agent 以 ask 模式分析选中内容，自动弹出侧栏流式返回中文解释。
+- **🌐 翻译选中文字**：选中文本，右键「翻译选中文字」，Agent 以 ask 模式翻译选中内容，侧栏流式返回中文译文。
+- **📸 页面长截图**：右键「截取当前页面长图」或 Agent 调用 `bh_vision_capture_full_page`，自动滚动页面触发懒加载内容，滚动拼接生成完整长图。支持 `bh_vision_batch_capture_full_pages` 批量截取当前窗口所有标签页长图，可在 Vision 面板预览并逐张下载。
+- **📝 选区转 Markdown**：选中网页文字，右键「下载选区为 Markdown」，纯自行实现的 DOM→Markdown 转换器自动将富文本转为结构化 Markdown（含标题、链接、列表、表格、代码块等），生成 `browserhelm-selection-YYYY-MM-DD.md` 文件下载。不依赖 turndown 等第三方库。
+- **🖼️ 全页图片收集**：右键「获取当前页面全部图片」或 Agent 调用 `bh_vision_collect_images`，自动滚动触发懒加载，从 `<img>`、`<picture>`、`<source>`、`background-image`、`og:image` 等来源收集图片，去重后打包为 `browserhelm-page-images.zip` 下载（含 `manifest.json` 元数据清单）。ZIP 打包为纯自行实现，无外部依赖。
+
 ---
 
 ## 🛠️ 内置工具
@@ -112,7 +122,7 @@ BrowserHelm 内置 **92 个 `bh_` 前缀工具**，覆盖页面观察、表单�
 | 📝 表单 | `bh_form_list` `bh_form_inspect` `bh_form_read_fields` `bh_form_find_missing_required` `bh_form_find_validation_errors` `bh_form_find_disabled_submit_reason` `bh_form_infer_fill_plan` `bh_form_fill_field` `bh_form_fill_many` `bh_form_verify` `bh_form_submit_with_approval` | 完整表单诊断、填写、验证、审批链路 |
 | 🖼️ iframe | `bh_iframe_read` | iframe 内容读取 |
 | 🔧 调试 | `bh_debug_collect_page_health` `bh_cdp_attach` `bh_cdp_get_network_events` `bh_cdp_get_console_events` | 页面健康诊断与 CDP deep inspect |
-| 👁️ 视觉 | `bh_vision_capture_viewport` `bh_vision_describe_viewport` `bh_vision_detect_overlay` `bh_pointer_click` | screenshot/vision 增强、DOM fallback 与坐标点击最后手段 |
+| 👁️ 视觉 | `bh_vision_capture_viewport` `bh_vision_capture_full_page` `bh_vision_batch_capture_full_pages` `bh_vision_collect_images` `bh_vision_describe_viewport` `bh_vision_detect_overlay` `bh_pointer_click` | 视口/长截图、批量截取、全页图片收集、vision 描述、叠加层检测与坐标点击最后手段 |
 | 🗂️ 高级浏览器 | `bh_tab_list` `bh_tab_get_active` `bh_tab_focus` `bh_shadow_list` `bh_shadow_query` `bh_storage_list` `bh_storage_set_with_approval` `bh_download_list` `bh_doc_read_url` | 多标签上下文、Shadow DOM、Web Storage 审批写操作、下载元数据与文档/PDF 读取 |
 | 🧩 记忆/工作流 | `bh_memory_lookup` `bh_pad_append` `bh_flow_preview` `bh_flow_run_with_approval` | 本地 domain memory、scratchpad 和 workflow replay |
 | 🧭 站点 Adapter | `bh_adapter_detect_site` `bh_adapter_list_workflows` `bh_adapter_apply_locator` `bh_adapter_report_failure` | 站点 guidance、workflow/locator hint、失败记录和通用工具 fallback |

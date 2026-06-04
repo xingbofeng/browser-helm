@@ -125,8 +125,18 @@ describe('selection context menu click handling', () => {
   });
 
   it('starts an ask run for explanation and opens the side panel for the run', async () => {
+    const calls: string[] = [];
     const startRun = vi.fn(async (_input: StartRunInput) => ({ runId: 'run_explain' }));
-    const openSidePanelForRun = vi.fn(async () => undefined);
+    const openSidePanelForTab = vi.fn(async () => {
+      calls.push('open-tab');
+    });
+    const openSidePanelForRun = vi.fn(async () => {
+      calls.push('open-run');
+    });
+    startRun.mockImplementation(async () => {
+      calls.push('start-run');
+      return { runId: 'run_explain' };
+    });
 
     await handleSelectionContextMenuClick(
       {
@@ -134,9 +144,11 @@ describe('selection context menu click handling', () => {
         selectionText: 'Shadow DOM'
       },
       { id: 42 },
-      { startRun, openSidePanelForRun }
+      { startRun, openSidePanelForTab, openSidePanelForRun }
     );
 
+    expect(calls).toEqual(['open-tab', 'start-run', 'open-run']);
+    expect(openSidePanelForTab).toHaveBeenCalledWith(42);
     expect(startRun).toHaveBeenCalledTimes(1);
     expect(startRun.mock.calls[0]?.[0].mode).toBe('ask');
     expect(startRun.mock.calls[0]?.[0].tabId).toBe(42);
@@ -146,8 +158,18 @@ describe('selection context menu click handling', () => {
   });
 
   it('starts an ask run for translation and opens the side panel for the run', async () => {
+    const calls: string[] = [];
     const startRun = vi.fn(async (_input: StartRunInput) => ({ runId: 'run_translate' }));
-    const openSidePanelForRun = vi.fn(async () => undefined);
+    const openSidePanelForTab = vi.fn(async () => {
+      calls.push('open-tab');
+    });
+    const openSidePanelForRun = vi.fn(async () => {
+      calls.push('open-run');
+    });
+    startRun.mockImplementation(async () => {
+      calls.push('start-run');
+      return { runId: 'run_translate' };
+    });
 
     await handleSelectionContextMenuClick(
       {
@@ -155,9 +177,11 @@ describe('selection context menu click handling', () => {
         selectionText: 'Accessibility tree'
       },
       { id: 7 },
-      { startRun, openSidePanelForRun }
+      { startRun, openSidePanelForTab, openSidePanelForRun }
     );
 
+    expect(calls).toEqual(['open-tab', 'start-run', 'open-run']);
+    expect(openSidePanelForTab).toHaveBeenCalledWith(7);
     expect(startRun).toHaveBeenCalledTimes(1);
     expect(startRun.mock.calls[0]?.[0].mode).toBe('ask');
     expect(startRun.mock.calls[0]?.[0].tabId).toBe(7);

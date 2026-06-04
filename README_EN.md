@@ -97,6 +97,16 @@ No built-in model service. Compatible with all OpenAI-compatible APIs including 
 
 Agent core loop, memory, trace, and settings all run locally via chrome.storage.local. Zero BrowserHelm backend dependency, no account registration needed. Page context is sent only to your chosen AI provider endpoint.
 
+### 📦 Page Capture & Export
+
+Right-click on any selected text or page area for instant AI understanding and content export:
+
+- **🔍 Explain Selection**: Select text, right-click "解释选中文字", and the Agent analyzes it in ask mode, opening the side panel to stream a Chinese explanation.
+- **🌐 Translate Selection**: Select text, right-click "翻译选中文字", and the Agent translates it in ask mode, streaming the Chinese translation in the side panel.
+- **📸 Full-Page Screenshots**: Right-click "截取当前页面长图" or call `bh_vision_capture_full_page` to auto-scroll the page, trigger lazy-loaded content, and stitch a complete full-page screenshot. `bh_vision_batch_capture_full_pages` supports batch capture across all tabs in the current window, with preview and per-image download in the Vision panel.
+- **📝 Selection to Markdown**: Select text on any page, right-click "下载选区为 Markdown", and a hand-crafted DOM→Markdown converter (no turndown or third-party libraries) turns rich text into structured Markdown with headings, links, lists, tables, and code blocks. Downloads as `browserhelm-selection-YYYY-MM-DD.md`.
+- **🖼️ Page Image Collection**: Right-click "获取当前页面全部图片" or call `bh_vision_collect_images` to auto-scroll for lazy-loaded resources and collect images from `<img>`, `<picture>`, `<source>`, `background-image`, `og:image`, and more. Deduplicated results are packaged into `browserhelm-page-images.zip` with a `manifest.json` metadata file. ZIP creation is hand-rolled with zero external dependencies.
+
 ---
 
 ## 🛠️ Built-in Tools
@@ -112,7 +122,7 @@ BrowserHelm ships with **92 `bh_`-prefixed tools** covering page observation, fo
 | 📝 Form | `bh_form_list` `bh_form_inspect` `bh_form_read_fields` `bh_form_find_missing_required` `bh_form_find_validation_errors` `bh_form_find_disabled_submit_reason` `bh_form_infer_fill_plan` `bh_form_fill_field` `bh_form_fill_many` `bh_form_verify` `bh_form_submit_with_approval` | Complete form diagnosis, fill, verify, approve pipeline |
 | 🖼️ iframe | `bh_iframe_read` | iframe content reading (mutating actions not exposed in v1.1.2) |
 | 🔧 Debug | `bh_debug_collect_page_health` `bh_cdp_attach` `bh_cdp_get_network_events` `bh_cdp_get_console_events` | Page health diagnostics and CDP deep inspect |
-| 👁️ Vision | `bh_vision_capture_viewport` `bh_vision_describe_viewport` `bh_vision_detect_overlay` `bh_pointer_click` | Screenshot/vision enhancement, DOM fallback, and last-resort coordinate click |
+| 👁️ Vision | `bh_vision_capture_viewport` `bh_vision_capture_full_page` `bh_vision_batch_capture_full_pages` `bh_vision_collect_images` `bh_vision_describe_viewport` `bh_vision_detect_overlay` `bh_pointer_click` | Viewport/full-page screenshots, batch capture, page image collection, vision description, overlay detection, and last-resort coordinate click |
 | 🗂️ Advanced browser | `bh_tab_list` `bh_tab_get_active` `bh_tab_focus` `bh_shadow_list` `bh_shadow_query` `bh_storage_list` `bh_storage_set_with_approval` `bh_download_list` `bh_doc_read_url` | Multi-tab context, Shadow DOM, approval-gated Web Storage mutation, download metadata, and document/PDF reading |
 | 🧩 Memory/Workflow | `bh_memory_lookup` `bh_pad_append` `bh_flow_preview` `bh_flow_run_with_approval` | Local domain memory, scratchpad, and workflow replay |
 | 🧭 Site Adapter | `bh_adapter_detect_site` `bh_adapter_list_workflows` `bh_adapter_apply_locator` `bh_adapter_report_failure` | Site guidance, workflow/locator hints, failure reports, and generic tool fallback |

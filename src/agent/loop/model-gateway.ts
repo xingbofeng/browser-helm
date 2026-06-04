@@ -70,17 +70,44 @@ export class ModelGateway {
 
     if (streamingEnabled && streamComplete) {
       let charCount = 0;
+      let reasoningCharCount = 0;
+      let previewText = '';
+      let reasoningPreview = '';
       try {
         const output = await withModelDecisionTimeout(
           streamComplete(common, {
             onDelta: (delta) => {
-              charCount += typeof delta === 'string' ? delta.length : 0;
+              if (typeof delta !== 'string' || delta.length === 0) {
+                return;
+              }
+              charCount += delta.length;
+              previewText = redactModelOutputText(`${previewText}${delta}`);
               this.deps.appendTrace(ctx.record, {
                 runId: ctx.runId,
                 type: TRACE_EVENT_NAMES.MODEL_STREAM_DELTA,
                 payload: {
                   stepIndex: ctx.stepIndex,
-                  charCount
+                  charCount,
+                  previewText
+                }
+              });
+              this.deps.updateStreaming(ctx.runId, ctx.record);
+            },
+            onReasoningDelta: (delta) => {
+              if (typeof delta !== 'string' || delta.length === 0) {
+                return;
+              }
+              reasoningCharCount += delta.length;
+              reasoningPreview = redactModelOutputText(`${reasoningPreview}${delta}`);
+              this.deps.appendTrace(ctx.record, {
+                runId: ctx.runId,
+                type: TRACE_EVENT_NAMES.MODEL_STREAM_DELTA,
+                payload: {
+                  stepIndex: ctx.stepIndex,
+                  charCount,
+                  reasoningCharCount,
+                  ...(previewText ? { previewText } : {}),
+                  reasoningPreview
                 }
               });
               this.deps.updateStreaming(ctx.runId, ctx.record);
@@ -98,6 +125,8 @@ export class ModelGateway {
             stepIndex: ctx.stepIndex,
             model: ctx.settings.model,
             charCount,
+            ...(previewText ? { previewText } : {}),
+            ...(reasoningPreview ? { reasoningPreview } : {}),
             finalPreview: redactModelOutputText(output.text)
           }
         });

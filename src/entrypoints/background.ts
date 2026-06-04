@@ -46,6 +46,7 @@ export default defineBackground(() => {
         void handleSelectionContextMenuClick(info, tab, {
           startRun: (input) => runManager.startRun(input),
           executeTool: (input) => runManager.executeTool(input),
+          openSidePanelForTab,
           openSidePanelForRun
         });
       }
@@ -223,6 +224,10 @@ export default defineBackground(() => {
     await bindSidePanelToRun(tabId, runId);
     notifySidePanelsTargetTabChanged(sidePanelPorts, tabId, runId);
     await chrome.sidePanel.open({ tabId });
+  }
+
+  async function openSidePanelForTab(tabId: number): Promise<void> {
+    await openNativeSidePanel(tabId);
   }
 
   async function readActiveTabId(): Promise<number | undefined> {

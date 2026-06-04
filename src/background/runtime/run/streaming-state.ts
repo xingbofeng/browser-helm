@@ -51,6 +51,10 @@ export function streamingStateFromTrace(trace: RuntimeEvent[]): StreamingState {
   const fallbackFinishedPayload = payloadRecord(fallbackFinished?.payload);
   const finalText = stringPayload(finishedPayload.finalPreview) ??
     stringPayload(fallbackFinishedPayload.finalPreview);
+  const previewText = stringPayload(lastDeltaPayload.previewText) ??
+    stringPayload(finishedPayload.previewText);
+  const reasoningText = stringPayload(lastDeltaPayload.reasoningPreview) ??
+    stringPayload(finishedPayload.reasoningPreview);
   const fallbackReason = stringPayload(fallbackPayload.reason) ?? payloadSummary(failed?.payload);
   const cancelledAfterStart = isEventAfter(cancelled, streamStarted);
   return {
@@ -61,6 +65,8 @@ export function streamingStateFromTrace(trace: RuntimeEvent[]): StreamingState {
     ...(provider ? { provider } : {}),
     ...(model ? { model } : {}),
     ...(failed || fallbackStarted ? { fallbackReason } : {}),
+    ...(previewText ? { previewText } : {}),
+    ...(reasoningText ? { reasoningText } : {}),
     ...(finalText ? { finalText } : {}),
     ...(usagePayload.inputTokensEstimate !== undefined &&
       usagePayload.outputTokensEstimate !== undefined &&

@@ -438,3 +438,18 @@
 - `src/i18n/locales/zh.ts` / `en.ts` — 新增 `vision.panel.debuggerPermissionDenied`
 
 **验证**：tsc 编译通过，1424 测试全绿。
+## 2026-06-04 主文件第九次瘦身归档：Task 8.1-8.3
+
+从 `implementation-notes.md` 移入 Task 8.1 RunManager 服务拆分、Task 8.2 AgentLoop pipeline 拆分、Task 8.3 PromptBuilder responsibility 拆分三条明细。主文件继续保留当前右键菜单、流式 UI、E2E hardening 和最近问题修复记录。
+
+### Task 8.1 RunManager 服务拆分 - 2026-06-03
+
+目标是在不改变 RuntimePort 外部行为的前提下，把 provider、domain policy、memory/workflow snapshot enrichment 和 tool execution composition 从 `RunManager` 拆到聚焦服务。新增 `ProviderService`、`DomainPolicyService`、`MemoryWorkflowService` 和 `ToolExecutionFacade`，`RunManager` 继续保留 run 生命周期编排与订阅通知；服务通过依赖注入接收 repo/client factory，避免测试触达真实 provider 或外部网络。验证：TDD RED/GREEN，相关 runtime services/run-manager 测试、typecheck、lint 通过。
+
+### Task 8.2 AgentLoop pipeline 拆分 - 2026-06-03
+
+目标是在保留 provider streaming、repair、工具执行和 finish verification 行为的前提下，把 `AgentLoop` 中的模型请求、上下文构建、决策校验、finish 评估和 task state 同步拆成聚焦模块。新增 `ModelGateway`、`ContextAssembler`、`DecisionPipeline`、`TerminationEvaluator` 和 `TaskStateReducer`；`AgentLoop` 保留 run turn 编排、trace 写入、repair loop 和 snapshot 状态转换。验证：相关 agent loop、runtime、prompt-builder 组合测试、typecheck、lint 通过。
+
+### Task 8.3 PromptBuilder responsibility 拆分 - 2026-06-03
+
+目标是在保持 prompt 行为稳定的前提下，把 stable system policy、dynamic context、budget compaction 和 tool manifest serialization 从 `PromptBuilder` 中拆成可测试模块。新增 `SystemPolicyBuilder`、`DynamicContextBuilder`、`ContextCompactor` 和 `ToolManifestPromptSerializer`；tool manifest prompt 明确使用 `toolManifestHash()`，并保留紧凑 args schema 与稳定排序。验证：相关 prompt/agent loop/runtime 测试、typecheck、lint、build、diff check 和 release check 通过。

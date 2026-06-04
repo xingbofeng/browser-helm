@@ -68,6 +68,45 @@ describe('streamingStateFromTrace', () => {
     expect(state.chunkCount).toBe(2);
   });
 
+  it('keeps latest content and reasoning previews while streaming is active', () => {
+    const trace: RuntimeEvent[] = [
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.MODEL_STREAM_STARTED,
+        timestamp: 1000,
+        payload: { streamingEnabled: true }
+      },
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.MODEL_STREAM_DELTA,
+        timestamp: 1001,
+        payload: {
+          charCount: 31,
+          previewText: '{"type":"finish","message":"这段话的意思是',
+          reasoningCharCount: 8,
+          reasoningPreview: '先理解选中文字，'
+        }
+      },
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.MODEL_STREAM_DELTA,
+        timestamp: 1002,
+        payload: {
+          charCount: 40,
+          previewText: '{"type":"finish","message":"这段话的意思是渐进增强',
+          reasoningCharCount: 16,
+          reasoningPreview: '先理解选中文字，再组织中文解释。'
+        }
+      }
+    ];
+
+    const state = streamingStateFromTrace(trace);
+
+    expect(state.active).toBe(true);
+    expect(state.previewText).toBe('{"type":"finish","message":"这段话的意思是渐进增强');
+    expect(state.reasoningText).toBe('先理解选中文字，再组织中文解释。');
+  });
+
   it('returns inactive with finalText when stream finished', () => {
     const trace: RuntimeEvent[] = [
       {

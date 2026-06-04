@@ -14,6 +14,10 @@
 
 已从主文件移出“截图 debugger 权限申请”完整记录；该记录已迁入 `implementation-notes-archive.md`。主文件继续保留 2026-06-03 后高频架构、hardening、右键菜单和本轮 E2E 收口记录。
 
+## 2026-06-04 主文件第九次瘦身归档摘要
+
+已从主文件移出 2026-06-03 的 Task 8.1-8.3 明细，包括 RunManager 服务拆分、AgentLoop pipeline 拆分和 PromptBuilder responsibility 拆分；完整记录迁入 `implementation-notes-archive.md`。
+
 ## 历史条目归档索引 - 2026-06-01
 
 v1.4 Vision/Screenshot、v1.5 Advanced Browser Tools、Floating Panel 稳定性、Review P0/P1、v1.6 Domain Adapters、v1.2-v1.6 验收补齐、早期真实站点/真实模型 E2E 扩展，以及 2026-06-01/02 的 P0 执行层授权、approval coordinator、tool manifest allowlist、completion matrix 记录已迁入 `implementation-notes-archive.md`，主文件保留当前任务要点。
@@ -25,30 +29,6 @@ v1.4 Vision/Screenshot、v1.5 Advanced Browser Tools、Floating Panel 稳定性�
 ## 2026-06-04 主文件第七次瘦身归档摘要
 
 已从主文件移出 2026-06-03 的 v1.5 Task 6.2 至 v1.6 Task 7.4 明细，包括高级可变动作边界、File/Download/Doc/PDF 边界、Clipboard/Storage approval UX、DomainAdapter 范围、version/drift metadata、per-adapter fixture tests 和 adapter UI failure visibility。完整历史已迁入 `implementation-notes-archive.md`。
-
-## Task 8.1 RunManager 服务拆分 - 2026-06-03
-
-**目标**：在不改变 RuntimePort 外部行为的前提下，把 provider、domain policy、memory/workflow snapshot enrichment 和 tool execution composition 从 `RunManager` 拆到聚焦服务。
-
-**设计决策**：新增 `ProviderService`、`DomainPolicyService`、`MemoryWorkflowService` 和 `ToolExecutionFacade`，`RunManager` 继续保留 run 生命周期编排与订阅通知；服务通过依赖注入接收 repo/client factory，避免测试触达真实 provider 或外部网络。
-
-**验证结果**：TDD RED 先覆盖四个服务模块缺失；GREEN 后 `npx vitest run tests/node/runtime/runtime-services.test.ts --reporter=verbose` 通过：1 file / 4 tests；`npx vitest run tests/node/runtime/runtime-services.test.ts tests/node/runtime/run-manager.test.ts --reporter=dot` 通过：2 files / 77 tests；`npm run typecheck`、`npm run lint -- --max-warnings=0` 通过。
-
-## Task 8.2 AgentLoop pipeline 拆分 - 2026-06-03
-
-**目标**：在保留 provider streaming、repair、工具执行和 finish verification 行为的前提下，把 `AgentLoop` 中的模型请求、上下文构建、决策校验、finish 评估和 task state 同步拆成聚焦模块。
-
-**设计决策**：新增 `ModelGateway` 负责 streaming/fallback/abort，`ContextAssembler` 负责每轮工具选择与 prompt messages，`DecisionPipeline` 负责 parse/normalize/validate，`TerminationEvaluator` 负责 success criteria 与 completion verifier，`TaskStateReducer` 负责模型和工具结果对 taskState 的更新。`AgentLoop` 保留 run turn 编排、trace 写入、repair loop 和 snapshot 状态转换。
-
-**验证结果**：逐模块 TDD RED 确认缺失后 GREEN；`npx vitest run tests/node/agent/loop/*.test.ts tests/node/runtime/run-manager.test.ts tests/node/runtime/run/decision-validator.test.ts tests/node/runtime/run/prompt-builder.test.ts --reporter=dot` 通过：8 files / 111 tests；`npm run typecheck`、`npm run lint -- --max-warnings=0` 通过。
-
-## Task 8.3 PromptBuilder responsibility 拆分 - 2026-06-03
-
-**目标**：在保持 prompt 行为稳定的前提下，把 stable system policy、dynamic context、budget compaction 和 tool manifest serialization 从 `PromptBuilder` 中拆成可测试模块。
-
-**设计决策**：新增 `SystemPolicyBuilder`、`DynamicContextBuilder`、`ContextCompactor` 和 `ToolManifestPromptSerializer`；tool manifest prompt 明确使用 `toolManifestHash()`，并保留紧凑 args schema 与稳定排序。`PromptBuilder` 继续作为组装入口，避免调用方同时理解多个 prompt 子模块。
-
-**验证结果**：逐模块 TDD RED 覆盖 stable prefix byte-stable、explicit manifest hash/compact args schema、dynamic suffix compaction；GREEN 后 `npx vitest run tests/node/agent/loop/*.test.ts tests/node/agent/prompts/safety-policy-prompt.test.ts tests/node/runtime/run/prompt-builder.test.ts tests/node/runtime/run-manager.test.ts --reporter=dot` 通过：11 files / 94 tests；`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm run build`、`git diff --check && npm run check:release` 通过。
 
 ## Task 9.1 Security regression suite - 2026-06-03
 
@@ -308,3 +288,13 @@ v1.4 Vision/Screenshot、v1.5 Advanced Browser Tools、Floating Panel 稳定性�
 **偏差说明**：本轮没有引入新的截图节流队列；先以 quota fallback 保证连续 viewport/full-page/describe 调用可用。
 
 **验证结果**：`npx vitest run tests/node/background/screenshot-manager.test.ts tests/node/tools/vision/vision-tools.test.ts --reporter=verbose` 通过；`BROWSER_HELM_E2E_REQUIRED_PERMISSIONS=1 npx playwright test tests/e2e/specs/extension/vision-screenshot.spec.ts` 通过；最终全量 gate 在提交前重跑。
+
+## 右键解释翻译侧栏与流式可见性修复 - 2026-06-04
+
+**目标**：修复右键解释/翻译未自动弹出右侧栏，以及 DeepSeek reasoning/content 流式输出在 UI 中只显示“正在思考”的问题。
+
+**设计决策**：context menu 文本动作先在用户手势内打开当前 tab 的 side panel，再启动 ask run 并绑定 runId。`ModelGateway` 接入 content delta 和 reasoning delta preview；`StreamingState` 暴露 `previewText`/`reasoningText`；UI 只从流式 `finish.message` 片段提取可见回答，继续隐藏 raw 协议 JSON。
+
+**偏差说明**：本轮先修复 UI 可见流式进度和右键侧栏打开时序，未做真实 Chrome 原生 side panel 手工验收。
+
+**验证结果**：TDD RED/GREEN 覆盖侧栏打开顺序、DeepSeek reasoning delta、streaming preview state 和 UI 可见预览；相关 5 files / 134 tests、`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm run build`、`git diff --check` 通过。

@@ -6,6 +6,63 @@ import type { RuntimeEvent } from '../../../../src/runtime/runtime-messages';
 import { TRACE_EVENT_NAMES } from '../../../../src/shared/constants/event-names';
 
 describe('ModelGateway', () => {
+  it('records reasoning deltas so DeepSeek-style streams show visible progress', async () => {
+    const trace: RuntimeEvent[] = [];
+    const record: RunRecord = {
+      task: '解释选中文字',
+      mode: 'ask',
+      trace
+    };
+    const updateStreaming = vi.fn();
+    const gateway = new ModelGateway({
+      appendTrace: (target, event) => {
+        target.trace.push(event);
+      },
+      updateStreaming
+    });
+    const client: ModelClient = {
+      complete: vi.fn(),
+      async streamComplete(_input, callbacks) {
+        callbacks?.onReasoningDelta?.('先理解选中文字，');
+        callbacks?.onReasoningDelta?.('再组织中文解释。');
+        callbacks?.onDelta?.('{"type":"finish","message":"这段话的意思是');
+        return { text: '{"type":"finish","message":"这段话的意思是浏览器能力增强。"}' };
+      }
+    };
+
+    await gateway.requestDecision({
+      client,
+      settings: {
+        baseUrl: 'https://api.example.com/v1',
+        model: 'deepseek-v4-pro',
+        streamingEnabled: true
+      },
+      runId: 'run_1',
+      record,
+      stepIndex: 0,
+      messages: []
+    });
+
+    const deltaPayloads = trace
+      .filter((event) => event.type === TRACE_EVENT_NAMES.MODEL_STREAM_DELTA)
+      .map((event) => event.payload as Record<string, unknown>);
+    expect(deltaPayloads).toEqual([
+      expect.objectContaining({
+        reasoningCharCount: 8,
+        reasoningPreview: '先理解选中文字，'
+      }),
+      expect.objectContaining({
+        reasoningCharCount: 16,
+        reasoningPreview: '先理解选中文字，再组织中文解释。'
+      }),
+      expect.objectContaining({
+        charCount: 35,
+        previewText: '{"type":"finish","message":"这段话的意思是'
+      })
+    ]);
+    expect(updateStreaming).toHaveBeenCalledTimes(4);
+  });
+
   it('falls back to complete when streaming fails and redacts the failure reason', async () => {
     const trace: RuntimeEvent[] = [];
     const record: RunRecord = {

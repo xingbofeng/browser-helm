@@ -49,6 +49,8 @@ export const streamingStateSchema = z.object({
   chunkCount: z.number().int().nonnegative().default(0),
   fallbackUsed: z.boolean().default(false),
   fallbackReason: safeTextSchema.min(1).optional(),
+  previewText: safeTextSchema.optional(),
+  reasoningText: safeTextSchema.optional(),
   finalText: safeTextSchema.optional(),
   usage: z.object({
     inputTokensEstimate: z.number().int().nonnegative(),

@@ -787,6 +787,50 @@ describe('QA 卡片 / 页面观察卡组件', () => {
     unmount();
   });
 
+  it('从流式 finish.message 片段中显示可见回答预览，不暴露协议 JSON', () => {
+    const snapshot: RunSnapshot = {
+      ...mkObsSnapshot(),
+      status: 'thinking',
+      messages: [{
+        id: 'test-run:task',
+        role: 'user',
+        kind: 'task',
+        status: 'complete',
+        content: '解释选中文字',
+        createdAt: 1,
+        updatedAt: 1
+      }],
+      streaming: {
+        enabled: true,
+        active: true,
+        chunkCount: 1,
+        fallbackUsed: false,
+        previewText: '{"type":"finish","message":"这段话的意思是浏览器能力',
+        reasoningText: '先理解选中文字，再组织中文解释。'
+      },
+      trace: [
+        { runId: 'test-run', type: 'model_stream_started', timestamp: Date.now(), payload: {} },
+        {
+          runId: 'test-run',
+          type: 'model_stream_delta',
+          timestamp: Date.now(),
+          payload: {
+            previewText: '{"type":"finish","message":"这段话的意思是浏览器能力',
+            reasoningPreview: '先理解选中文字，再组织中文解释。'
+          }
+        }
+      ]
+    } as unknown as RunSnapshot;
+    const { container, unmount } = render(snapshot);
+
+    expect(container.textContent).toContain('这段话的意思是浏览器能力');
+    expect(container.textContent).toContain('Reasoning');
+    expect(container.textContent).toContain('先理解选中文字，再组织中文解释。');
+    expect(container.textContent).not.toContain('"type"');
+    expect(container.textContent).not.toContain('finish');
+    unmount();
+  });
+
   it('表单填写计划失败时不暴露内部工具参数错误', () => {
     const snapshot: RunSnapshot = {
       ...mkObsSnapshot(),

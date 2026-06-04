@@ -58,6 +58,7 @@ type SelectionContextDeps = {
     tool: ToolName;
     result: unknown;
   }) => Promise<void>) | undefined;
+  openSidePanelForTab?: ((tabId: number) => Promise<void>) | undefined;
   openSidePanelForRun: (tabId: number, runId: string) => Promise<void>;
 };
 
@@ -212,6 +213,7 @@ export async function handleSelectionContextMenuClick(
   if (!task) {
     return;
   }
+  await deps.openSidePanelForTab?.(tabId);
   const started = await deps.startRun({
     task,
     mode: 'ask',

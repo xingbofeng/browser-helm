@@ -130,6 +130,7 @@ export function withDerivedPageSummary(
       });
     }
   }
+  appendStreamingProviderPreview(nextMessages, snapshot, t);
   appendFinalProviderText(nextMessages, snapshot, t);
   appendDebugReportMessages(nextMessages, snapshot, t);
   return nextMessages;
@@ -228,6 +229,98 @@ function appendFinalProviderText(
     messages[providerMessageIndex] = completedProviderMessage;
   } else {
     messages.push(completedProviderMessage);
+  }
+}
+
+function appendStreamingProviderPreview(
+  messages: AgentMessage[],
+  snapshot: RunSnapshot,
+  t: TFunction
+): void {
+  const streaming = snapshot.streaming;
+  if (!streaming?.active) {
+    return;
+  }
+  const visibleText = visibleStreamingFinishMessage(streaming.previewText);
+  const reasoningText = streaming.reasoningText?.trim();
+  if (!visibleText && !reasoningText) {
+    return;
+  }
+  const providerMessageId = `${snapshot.runId}:provider-response`;
+  const providerMessageIndex = messages.findIndex((message) => message.id === providerMessageId);
+  const providerMessage = providerMessageIndex >= 0 ? messages[providerMessageIndex] : undefined;
+  const now = Date.now();
+  const streamingMessage: AgentMessage = {
+    id: providerMessageId,
+    role: 'agent',
+    kind: 'agent_status',
+    status: 'streaming',
+    title: providerMessage?.title ?? t('messageList.browserHelm'),
+    content: visibleText || t('messageList.waitingOutput'),
+    ...(reasoningText ? { reasoning: reasoningText } : {}),
+    createdAt: providerMessage?.createdAt ?? streaming.startedAt ?? now,
+    updatedAt: now
+  };
+  if (providerMessageIndex >= 0) {
+    messages[providerMessageIndex] = streamingMessage;
+  } else {
+    messages.push(streamingMessage);
+  }
+}
+
+function visibleStreamingFinishMessage(previewText: string | undefined): string | undefined {
+  const text = previewText?.trim();
+  if (!text || !/"type"\s*:\s*"finish"/u.test(text)) {
+    return undefined;
+  }
+  const messageStart = /"message"\s*:\s*"/u.exec(text);
+  if (!messageStart) {
+    return undefined;
+  }
+  const startIndex = messageStart.index + messageStart[0].length;
+  const rawFragment = text.slice(startIndex);
+  const decoded = decodeJsonStringFragment(rawFragment);
+  return decoded.trim() || undefined;
+}
+
+function decodeJsonStringFragment(value: string): string {
+  let result = '';
+  let escaping = false;
+  for (const char of value) {
+    if (escaping) {
+      result += decodeJsonEscape(char);
+      escaping = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaping = true;
+      continue;
+    }
+    if (char === '"') {
+      break;
+    }
+    result += char;
+  }
+  return result;
+}
+
+function decodeJsonEscape(char: string): string {
+  switch (char) {
+    case '"':
+    case '\\':
+    case '/':
+      return char;
+    case 'n':
+      return '\n';
+    case 'r':
+      return '\r';
+    case 't':
+      return '\t';
+    case 'b':
+    case 'f':
+      return '';
+    default:
+      return char;
   }
 }
 
