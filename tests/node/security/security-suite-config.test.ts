@@ -11,6 +11,7 @@ const packageJson = JSON.parse(
 const requiredSecurityRegressionFiles = [
   'tests/node/runtime/run/security/prompt-injection-mutation.test.ts',
   'tests/node/runtime/run/tools/tool-runtime-policy.test.ts',
+  'tests/node/runtime/run/tools/tool-execution-service.test.ts',
   'tests/dom/page/messaging/content-rpc-handler.test.ts',
   'tests/node/runtime/run/approval/approval-coordinator.test.ts',
   'tests/node/runtime/run/security/authorization-service.test.ts',

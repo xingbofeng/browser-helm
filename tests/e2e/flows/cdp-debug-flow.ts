@@ -16,6 +16,7 @@ export class CdpDebugFlow {
     await fixture.goto('console-network-errors.html');
     const tabId = await this.flowContext.shell().activeTabId();
     const sidePanel = this.flowContext.sidePanel();
+    await sidePanel.open(tabId);
     const snapshot = await sidePanel.runOnTab({
       tabId,
       task: 'CDP attach failure regression',
@@ -23,15 +24,33 @@ export class CdpDebugFlow {
       runKind: 'observe_only'
     });
 
-    const result = await executeToolResult(sidePanel.executeTool({
-      runId: snapshot.runId,
-      tool: TOOL_NAMES.CDP_ATTACH,
-      args: { tabId: 999_999_999 }
-    }));
+    const result = await this.approveCdpAttach(sidePanel, snapshot.runId, { tabId: 999_999_999 });
 
     expect(result.ok).toBe(false);
     expect(result.summary).toContain('Debugger attach failed');
     expect(JSON.stringify(result.data)).toMatch(/reason|state/u);
+  }
+
+  private async approveCdpAttach(
+    sidePanel: ReturnType<E2EFlowContext['sidePanel']>,
+    runId: string,
+    args: Record<string, unknown>
+  ): Promise<RuntimeToolExecutionResult> {
+    const request = await executeToolResult(sidePanel.executeTool({
+      runId,
+      tool: TOOL_NAMES.CDP_ATTACH,
+      args
+    }));
+    expect(request.ok).toBe(false);
+    expect(request.requiresApproval).toBe(true);
+    const pending = await sidePanel.snapshot(runId);
+    expect(pending.pendingApproval?.tool).toBe(TOOL_NAMES.CDP_ATTACH);
+    return executeToolResult(sidePanel.decideApproval({
+      runId,
+      requestId: requireApprovalId(pending.pendingApproval?.id),
+      decision: 'approved',
+      reason: 'e2e approve cdp attach'
+    }));
   }
 
   async expectCdpNetworkPerformanceConsoleAndUi(): Promise<void> {
@@ -39,6 +58,7 @@ export class CdpDebugFlow {
     await fixture.goto('console-network-errors.html');
     const tabId = await this.flowContext.shell().activeTabId();
     const sidePanel = this.flowContext.sidePanel();
+    await sidePanel.open(tabId);
     const snapshot = await sidePanel.runOnTab({
       tabId,
       task: 'CDP deep debug regression',
@@ -46,11 +66,7 @@ export class CdpDebugFlow {
       runKind: 'observe_only'
     });
 
-    const attach = await executeToolResult(sidePanel.executeTool({
-      runId: snapshot.runId,
-      tool: TOOL_NAMES.CDP_ATTACH,
-      args: {}
-    }));
+    const attach = await this.approveCdpAttach(sidePanel, snapshot.runId, {});
     expect(attach.ok).toBe(true);
 
     await fixture.page.evaluate(async () => {

@@ -122,6 +122,79 @@ describe('ToolExecutionService', () => {
     expect(result.code).toBe(ERROR_CODES.APPROVAL_REQUIRED);
     expect(execute).not.toHaveBeenCalled();
   });
+  it('requires approval before executing user-triggered CDP attach', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      ok: true,
+      code: ERROR_CODES.OK,
+      summary: 'debugger attached',
+      changedPage: false,
+      requiresObserve: false
+    });
+    const approvalCoordinator = {
+      createRequest: vi.fn().mockReturnValue({
+        request: {
+          id: 'cdp_attach_req_1',
+          runId: 'run_1',
+          stepId: `run_1:${TOOL_NAMES.CDP_ATTACH}`,
+          tool: TOOL_NAMES.CDP_ATTACH,
+          argsPreview: {},
+          risk: 'medium',
+          reason: 'Tool metadata requires approval before execution',
+          status: 'pending',
+          createdAt: 1
+        }
+      })
+    };
+    const d = deps({
+      getSnapshot: vi.fn().mockReturnValue({
+        runId: 'run_1',
+        mode: 'debug',
+        status: 'observed' as const,
+        capabilities: {
+          hasActiveTab: true,
+          hasDebuggerPermission: true,
+          hasClipboardPermission: true,
+          hasDownloadsPermission: true,
+          hasStorageInspection: true,
+          hostPermissions: ['http://127.0.0.1/*'],
+          shallowDebugAvailable: true,
+          cdp: 'available'
+        }
+      }),
+      getRecord: vi.fn().mockReturnValue({ task: '连接 CDP debugger', mode: 'debug' as RunMode, tabId: 42, trace: [] }),
+      approvalCoordinator,
+      createToolRouter: vi.fn().mockReturnValue({
+        execute,
+        getToolContract: vi.fn().mockReturnValue({
+          name: TOOL_NAMES.CDP_ATTACH,
+          title: 'CDP Attach',
+          risk: 'medium',
+          readOnly: false,
+          requiresApproval: true
+        })
+      })
+    });
+    const svc = new ToolExecutionService(d as unknown as ToolExecutionDeps);
+
+    const result = await svc.execute({
+      runId: 'run_1',
+      tool: TOOL_NAMES.CDP_ATTACH,
+      args: {},
+      source: 'user'
+    });
+
+    expect(result.code).toBe(ERROR_CODES.APPROVAL_REQUIRED);
+    expect(approvalCoordinator.createRequest).toHaveBeenCalledWith(expect.objectContaining({
+      tool: TOOL_NAMES.CDP_ATTACH,
+      pendingAction: {
+        runId: 'run_1',
+        tool: TOOL_NAMES.CDP_ATTACH,
+        args: {},
+        source: 'user'
+      }
+    }));
+    expect(execute).not.toHaveBeenCalled();
+  });
   it('requires capability-bound tools even when snapshot capabilities are missing', async () => {
     const execute = vi.fn().mockResolvedValue({
       ok: true,

@@ -1,11 +1,11 @@
 # v1.6 Production Hardening Verification Report
 
-> 日期：2026-06-04
+> 日期：2026-06-05
 > 范围：v1.6 hardening 任务实现、验证记录与 release gate 证据
 
 ## 结论
 
-BrowserHelm v1.6 当前默认发布状态是 **controlled-beta / release candidate**。本轮审核指出的 CDP attach approval 断链已修复，安全关键覆盖率和 release hygiene 继续作为默认 gate；但这不等同于默认可对外宣称 production-grade。production profile 需要在发布当次重新提供 real-model E2E、real-site E2E 和 profile 环境变量证据，未提供时不得把默认 release note 写成生产级发布。
+BrowserHelm v1.6 当前默认发布状态是 **controlled-beta / release candidate**。本轮审核指出的 CDP attach approval 断链与后续 user-source non-mutating metadata approval bypass 已修复，安全关键覆盖率和 release hygiene 继续作为默认 gate；但这不等同于默认可对外宣称 production-grade。production profile 需要在发布当次重新提供 real-model E2E、real-site E2E 和 profile 环境变量证据，未提供时不得把默认 release note 写成生产级发布。
 
 ## Controlled-Beta Verified
 
@@ -37,18 +37,21 @@ BrowserHelm v1.6 当前默认发布状态是 **controlled-beta / release candida
 | 新增测试 | `form-fill-augmenter.test.ts` | 8 个单元测试覆盖 stale ref 各种场景 |
 | CDP attach approval flow | `cdp-attach-approval-flow.test.ts` | approve 执行 pending attach，deny/stale/revoked capability 均 fail closed |
 | Approval behavior release gate | `tool-manifest.test.ts`, `release-hygiene-approval-behavior.test.ts` | 所有 approval-gated 工具必须声明 record-only / execute-pending / custom-flow 语义 |
+| Approval invariant runtime gate | `authorization-service.test.ts`, `tool-execution-service.test.ts` | `requiresApproval` 不再因 `source=user` 且非页面变更而绕过；CDP attach public/user path 只创建 pending approval，不执行 attach |
 | CDP session lifecycle | `debugger-manager.test.ts`, `run-lifecycle-service.test.ts` | tab close、TTL、run cancel/finish cleanup hook 收口 debugger session |
 | Verifier hardening | `click-effect-verifier.test.ts`, `task-verifier.test.ts` | Click 增加 URL/state evidence；Submit 拒绝 negated success false positive |
 
 ## Current Gate Evidence
 
+- `npx vitest run tests/node/runtime/run/security/authorization-service.test.ts tests/node/runtime/run/tools/tool-execution-service.test.ts tests/node/runtime/run/cdp-attach-approval-flow.test.ts tests/node/security/security-suite-config.test.ts tests/node/scripts/release-hygiene-approval-behavior.test.ts --reporter=dot`：5 files / 49 tests 通过。
 - `npm run typecheck`：通过。
 - `npm run lint -- --max-warnings=0`：通过。
-- `npm test -- --reporter=dot --silent`：227 files / 1424 passed / 1 skipped。
-- `npm run test:security`：node security 87 tests + extension security E2E 2 passed。
-- `npm run test:coverage -- --reporter=dot --silent`：statements 87.72%、branches 77.55%、functions 94.34%、lines 88.52%。
+- 2026-06-04 保留证据：`npm test -- --reporter=dot --silent`：227 files / 1424 passed / 1 skipped。
 - `npm run build`：通过。
-- `npm run test:e2e`：60 passed / 37 skipped。
-- `npm run test:e2e:real:model`：首次 21/25，4 个失败全部修复/重跑通过。
+- `npm run test:security`：node security 13 files / 124 tests + extension security E2E 2 passed。
+- `BROWSER_HELM_E2E_REQUIRED_PERMISSIONS=1 npx playwright test tests/e2e/specs/extension/cdp-debug.spec.ts`：4 passed。
+- 2026-06-04 保留证据：`npm run test:coverage -- --reporter=dot --silent`：statements 87.72%、branches 77.55%、functions 94.34%、lines 88.52%。
+- 2026-06-04 保留证据：`npm run test:e2e`：60 passed / 37 skipped。
+- 2026-06-04 保留证据：`npm run test:e2e:real:model`：首次 21/25，4 个失败全部修复/重跑通过。
 - `npm run check:release`：controlled-beta 通过。
 - `BROWSER_HELM_RELEASE_PROFILE=production BROWSER_HELM_REAL_MODEL_E2E_VERIFIED=1 npm run check:release`：production profile 可在显式真实模型证据齐备时通过；这条命令不是默认 release gate。

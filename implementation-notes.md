@@ -119,68 +119,9 @@ v1.4 Vision/Screenshot、v1.5 Advanced Browser Tools、Floating Panel 稳定性�
 - [ ] 原生 side panel 中截图预览右下角下载按钮位置是否符合预期？
 - [ ] 是否需要给下载文件名增加时间戳或页面域名？
 
-## v1.6 hardening 审计补齐 - 2026-06-04
+## 2026-06-05 主文件第十三次瘦身归档摘要
 
-**目标**：把最新审计中的 P1/P2 问题转成可验证任务，收口到 controlled beta / release candidate 可放行状态，而不是宣称默认 production-grade。
-
-**设计决策**：
-- PermissionBroker 统一 `chrome.permissions.contains()` 与可选权限请求，capability-bound tool 执行前刷新 snapshot，避免权限被撤销后仍用旧状态。
-- `provider_context` 独立于本地 `observe` 做 domain consent gate；未获授权时 prompt 不携带 observation、structuredPageData、page read、recent actions 或 last tool result。
-- CDP attach 转为高风险审批动作；Action readiness 扩大确认/授权/发布/连接/订阅等高风险文本；Verifier 优先读取结构化 evidence，再回退到旧启发式文本判断。
-- Domain Adapter 明确为 non-executing hints；release 报告默认状态改为 controlled-beta / RC，production profile 只作为显式真实模型/真实站点证据齐备时的 opt-in gate。
-
-**验证结果**：已按 TDD 对 PermissionBroker、provider context gate、action risk、runtime policy 抽象清理、Click/Submit verifier、release/安全文档和 Domain Adapter UI 补 RED/GREEN；相关组合测试 `17 files / 167 tests` 通过。全量 typecheck/lint/test/build/e2e/release gate 仍需在提交前重跑。
-
-**待确认**：
-- [ ] production 公开发布前是否彻底禁用 local API key persistence，或改为更强二次确认。
-
-## 选中文字右键一键解释/翻译 - 2026-06-04
-
-**目标**：在网页选中文字后，通过浏览器右键菜单一键启动 BrowserHelm 解释或翻译任务。
-
-**设计决策**：新增 background 侧 `selection-context-menu` helper，注册两个 `selection` context menu：解释和翻译。点击菜单后将选中文本转换为中文 ask 任务，复用同一个 `RunManager.startRun()` 和 Cockpit side panel 订阅路径；`side-panel-target` 支持带 `runId` 的 path/message，保证 side panel 已打开时也能切到新 run。
-
-**偏差说明**：本轮没有新增独立翻译 UI，也没有从 content script 直接调用 provider；选中文本作为用户显式输入进入现有 provider/domain consent/脱敏边界。真实 Chrome 扩展右键菜单未做手工验收。
-
-**验证结果**：TDD RED 确认 `selection-context-menu` 模块缺失；GREEN 后 `npx vitest run tests/node/background/selection-context-menu.test.ts tests/node/runtime/side-panel-target.test.ts tests/node/entrypoints/sidepanel-app.test.ts --reporter=dot` 通过：3 files / 38 tests；`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm run build`、`npx vitest run tests/node/config/manifest-contract.test.ts --reporter=dot` 通过。
-
-## Vision 右键菜单入口 - 2026-06-04
-
-**目标**：把截取当前视口、截取当前页面长图、获取当前页面全部图片加入 BrowserHelm 右键菜单。
-
-**设计决策**：`selection-context-menu` 改为统一注册 `BrowserHelm` 父菜单，解释/翻译作为 selection-only 子项，三项 Vision 子项在 page/selection/link/image context 可用。Vision 点击创建 `debug` + `observe_only` run 后执行现有 Vision tool，再打开 side panel 到该 run；不新增截图 pipeline。
-
-**偏差说明**：未做真实 Chrome 右键菜单手工验收；长图和图片懒加载副作用沿用现有 Vision tool 行为。
-
-**验证结果**：TDD RED 覆盖分组菜单缺失和 Vision click 未执行 tool；GREEN 后 `npx vitest run tests/node/background/selection-context-menu.test.ts tests/node/runtime/side-panel-target.test.ts tests/node/entrypoints/sidepanel-app.test.ts --reporter=dot` 通过：3 files / 41 tests；`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm run build`、`npx vitest run tests/node/config/manifest-contract.test.ts tests/node/tools/vision/vision-tools.test.ts --reporter=dot`、`git diff --check` 通过。
-
-## Selection context actions - 2026-06-04
-
-**目标**：新增选中文字后的右键菜单快捷入口，一键生成中文解释或翻译任务并在当前 tab 上启动 `ask` run。
-
-**设计决策**：将 Chrome `contextMenus` 注册、选中文本任务构造和点击处理集中在 background helper；background 复用同一个 `RunManager` 与 side panel 绑定路径，打开面板时携带 `runId`，已打开面板也通过 target message 切到对应 run。
-
-**偏差说明**：该入口只读，不执行页面工具或绕过 provider/domain consent；选中文本作为用户显式输入进入普通 ask 任务。
-
-**验证结果**：TDD RED 由 selection context menu 测试和 manifest contract 暴露；GREEN 后 `npx vitest run tests/node/config/manifest-contract.test.ts tests/node/background/selection-context-menu.test.ts tests/node/runtime/side-panel-target.test.ts --reporter=verbose` 通过（3 files / 51 tests）。`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm run build` 已重跑通过，最终全量 gate 仍在提交前继续跑。
-
-## 右键直接下载 Markdown/图片/ZIP - 2026-06-04
-
-**目标**：网页选中区域后，通过右键菜单直接生成并下载 `.md` 文件；截图/长图右键项直接下载图片；获取页面全部图片右键项直接下载 ZIP；所有 BrowserHelm 右键项应平铺而不是放在二级菜单。
-
-**设计决策**：选区 DOM 读取放在 content script，background 只注册 context menu 并把点击转发到发生右键的 frame。Markdown 序列化从真实 `Selection` clone DOM Range，保留 heading/list/link/image/table/blockquote/code 结构；下载用 Blob URL/data URL + `<a download>` 自动触发，不新增 `downloads` 或 clipboard 权限。Vision 右键先执行现有 safe tool，再把 screenshot data URL 或 imageCollection 发送回 content script 下载；长图/图片采集右键使用 `scope: active_tab`，与“当前页面”文案一致。
-
-**偏差说明**：第一版实现了预览后下载；根据用户反馈改为右键后自动下载，并删除预览弹层路径。右键下载不打开 side panel；Vision 仍创建内部 observe-only run 用于执行既有 tool，但结果直接下载。全量 E2E 受当前工作树既有 CDP/Cockpit/Vision/Adapter 失败影响未通过，本功能相关的 DOM、background 菜单、manifest、typecheck/lint/build 已验证。
-
-**权衡分析**：
-- 方案一：右键后直接下载。优点是最快，符合用户最新反馈；缺点是下载前无法编辑 Markdown。
-- 方案二：右键后页面内预览再下载。优点是可确认、可编辑；缺点是多一个确认动作，和最新反馈不一致。
-- 选择方案一，因为用户明确要求“右键点的应该弄完之后自动触发下载”。
-
-**验证结果**：TDD RED/GREEN 覆盖 Markdown 保留链接和结构、空选区、直接下载链路、右键菜单 frame 转发、stale menu id、所有 BrowserHelm 菜单平铺、Vision screenshot 图片下载、批量长图图片下载、图片清单 ZIP 下载和 content script ZIP 生成；`npx vitest run tests/node/background/selection-context-menu.test.ts tests/node/background/selection-context-download.test.ts tests/node/background/selection-markdown-menu.test.ts tests/dom/page/selection/context-menu-downloads.test.ts tests/dom/page/selection/selection-markdown.test.ts tests/dom/page/selection/selection-markdown-download.test.ts tests/dom/page/selection/selection-markdown-controller.test.ts tests/node/config/wxt-config.test.ts tests/node/config/manifest-contract.test.ts --reporter=dot` 通过；`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm run build` 通过。`npm run test:e2e` 结果为 45 passed / 16 failed / 37 skipped，失败集中在既有 CDP、Cockpit、streaming、vision 和 adapter 场景。
-
-**待确认**：
-- [ ] Chrome 是否仍会因为浏览器自身规则把多个同扩展菜单自动折叠；代码层已不再创建父菜单或 `parentId`。
+已从主文件移出 2026-06-04 的 v1.6 hardening 审计补齐和早期右键菜单阶段记录，包括选中文字解释/翻译、Vision 右键菜单、Selection context actions、右键直接下载 Markdown/图片/ZIP；完整记录迁入 `implementation-notes-archive.md`。主文件继续保留右键/E2E 最近收口、设置页快捷键和当前审批 invariant 修复记录。
 
 ## E2E hardening 回归收口 - 2026-06-04
 
@@ -291,3 +232,22 @@ v1.4 Vision/Screenshot、v1.5 Advanced Browser Tools、Floating Panel 稳定性�
 **设计决策**：快捷键走 Manifest `commands`，但 Chrome 最多允许扩展预设 4 个 `suggested_key`，因此只为 side panel、Markdown、解释、翻译提供默认键位；截图类命令继续注册但不预设键位，设置页显示“未绑定”并引导到 `chrome://extensions/shortcuts` 手动设置。命令处理复用 `selection-context-menu` 既有右键动作，解释/翻译通过 content script 只读读取当前选区文本。
 
 **验证结果**：TDD RED/GREEN 覆盖 Chrome 4 个 suggested_key 上限、manifest commands、快捷键命令分发、设置页三 tab 和快捷键 CSS；目标 Vitest、`npm run typecheck`、`npm run lint -- --max-warnings=0`、`git diff --check`、`npm run build`、`npm test -- --reporter=dot`（1524 passed / 1 skipped）通过。`cockpit-ui.spec.ts` E2E 因设置页默认 tab 迁移先暴露 POM 失败，修复后单独运行 11 passed。
+
+## CDP attach approval invariant 修复 - 2026-06-05
+
+**目标**：修复审核确认属实的 P0：`requiresApproval` 不得因为 `source=user` 且工具不改变页面 DOM 而绕过 BrowserHelm approval，尤其是 `bh_cdp_attach`。
+
+**设计决策**：
+- 删除 `AuthorizationService` 中 user-triggered non-mutating metadata approval 豁免；`requiresApproval` 现在只允许通过自管 approval flow (`bypassPolicyApproval`) 或批准恢复 (`approvalResume`) 跳过 metadata gate。
+- 新增执行层回归测试，覆盖 public/user-source CDP attach 只创建 pending approval、不执行 router/attach。
+- 将 `tool-execution-service.test.ts` 加入 `npm run test:security` 和 security suite 自检，避免 release hygiene 只验证声明、不验证执行层行为。
+- `debugger` 继续保持 required permission，因为 Chrome 不支持 optional debugger；`downloads` 继续保持 required，用于右键长图/图片 ZIP 大 payload background download fallback，权限风险由文档、manifest check、approval/runtime gate 约束。
+
+**偏差说明**：record-only file/download 工具保留自管安全外壳语义；它们执行的是返回 limitation/approval preview 的外壳，不读取本地文件或执行上传，不改成 CDP 的 execute-pending 流。
+
+**权衡分析**：
+- 方案一：保留 user-source non-mutating 泛化豁免。优点是手动 debug 工具少一次 approval；缺点是破坏 `requiresApproval` invariant，CDP attach 可被绕过。
+- 方案二：删除泛化豁免，仅允许显式 approval resume / self-owned approval flow。优点是语义清晰并 fail closed；缺点是某些声明 approval 的用户触发工具需要走完整 approval。
+- 选择方案二，因为 metadata `requiresApproval` 必须代表执行前阻断。
+
+**验证结果**：TDD RED 先确认 2 个回归测试失败；GREEN 后目标 Vitest 5 files / 49 tests 通过；`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm run build`、`npm run test:security`（13 files / 124 tests + extension security E2E 2 passed）、`BROWSER_HELM_E2E_REQUIRED_PERMISSIONS=1 npx playwright test tests/e2e/specs/extension/cdp-debug.spec.ts`（4 passed）、`npm run check:release` 通过。

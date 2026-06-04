@@ -68,8 +68,7 @@ export class AuthorizationService {
     if (
       context.requiresApproval &&
       context.bypassPolicyApproval !== true &&
-      context.approvalResume !== true &&
-      !isUserTriggeredNonMutatingExecution(context)
+      context.approvalResume !== true
     ) {
       return {
         allow: false,
@@ -107,10 +106,6 @@ export class AuthorizationService {
       risk: context.risk
     };
   }
-}
-
-function isUserTriggeredNonMutatingExecution(context: ToolAuthorizationContext): boolean {
-  return context.source === 'user' && context.changedPageExpected !== true;
 }
 
 export function buildActionPreview(context: Pick<

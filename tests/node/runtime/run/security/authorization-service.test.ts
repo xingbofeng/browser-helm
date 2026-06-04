@@ -60,7 +60,7 @@ describe('AuthorizationService', () => {
     });
   });
 
-  it('allows user-triggered non-mutating debug tools that declare approval metadata', () => {
+  it('requires approval for user-triggered non-mutating tools that declare approval metadata', () => {
     const service = new AuthorizationService(policy({
       allow: true,
       requiresApproval: false,
@@ -70,15 +70,17 @@ describe('AuthorizationService', () => {
 
     expect(service.authorize({
       ...baseContext,
+      tool: 'bh_cdp_attach',
+      title: 'CDP Attach',
       risk: 'medium',
       readOnly: false,
       requiresApproval: true,
       changedPageExpected: false,
       source: 'user'
     })).toMatchObject({
-      allow: true,
-      requiresApproval: false,
-      reason: 'allowed',
+      allow: false,
+      requiresApproval: true,
+      reason: 'Tool metadata requires approval before execution',
       risk: 'medium'
     });
   });
