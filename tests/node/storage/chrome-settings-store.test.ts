@@ -53,26 +53,8 @@ describe('ChromeSettingsStore provider secrets', () => {
     });
   });
 
-  it('downgrades local provider API key persistence to session by default', async () => {
+  it('persists provider API keys locally when local persistence is explicitly requested', async () => {
     const store = new ChromeSettingsStore();
-
-    await store.setProviderSettings({
-      baseUrl: 'https://api.example.com/v1',
-      model: 'demo-model',
-      apiKey: 'sk-local-secret',
-      apiKeyPersistence: 'local'
-    });
-
-    expect(JSON.stringify(localData)).not.toContain('sk-local-secret');
-    expect(JSON.stringify(sessionData)).toContain('sk-local-secret');
-    await expect(store.getProviderSettings()).resolves.toMatchObject({
-      apiKey: 'sk-local-secret',
-      apiKeyPersistence: 'session'
-    });
-  });
-
-  it('persists provider API keys locally only when storage policy explicitly allows it', async () => {
-    const store = new ChromeSettingsStore({ allowLocalApiKeyPersistence: true });
 
     await store.setProviderSettings({
       baseUrl: 'https://api.example.com/v1',

@@ -46,7 +46,8 @@ export class ExecutePendingActionApprovalFlow implements ToolApprovalFlow {
     }
     return await this.deps.executeTool({
       ...pendingAction,
-      source: 'runtime'
+      source: 'runtime',
+      approvalResume: true
     });
   }
   onDenied(): ToolResult {

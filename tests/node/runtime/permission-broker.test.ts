@@ -37,6 +37,47 @@ describe('ChromePermissionBroker', () => {
     expect(request).toHaveBeenCalledWith({ permissions: ['downloads'] });
   });
 
+  it('requests clipboard capability through one named broker API', async () => {
+    const request = vi.fn(async (_input: unknown) => true);
+    const broker = new ChromePermissionBroker({
+      permissions: {
+        contains: vi.fn(async () => false),
+        getAll: vi.fn(async () => ({ origins: [] })),
+        request
+      }
+    });
+
+    await expect(broker.requestCapability('clipboard')).resolves.toEqual({
+      capability: 'clipboard',
+      granted: true,
+      permissions: ['clipboardRead', 'clipboardWrite'],
+      origins: []
+    });
+    expect(request).toHaveBeenCalledWith({
+      permissions: ['clipboardRead', 'clipboardWrite']
+    });
+  });
+
+  it('does not request debugger as an optional capability', async () => {
+    const request = vi.fn(async (_input: unknown) => true);
+    const broker = new ChromePermissionBroker({
+      permissions: {
+        contains: vi.fn(async () => false),
+        getAll: vi.fn(async () => ({ origins: [] })),
+        request
+      }
+    });
+
+    await expect(broker.requestCapability('debugger')).resolves.toEqual({
+      capability: 'debugger',
+      granted: false,
+      permissions: ['debugger'],
+      origins: [],
+      reason: 'debugger is a required Chrome permission and cannot be requested optionally'
+    });
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it('re-reads permission state on every call so revoked permissions are reflected', async () => {
     const broker = new ChromePermissionBroker({
       permissions: {

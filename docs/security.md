@@ -6,7 +6,7 @@ BrowserHelm runs in your browser as a Chrome extension. No BrowserHelm-owned bac
 
 **What stays local:**
 - Settings and non-secret provider configuration → `chrome.storage.local`.
-- Provider API keys → session storage by default; local persistence is only used when a trusted storage policy explicitly enables it.
+- Provider API keys → `chrome.storage.session` by default; `chrome.storage.local` only when the user explicitly chooses trusted local storage.
 - Run traces, agent messages, task state → `chrome.storage.local`.
 - DOM observation data → processed in-browser; only trimmed summaries sent to provider.
 
@@ -22,7 +22,7 @@ BrowserHelm runs in your browser as a Chrome extension. No BrowserHelm-owned bac
 
 API keys are session-only by default. BrowserHelm stores the key in `chrome.storage.session` and keeps only non-secret provider settings such as Base URL, model, and persistence mode in `chrome.storage.local`.
 
-Trusted local persistence can be enabled by explicit storage policy opt-in. When enabled, the API key is stored in `chrome.storage.local` (unencrypted on disk), so the UI labels it as trusted local storage rather than the default path.
+Trusted local persistence can be enabled by explicit user opt-in. When enabled, the API key is stored in `chrome.storage.local` (unencrypted on disk), so the UI labels it as trusted local storage rather than the default path.
 
 API keys are:
 - Never written to trace/model context.
@@ -86,12 +86,12 @@ Screenshot data handling:
 | `sidePanel` | Open BrowserHelm in Chrome side panel |
 | `webNavigation` | Detect page navigations for side panel updates |
 | `contextMenus` | Add selection-only explain/translate shortcuts that start read-only Ask runs from user-selected text |
-| `debugger` | Attach to the active tab for explicit Debug/Full CDP deep inspection |
-| `downloads` | List recent download metadata for v1.5 advanced file tools; BrowserHelm redacts local paths and URL query/fragment before traces/model context |
+| `debugger` | Required by Chrome for explicit Debug/Full CDP deep inspection and Vision CDP fallback; BrowserHelm still gates CDP attach through approval, capability refresh, session TTL, tab-close cleanup, and detach |
+| `downloads` | Required in the controlled-beta build because right-click full-page screenshots and image ZIP exports may exceed content-message payloads and need background download fallback; download metadata is redacted before traces/model context |
 | `offscreen` | Host the MV3 offscreen clipboard bridge; it is created only for approved clipboard read/write operations |
 | `clipboardRead` | Read clipboard text only after explicit BrowserHelm approval; snapshot detail masks clipboard content |
 | `clipboardWrite` | Write clipboard text only after explicit BrowserHelm approval; trace stores length/preview metadata, not raw text |
-| `optional: <all_urls>` | Request page access on first use (user-granted) |
+| `optional: http/https origins` | Request page access on first use for explicit web origins (user-granted); BrowserHelm does not request `<all_urls>` as a blanket host permission |
 
 ## Web-Accessible Resources
 

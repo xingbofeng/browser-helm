@@ -16,6 +16,7 @@ import {
   floatingPanelPathForTab,
   notifySidePanelsActiveTab,
   notifySidePanelsTargetTabChanged,
+  openSidePanelForUserGesture,
   sidePanelSurfaceFromSender,
   sidePanelTargetTabIdFromUrl,
   type SidePanelSurface
@@ -227,7 +228,7 @@ export default defineBackground(() => {
   }
 
   async function openSidePanelForTab(tabId: number): Promise<void> {
-    await openNativeSidePanel(tabId);
+    await openSidePanelForUserGesture(tabId);
   }
 
   async function readActiveTabId(): Promise<number | undefined> {

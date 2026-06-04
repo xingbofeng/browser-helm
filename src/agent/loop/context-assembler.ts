@@ -50,7 +50,7 @@ export class ContextAssembler {
         ? {
             permissions: {
               allowedDomains: domainPolicy?.enabledDomains ?? [],
-              requireExplicitDomainConsent: true
+              requireExplicitDomainConsent: providerContextConsentGateEnabled()
             }
           }
         : {}),
@@ -80,7 +80,7 @@ export class ContextAssembler {
       toolsContracts,
       locale: input.record.locale ?? 'zh',
       domainPolicy,
-      requireProviderContextConsent: this.deps.getDomainPolicy !== undefined
+      requireProviderContextConsent: this.deps.getDomainPolicy !== undefined && providerContextConsentGateEnabled()
     });
     return {
       domainPolicy,
@@ -89,4 +89,8 @@ export class ContextAssembler {
       messages
     };
   }
+}
+
+export function providerContextConsentGateEnabled(): boolean {
+  return true;
 }

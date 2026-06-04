@@ -26,6 +26,7 @@ export type ToolAuthorizationContext = {
   bypassPolicyApproval?: boolean | undefined;
   changedPageExpected?: boolean | undefined;
   source?: 'agent' | 'runtime' | 'user' | undefined;
+  approvalResume?: boolean | undefined;
   userTask: string;
   pageDomain?: string | undefined;
   domainPolicy?: BrowserHelmDomainPolicy | undefined;

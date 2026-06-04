@@ -129,6 +129,7 @@ export function bhStorageSetWithApproval(): ToolSpec<z.infer<typeof storageSetAr
     resultSchema: toolResultSchema,
     readOnly: false,
     requiresApproval: true,
+    approvalBehavior: 'custom_flow',
     contextVisibility: 'summary',
     execute: (args) => Promise.resolve(storageApprovalRequired('set', args.area, args.key, args.value.length))
   };
@@ -152,6 +153,7 @@ export function bhStorageDeleteWithApproval(): ToolSpec<z.infer<typeof storageDe
     resultSchema: toolResultSchema,
     readOnly: false,
     requiresApproval: true,
+    approvalBehavior: 'custom_flow',
     contextVisibility: 'summary',
     execute: (args) => Promise.resolve(storageApprovalRequired('delete', args.area, args.key))
   };
@@ -175,6 +177,7 @@ export function bhStorageClearWithApproval(): ToolSpec<z.infer<typeof storageCle
     resultSchema: toolResultSchema,
     readOnly: false,
     requiresApproval: true,
+    approvalBehavior: 'custom_flow',
     contextVisibility: 'summary',
     execute: (args) => Promise.resolve(storageApprovalRequired('clear', args.area))
   };

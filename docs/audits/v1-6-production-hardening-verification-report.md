@@ -5,7 +5,7 @@
 
 ## 结论
 
-BrowserHelm v1.6 当前默认发布状态是 **controlled-beta / release candidate**。P0/P1/P2 hardening 项已收口，安全关键覆盖率达标，默认 `check:release` 通过；但这不等同于默认可对外宣称 production-grade。production profile 需要在发布当次重新提供 real-model E2E、real-site E2E 和 profile 环境变量证据，未提供时不得把默认 release note 写成生产级发布。
+BrowserHelm v1.6 当前默认发布状态是 **controlled-beta / release candidate**。本轮审核指出的 CDP attach approval 断链已修复，安全关键覆盖率和 release hygiene 继续作为默认 gate；但这不等同于默认可对外宣称 production-grade。production profile 需要在发布当次重新提供 real-model E2E、real-site E2E 和 profile 环境变量证据，未提供时不得把默认 release note 写成生产级发布。
 
 ## Controlled-Beta Verified
 
@@ -13,7 +13,7 @@ BrowserHelm v1.6 当前默认发布状态是 **controlled-beta / release candida
 
 - P0 semantic completion verifier：answer、form、submit、navigation、click、workflow、debug verifier 已集成到 finish evaluation。
 - Runtime capability/source trust：Chrome permission probe、capability fail-closed、public runtime source stripping、background source assignment 已覆盖。
-- Secrets/permissions/domain consent：provider key 默认 session-only，本地持久化需要 UI 显式选择并展示风险；高风险 manifest permissions 进入 optional；未知域名 provider context 需要 consent。
+- Secrets/permissions/domain consent：provider key 默认 session-only，本地持久化需要 UI 显式选择并展示风险；`debugger` 因 Chrome 约束为 required 但 CDP attach 仍走 BrowserHelm approval/session gate；`downloads` 在 controlled-beta 中为 required 以支持右键长图/图片 ZIP 的 background download fallback；未知域名 provider context 需要 consent。
 - Adapter truthfulness/drift：Domain Adapter 保持 non-executing SiteHints 语义，drift status 基于 signal 生成 `ok` / `drift_suspected` 并保留 generic fallback。
 - Security coverage：security-critical file thresholds 当前通过。
 - P2 hardening：workflow structured invariants、true element screenshot crop、approval transaction/recovery boundary、release profiles 已实现并测试。
@@ -35,6 +35,10 @@ BrowserHelm v1.6 当前默认发布状态是 **controlled-beta / release candida
 | maxSteps 提升 | `agent-loop.ts` | 从 6→8，多工具场景需要更多步骤 |
 | lint 修复 | `agent-loop.ts`, `task-verifier.test.ts`, `screenshot-manager.ts` | 不必要类型断言 + unsafe any + explicit undefined |
 | 新增测试 | `form-fill-augmenter.test.ts` | 8 个单元测试覆盖 stale ref 各种场景 |
+| CDP attach approval flow | `cdp-attach-approval-flow.test.ts` | approve 执行 pending attach，deny/stale/revoked capability 均 fail closed |
+| Approval behavior release gate | `tool-manifest.test.ts`, `release-hygiene-approval-behavior.test.ts` | 所有 approval-gated 工具必须声明 record-only / execute-pending / custom-flow 语义 |
+| CDP session lifecycle | `debugger-manager.test.ts`, `run-lifecycle-service.test.ts` | tab close、TTL、run cancel/finish cleanup hook 收口 debugger session |
+| Verifier hardening | `click-effect-verifier.test.ts`, `task-verifier.test.ts` | Click 增加 URL/state evidence；Submit 拒绝 negated success false positive |
 
 ## Current Gate Evidence
 

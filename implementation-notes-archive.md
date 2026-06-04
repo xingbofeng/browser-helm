@@ -453,3 +453,48 @@
 ### Task 8.3 PromptBuilder responsibility 拆分 - 2026-06-03
 
 目标是在保持 prompt 行为稳定的前提下，把 stable system policy、dynamic context、budget compaction 和 tool manifest serialization 从 `PromptBuilder` 中拆成可测试模块。新增 `SystemPolicyBuilder`、`DynamicContextBuilder`、`ContextCompactor` 和 `ToolManifestPromptSerializer`；tool manifest prompt 明确使用 `toolManifestHash()`，并保留紧凑 args schema 与稳定排序。验证：相关 prompt/agent loop/runtime 测试、typecheck、lint、build、diff check 和 release check 通过。
+
+## 2026-06-04 主文件第十次瘦身归档：Task 9.1-9.2
+
+从 `implementation-notes.md` 移入 Task 9.1 Security regression suite、Task 9.2 Coverage gate 渐进提升两条明细。主文件继续保留最终验证、真实模型诊断、右键菜单、流式 UI 和最近问题修复记录。
+
+### Task 9.1 Security regression suite - 2026-06-03
+
+**目标**：把分散的 P0/security 回归集中到一个可执行入口，并补齐 extension security spec 目录，避免 release 前漏跑关键安全场景。
+
+**设计决策**：新增 `tests/node/security/security-suite-config.test.ts` 作为 suite 清单守门员，要求 `npm run test:security` 覆盖 prompt injection mutation、full mode approval、form token forgery、approval race/capability unavailable、XSS markdown、page-health nonce、memory redaction、workflow precondition mismatch 和 adapter disabled prompt exclusion。新增 `tests/e2e/specs/extension/security/prompt-injection-security.spec.ts` 复用现有 flow 验证真实扩展宿主中的提示注入不触发点击、填写或提交。
+
+**验证结果**：TDD RED 先确认 `npm run test:security` 缺失，再确认脚本缺少 E2E security 入口；GREEN 后 `npm run test:security` 通过：node 11 files / 82 tests，extension security E2E 2 passed，并包含一次 `npm run build`。
+
+### Task 9.2 Coverage gate 渐进提升 - 2026-06-03
+
+**目标**：先把安全关键模块纳入文件级 coverage gate，不一次性抬高全局阈值导致虚假阻塞。
+
+**设计决策**：全局阈值维持 statements 30、branches 20、functions 25、lines 30；新增 authorization、approval coordinator、form action token handler、tool registry、workflow replay approval flow 和 shared redaction 的文件级阈值。`docs/roadmap/readme.md` 明确 release readiness 需要 `test:security` 与 `test:coverage`。
+
+**验证结果**：TDD RED 覆盖缺少文件级 thresholds；GREEN 后 `npx vitest run tests/node/config/coverage-thresholds.test.ts --reporter=verbose`、`npm run typecheck`、`npm run lint -- --max-warnings=0` 和 `npm run test:coverage -- --reporter=dot` 通过。
+
+## 2026-06-04 主文件第十一次瘦身归档：Task 9.3 与 v1.6 hardening 收口
+
+从 `implementation-notes.md` 移入 2026-06-03 的 Task 9.3 最终 release verification 和 v1.6 production hardening 收口记录。主文件继续保留真实模型诊断、右键菜单、流式 UI 和最近问题修复记录。
+
+### Task 9.3 Final v1.1-v1.6 verification - 2026-06-03
+
+**目标**：完成最终 release verification，并把 completion matrix 从 partial/missing 状态清零。
+
+**设计决策**：`docs/audits/v1-1-v1-6-completion-matrix.md` 现在将 48 个 roadmap AC 标为 done，P0 gate 保持 closed；real-sites/real-model E2E 保持 opt-in，不在未配置 `BROWSER_HELM_REAL_SITE_E2E`、`BROWSER_HELM_REAL_MODEL_E2E` 和 provider credentials 时作为默认 gate。
+
+**验证结果**：`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm test`、`npm run test:coverage -- --reporter=dot`、`npm run build`、`npm run test:e2e`、`npm run check:release` 均通过。`npm run test:e2e` 结果为 60 passed / 37 skipped；skipped 均为 real-sites/real-model opt-in 用例。
+
+### v1.6 Production hardening 收口 - 2026-06-03
+
+**目标**：按 `docs/superpowers/plans/2026-06-03-v1-6-production-hardening.md` 收口语义完成验证、运行时能力、source trust、密钥持久化、权限、domain consent、安全覆盖、adapter 真实性、截图 fallback、workflow/postcondition 和 release profile gate。
+
+**设计决策**：完成 verifier family 与 `TerminationEvaluator` 集成，finish 需要 answer/form/submit/navigation/click/workflow/debug 的语义证据；Chrome 能力来自 real probe，缺失能力 fail closed；公开 runtime 消息不再信任 caller-provided source，background/agent/approval/replay 路径显式标注 source；provider key 默认 session-only，持久化需显式 opt-in；默认 manifest 只保留基础权限，高风险能力进 optional，E2E profile 才提升 required；未知域名 provider context 需显式 consent；adapter 仅声明 non-executing hints；release check 报告 controlled-beta profile。
+
+**偏差说明**：真实模型 opt-in E2E 仍被外部 provider 阻塞，trace 显示 `model_stream_failed: Model stream request failed with status 402`，fallback 后 run 停在 `observed`，不能作为 production real-model gate 通过证据。
+
+**验证结果**：`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm test -- --reporter=dot --silent`、`npm run test:security`、`npm run test:coverage -- --reporter=dot --silent`、`npm run build`、`npm run test:e2e`、`npm run check:release` 均通过；`npm run test:e2e` 为 60 passed / 37 skipped；coverage summary 为 statements 87.7%、branches 77.61%、functions 94.47%、lines 88.54%；真实模型定向用例未通过，原因是 provider HTTP 402。
+
+**待确认**：
+- [ ] 修复 provider 402/额度后重跑 `BROWSER_HELM_REAL_MODEL_E2E=1` 的真实模型套件，作为 production release gate。

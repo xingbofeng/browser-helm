@@ -5391,7 +5391,7 @@ describe('RunManager', () => {
         expect.objectContaining({
           kind: 'error',
           title: '运行出错',
-          content: '模型配置缺少 Base URL、Model 或 API Key。请在设置中重新输入 API Key 并保存；生产构建默认只使用会话存储保存密钥。'
+          content: '模型配置缺少 Base URL、Model 或 API Key。请在设置中重新输入 API Key 并保存；如果希望扩展刷新后保留密钥，请选择受信任本地存储。'
         })
       ])
     );
@@ -5417,7 +5417,7 @@ describe('RunManager', () => {
     const snapshot = await waitForSubscribedSnapshot(manager, started.runId, (nextSnapshot) =>
       nextSnapshot.messages?.some((message) =>
         message.kind === 'error' &&
-        message.content === '模型配置缺少 Base URL、Model 或 API Key。请在设置中重新输入 API Key 并保存；生产构建默认只使用会话存储保存密钥。'
+        message.content === '模型配置缺少 Base URL、Model 或 API Key。请在设置中重新输入 API Key 并保存；如果希望扩展刷新后保留密钥，请选择受信任本地存储。'
       ) === true
     );
 
@@ -5425,7 +5425,7 @@ describe('RunManager', () => {
       expect.arrayContaining([
         expect.objectContaining({
           kind: 'error',
-          content: '模型配置缺少 Base URL、Model 或 API Key。请在设置中重新输入 API Key 并保存；生产构建默认只使用会话存储保存密钥。'
+          content: '模型配置缺少 Base URL、Model 或 API Key。请在设置中重新输入 API Key 并保存；如果希望扩展刷新后保留密钥，请选择受信任本地存储。'
         })
       ])
     );

@@ -19,6 +19,16 @@ export type PermissionRequestResult = {
   origins: string[];
 };
 
+export type BrowserHelmPermissionCapability =
+  | 'clipboard'
+  | 'debugger'
+  | 'downloads';
+
+export type CapabilityRequestResult = PermissionRequestResult & {
+  capability: BrowserHelmPermissionCapability;
+  reason?: string | undefined;
+};
+
 export class ChromePermissionBroker {
   constructor(
     private readonly chromeApi: ChromePermissionBrokerApi | undefined =
@@ -60,5 +70,23 @@ export class ChromePermissionBroker {
     } catch {
       return { granted: false, permissions, origins };
     }
+  }
+
+  async requestCapability(capability: BrowserHelmPermissionCapability): Promise<CapabilityRequestResult> {
+    if (capability === 'clipboard') {
+      return {
+        capability,
+        ...await this.requestPermissions({ permissions: ['clipboardRead', 'clipboardWrite'] })
+      };
+    }
+
+    const granted = await this.hasPermission(capability);
+    return {
+      capability,
+      granted,
+      permissions: [capability],
+      origins: [],
+      ...(granted ? {} : { reason: `${capability} is a required Chrome permission and cannot be requested optionally` })
+    };
   }
 }

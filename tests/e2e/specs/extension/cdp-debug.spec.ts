@@ -20,6 +20,15 @@ test('CDP 深度工具会采集网络、详情、性能、控制台和界面信�
   }
 });
 
+test('CDP attach 走 Agent 审批链路，批准后连接，拒绝后不连接', async () => {
+  const flow = await CdpDebugFlow.start();
+  try {
+    await flow.expectCdpAttachApprovalApproveAndDeny();
+  } finally {
+    await flow.close();
+  }
+});
+
 test('页面健康钩子默认关闭且只通过调试开关启用', async () => {
   const flow = await CdpDebugFlow.start();
   try {

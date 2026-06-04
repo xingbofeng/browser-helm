@@ -59,6 +59,15 @@ async function respondUnifiedAgentStream(
   finishMessage: string
 ): Promise<void> {
   const body = await readRequestBody(request);
+  if (body.includes('CDP approval e2e')) {
+    await writeSlowStream(response, splitIntoThreeChunks(JSON.stringify({
+      type: 'tool_call',
+      tool: 'bh_cdp_attach',
+      args: {},
+      reason: 'CDP approval e2e attach request'
+    })));
+    return;
+  }
   const hasArticleResult = requestHasArticleToolResult(body);
   const decision = hasArticleResult
     ? JSON.stringify({ type: 'finish', message: finishMessage })

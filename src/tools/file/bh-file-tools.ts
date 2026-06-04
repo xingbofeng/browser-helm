@@ -76,6 +76,7 @@ export function bhFileReadDownload(): ToolSpec<z.infer<typeof fileReadDownloadAr
     resultSchema: toolResultSchema,
     readOnly: true,
     requiresApproval: true,
+    approvalBehavior: 'record_only',
     contextVisibility: 'summary',
     execute: async (args) => {
       try {
@@ -125,6 +126,7 @@ export function bhFileUploadWithApproval(): ToolSpec<z.infer<typeof fileUploadWi
     resultSchema: toolResultSchema,
     readOnly: false,
     requiresApproval: true,
+    approvalBehavior: 'record_only',
     contextVisibility: 'summary',
     execute: (args) => {
       const fileName = args.fileName ? basename(args.fileName) : undefined;

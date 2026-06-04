@@ -47,6 +47,20 @@ export function verifyClickEffectCompletion(input: VerificationInput): TaskVerif
     if (!observation) {
       return fail('click_effect', 'unknown', 'Click has no follow-up observation.', ['post_click_observation'], [], event.payload.tool);
     }
+    const previousObservation = latestSuccessfulObservationBefore(input.trace, index);
+    const previousUrl = observationUrl(previousObservation);
+    const nextUrl = observationUrl(observation);
+    if (previousUrl && nextUrl && previousUrl !== nextUrl) {
+      return pass('click_effect', 'Follow-up observation shows URL changed after click.', [
+        { kind: 'url_change', summary: `${previousUrl} -> ${nextUrl}`, tool: TOOL_NAMES.PAGE_OBSERVE }
+      ]);
+    }
+    const stateEvidence = clickedTargetStateEvidence(observation, args);
+    if (stateEvidence) {
+      return pass('click_effect', 'Follow-up observation shows clicked target state changed.', [
+        stateEvidence
+      ]);
+    }
     const observationText = collectObservationText(input.trace, index);
     if (expectedEffectText && textIncludes(observationText, expectedEffectText)) {
       return pass('click_effect', 'Expected click effect text appeared after click.', [
@@ -63,4 +77,77 @@ export function verifyClickEffectCompletion(input: VerificationInput): TaskVerif
     );
   }
   return fail('click_effect', 'unknown', 'No click action exists.', ['click_result']);
+}
+
+function latestSuccessfulObservationBefore(trace: VerificationInput['trace'], index: number): VerificationInput['trace'][number] | undefined {
+  for (let current = index - 1; current >= 0; current -= 1) {
+    const event = trace[current];
+    if (
+      event?.type === TRACE_EVENT_NAMES.TOOL_RESULT &&
+      isRecord(event.payload) &&
+      event.payload.tool === TOOL_NAMES.PAGE_OBSERVE &&
+      event.payload.ok === true
+    ) {
+      return event;
+    }
+  }
+  return undefined;
+}
+
+function observationUrl(event: VerificationInput['trace'][number] | undefined): string | undefined {
+  if (!event || !isRecord(event.payload)) {
+    return undefined;
+  }
+  return stringField(event.payload, 'url') ??
+    (isRecord(event.payload.data) ? stringField(event.payload.data, 'url') : undefined) ??
+    (isRecord(event.payload.detail) && isRecord(event.payload.detail.data)
+      ? stringField(event.payload.detail.data, 'url')
+      : undefined);
+}
+
+function clickedTargetStateEvidence(
+  observation: VerificationInput['trace'][number],
+  args: Record<string, unknown> | undefined
+) {
+  const refId = stringField(args, 'refId');
+  if (!refId || !isRecord(observation.payload)) {
+    return undefined;
+  }
+  const target = findObservedRef(observation.payload, refId);
+  if (!target) {
+    return undefined;
+  }
+  const state = ['expanded', 'selected', 'checked', 'pressed', 'focused']
+    .find((key) => booleanField(target, key) === true);
+  return state
+    ? { kind: `target_${state}`, summary: `${refId} ${state}=true`, tool: TOOL_NAMES.PAGE_OBSERVE }
+    : undefined;
+}
+
+function findObservedRef(value: unknown, refId: string, depth = 0): Record<string, unknown> | undefined {
+  if (depth > 5) {
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findObservedRef(item, refId, depth + 1);
+      if (found) {
+        return found;
+      }
+    }
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  if (stringField(value, 'refId') === refId) {
+    return value;
+  }
+  for (const nested of Object.values(value)) {
+    const found = findObservedRef(nested, refId, depth + 1);
+    if (found) {
+      return found;
+    }
+  }
+  return undefined;
 }

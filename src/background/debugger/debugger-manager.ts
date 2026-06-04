@@ -13,6 +13,7 @@ import {
 
 const PROTOCOL_VERSION = '1.3';
 const MAX_RESPONSE_BODY_CHARS = 64_000;
+const DEFAULT_SESSION_TTL_MS = 10 * 60 * 1000;
 const SENSITIVE_RESPONSE_BODY_PATTERN = /\b(token|secret|password|api[_-]?key|apikey|authorization|bearer|cookie|set-cookie|otp|cvv)\b/iu;
 
 type CdpTarget = chrome.debugger.Debuggee;
@@ -21,7 +22,13 @@ type CdpCommandResult = Record<string, unknown>;
 export class DebuggerManager {
   private readonly sessions = new Map<number, CdpSession>();
   private readonly detachedStates = new Map<number, CdpSessionState>();
+  private readonly ttlTimers = new Map<number, ReturnType<typeof setTimeout>>();
+  private readonly sessionTtlMs: number;
   private listening = false;
+
+  constructor(options: { sessionTtlMs?: number | undefined } = {}) {
+    this.sessionTtlMs = options.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS;
+  }
 
   async attach(tabId: number, protocolVersion = PROTOCOL_VERSION, owner: CdpSessionOwner = 'browserhelm'): Promise<CdpAttachState> {
     if (!globalThis.chrome?.debugger?.attach) {
@@ -50,6 +57,7 @@ export class DebuggerManager {
       });
       this.sessions.set(tabId, session);
       this.detachedStates.delete(tabId);
+      this.scheduleSessionExpiry(tabId);
       session.enabledDomains = await this.enableCollectors(target);
       return this.attachState(session);
     } catch (error) {
@@ -267,8 +275,12 @@ export class DebuggerManager {
   }
 
   resetForTesting(): void {
+    for (const timer of this.ttlTimers.values()) {
+      clearTimeout(timer);
+    }
     this.sessions.clear();
     this.detachedStates.clear();
+    this.ttlTimers.clear();
     this.listening = false;
   }
 
@@ -334,6 +346,9 @@ export class DebuggerManager {
         this.markDetached(source.tabId, typeof reason === 'string' ? reason : 'external_detach');
       }
     });
+    chrome.tabs?.onRemoved?.addListener((tabId) => {
+      this.markDetached(tabId, 'tab_closed');
+    });
   }
 
   private handleEvent(tabId: number, method: string, params: Record<string, unknown>): void {
@@ -381,6 +396,11 @@ export class DebuggerManager {
   }
 
   private markDetached(tabId: number, reason: string): CdpSessionState | undefined {
+    const timer = this.ttlTimers.get(tabId);
+    if (timer) {
+      clearTimeout(timer);
+      this.ttlTimers.delete(tabId);
+    }
     const session = this.sessions.get(tabId);
     if (!session) {
       return this.detachedStates.get(tabId);
@@ -392,6 +412,41 @@ export class DebuggerManager {
     this.sessions.delete(tabId);
     this.detachedStates.set(tabId, state);
     return state;
+  }
+
+  private scheduleSessionExpiry(tabId: number): void {
+    const previous = this.ttlTimers.get(tabId);
+    if (previous) {
+      clearTimeout(previous);
+    }
+    const timer = setTimeout(() => {
+      void this.detachForReason(tabId, 'ttl_expired');
+    }, this.sessionTtlMs);
+    timer.unref?.();
+    this.ttlTimers.set(tabId, timer);
+  }
+
+  private async detachForReason(tabId: number, reason: string): Promise<CdpAttachState> {
+    const detach = (globalThis.chrome?.debugger as { detach?: ((target: CdpTarget) => Promise<void>) | undefined } | undefined)?.detach;
+    if (detach) {
+      try {
+        await detach({ tabId });
+      } catch {
+        // Detach is best-effort when a TTL races tab close or external detach.
+      }
+    }
+    const state = this.markDetached(tabId, reason);
+    return cdpAttachStateSchema.parse({
+      tabId,
+      attached: false,
+      protocolVersion: state?.protocolVersion ?? PROTOCOL_VERSION,
+      owner: state?.owner ?? 'browserhelm',
+      ...(state?.createdAt === undefined ? {} : { createdAt: state.createdAt }),
+      ...(state?.attachedAt === undefined ? {} : { attachedAt: state.attachedAt }),
+      ...(state?.lastEventAt === undefined ? {} : { lastEventAt: state.lastEventAt }),
+      ...(state?.enabledDomains === undefined ? {} : { enabledDomains: state.enabledDomains }),
+      detachReason: reason
+    });
   }
 }
 

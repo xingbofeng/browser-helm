@@ -113,4 +113,100 @@ describe('click effect semantic verifier', () => {
       verifier: 'click_effect'
     });
   });
+
+  it('passes when a follow-up observation shows URL changed after click', () => {
+    const trace: RuntimeEvent[] = [
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.TOOL_RESULT,
+        payload: {
+          tool: TOOL_NAMES.PAGE_OBSERVE,
+          ok: true,
+          code: 'OK',
+          summary: 'Observed home',
+          data: { url: 'https://example.com/home' }
+        }
+      },
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.TOOL_RESULT,
+        payload: {
+          tool: TOOL_NAMES.ACTION_CLICK,
+          ok: true,
+          code: 'OK',
+          summary: 'Clicked Next',
+          changedPage: true,
+          requiresObserve: true
+        }
+      },
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.TOOL_RESULT,
+        payload: {
+          tool: TOOL_NAMES.PAGE_OBSERVE,
+          ok: true,
+          code: 'OK',
+          summary: 'Observed details',
+          data: { url: 'https://example.com/details' }
+        }
+      }
+    ];
+
+    expect(verifyTaskCompletionBeforeFinish(trace)).toMatchObject({
+      ok: true,
+      status: 'pass',
+      verifier: 'click_effect'
+    });
+  });
+
+  it('passes when a follow-up observation shows clicked target state expanded', () => {
+    const trace: RuntimeEvent[] = [
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.TOOL_STARTED,
+        payload: {
+          tool: TOOL_NAMES.ACTION_CLICK,
+          args: { refId: 'ref_menu' }
+        }
+      },
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.TOOL_RESULT,
+        payload: {
+          tool: TOOL_NAMES.ACTION_CLICK,
+          ok: true,
+          code: 'OK',
+          summary: 'Clicked Menu',
+          changedPage: true,
+          requiresObserve: true
+        }
+      },
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.TOOL_RESULT,
+        payload: {
+          tool: TOOL_NAMES.PAGE_OBSERVE,
+          ok: true,
+          code: 'OK',
+          summary: 'Observed expanded menu',
+          data: {
+            refSummary: [
+              {
+                refId: 'ref_menu',
+                role: 'button',
+                name: 'Menu',
+                expanded: true
+              }
+            ]
+          }
+        }
+      }
+    ];
+
+    expect(verifyTaskCompletionBeforeFinish(trace)).toMatchObject({
+      ok: true,
+      status: 'pass',
+      verifier: 'click_effect'
+    });
+  });
 });

@@ -126,6 +126,76 @@ export class CdpDebugFlow {
     expect(detach.ok).toBe(true);
   }
 
+  async expectCdpAttachApprovalApproveAndDeny(): Promise<void> {
+    const fixture = await this.flowContext.fixturePage();
+    await fixture.goto('console-network-errors.html');
+    const tabId = await this.flowContext.shell().activeTabId();
+    const sidePanel = this.flowContext.sidePanel();
+    await sidePanel.open(tabId);
+    await sidePanel.setProviderSettings({
+      baseUrl: `${this.flowContext.origin}/v1`,
+      model: 'mock-stream',
+      apiKey: 'sk-e2e-secret'
+    });
+
+    const deniedSnapshot = await sidePanel.runOnTab({
+      tabId,
+      task: 'CDP approval e2e deny',
+      mode: 'debug'
+    });
+    expect(deniedSnapshot.status).toBe('waiting_for_approval');
+    expect(deniedSnapshot.pendingApproval?.tool).toBe(TOOL_NAMES.CDP_ATTACH);
+    const denied = await executeToolResult(sidePanel.decideApproval({
+      runId: deniedSnapshot.runId,
+      requestId: requireApprovalId(deniedSnapshot.pendingApproval?.id),
+      decision: 'denied',
+      reason: 'e2e deny cdp attach'
+    }));
+    expect(denied.ok).toBe(false);
+    const deniedAfterDecision = await sidePanel.snapshot(deniedSnapshot.runId);
+    expect(deniedAfterDecision.trace?.some((event) =>
+      event.type === 'tool_result' &&
+      readRecord(event.payload)?.tool === TOOL_NAMES.CDP_ATTACH &&
+      readRecord(event.payload)?.ok === true
+    )).toBe(false);
+
+    const approvedSnapshot = await sidePanel.runOnTab({
+      tabId,
+      task: 'CDP approval e2e approve',
+      mode: 'debug'
+    });
+    expect(approvedSnapshot.status).toBe('waiting_for_approval');
+    expect(approvedSnapshot.pendingApproval?.tool).toBe(TOOL_NAMES.CDP_ATTACH);
+    const approved = await executeToolResult(sidePanel.decideApproval({
+      runId: approvedSnapshot.runId,
+      requestId: requireApprovalId(approvedSnapshot.pendingApproval?.id),
+      decision: 'approved',
+      reason: 'e2e approve cdp attach'
+    }));
+    expect(approved.ok, JSON.stringify(approved)).toBe(true);
+    expect(readNestedBoolean(approved.data, 'state', 'attached')).toBe(true);
+    const approvedAfterDecision = await sidePanel.snapshot(approvedSnapshot.runId);
+    expect(approvedAfterDecision.trace?.some((event) =>
+      event.type === 'tool_result' &&
+      readRecord(event.payload)?.tool === TOOL_NAMES.CDP_ATTACH &&
+      readRecord(event.payload)?.ok === true
+    )).toBe(true);
+
+    const performance = await executeToolResult(sidePanel.executeTool({
+      runId: approvedSnapshot.runId,
+      tool: TOOL_NAMES.CDP_GET_PERFORMANCE_METRICS,
+      args: {}
+    }));
+    expect(performance.ok).toBe(true);
+
+    const detach = await executeToolResult(sidePanel.executeTool({
+      runId: approvedSnapshot.runId,
+      tool: TOOL_NAMES.CDP_DETACH,
+      args: {}
+    }));
+    expect(detach.ok).toBe(true);
+  }
+
   async expectPageHealthHookIsDebugOptIn(): Promise<void> {
     const fixture = await this.flowContext.fixturePage();
     await fixture.goto('console-network-errors.html');
@@ -188,6 +258,13 @@ export class CdpDebugFlow {
   }
 }
 
+function requireApprovalId(value: string | undefined): string {
+  if (!value) {
+    throw new Error('Expected a pending approval id');
+  }
+  return value;
+}
+
 async function executeToolResult(
   promise: Promise<unknown>
 ): Promise<RuntimeToolExecutionResult> {
@@ -232,6 +309,12 @@ function readNestedString(value: unknown, parentKey: string, childKey: string): 
   const parent = readRecordField(value, parentKey);
   const field = parent ? parent[childKey] : undefined;
   return typeof field === 'string' ? field : undefined;
+}
+
+function readNestedBoolean(value: unknown, parentKey: string, childKey: string): boolean | undefined {
+  const parent = readRecordField(value, parentKey);
+  const field = parent ? parent[childKey] : undefined;
+  return typeof field === 'boolean' ? field : undefined;
 }
 
 function readRecord(value: unknown): Record<string, unknown> | undefined {

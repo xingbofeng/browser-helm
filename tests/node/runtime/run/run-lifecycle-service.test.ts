@@ -177,6 +177,20 @@ describe('RunLifecycleService', () => {
     expect(d.store.setSnapshot).toHaveBeenCalled();
   });
 
+  it('runs terminal cleanup for the target tab when a run is cancelled', () => {
+    const onRunEnded = vi.fn();
+    const d = deps({ onRunEnded });
+    const svc = new RunLifecycleService(d);
+
+    svc.cancelRun('run_1');
+
+    expect(onRunEnded).toHaveBeenCalledWith({
+      runId: 'run_1',
+      tabId: 42,
+      reason: 'cancelled'
+    });
+  });
+
   it('reviseGoal updates snapshot with new goal', async () => {
     const d = deps();
     const svc = new RunLifecycleService(d);

@@ -148,6 +148,7 @@ export type PublicExecuteToolInput = z.infer<typeof executeToolInputSchema>;
 export type TrustedToolExecutionSource = 'agent' | 'runtime' | 'user';
 export type ExecuteToolInput = PublicExecuteToolInput & {
   source?: TrustedToolExecutionSource | undefined;
+  approvalResume?: boolean | undefined;
 };
 export type DecideApprovalInput = z.infer<typeof decideApprovalInputSchema>;
 export type ReviseGoalInput = z.infer<typeof reviseGoalInputSchema>;

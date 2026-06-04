@@ -522,6 +522,39 @@ describe('task verifier', () => {
     });
   });
 
+  it('does not treat negated success language as submit success evidence', () => {
+    expect(verifyTaskCompletionBeforeFinish([
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.FORM_SUBMIT_RESULT,
+        payload: {
+          outcome: 'unknown',
+          summary: 'submitted'
+        }
+      },
+      {
+        runId: 'run_1',
+        type: TRACE_EVENT_NAMES.TOOL_RESULT,
+        payload: {
+          tool: TOOL_NAMES.PAGE_OBSERVE,
+          ok: true,
+          code: 'OK',
+          summary: 'observed',
+          changedPage: false,
+          requiresObserve: false,
+          data: {
+            visibleTextSummary: 'Submission was not successful.'
+          }
+        }
+      }
+    ])).toMatchObject({
+      ok: false,
+      verifier: 'submit',
+      status: 'fail',
+      missingEvidence: ['submit_success_evidence']
+    });
+  });
+
   it('blocks finish after workflow replay without postcondition score evidence', () => {
     expect(verifyTaskCompletionBeforeFinish([
       {

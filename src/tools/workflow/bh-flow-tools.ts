@@ -96,6 +96,7 @@ export function bhFlowRunWithApproval(_rpc: ContentRpcClient): ToolSpec<z.infer<
     risk: 'high',
     readOnly: true,
     requiresApproval: true,
+    approvalBehavior: 'custom_flow',
     execute: ({ id }) => {
       const preview = defaultWorkflowRepo.preview(id);
       if (!preview) return notFound('Workflow not found');
@@ -235,6 +236,7 @@ function flowTool<TArgs>(input: {
   risk?: 'safe' | 'low' | 'medium' | 'high' | undefined;
   readOnly?: boolean | undefined;
   requiresApproval?: boolean | undefined;
+  approvalBehavior?: ToolSpec<TArgs, ToolResult>['approvalBehavior'];
   execute: (args: TArgs) => ToolResult;
 }): ToolSpec<TArgs, ToolResult> {
   return {
@@ -247,6 +249,7 @@ function flowTool<TArgs>(input: {
     resultSchema: toolResultSchema,
     readOnly: input.readOnly ?? false,
     requiresApproval: input.requiresApproval ?? false,
+    ...(input.approvalBehavior ? { approvalBehavior: input.approvalBehavior } : {}),
     contextVisibility: 'summary',
     execute: (args) => Promise.resolve(input.execute(args))
   };

@@ -83,6 +83,28 @@ describe('AuthorizationService', () => {
     });
   });
 
+  it('allows approval-resume execution for metadata approval tools after the approval flow owns the decision', () => {
+    const service = new AuthorizationService(policy({
+      allow: true,
+      requiresApproval: false,
+      reason: 'allowed',
+      risk: 'medium'
+    }));
+
+    expect(service.authorize({
+      ...baseContext,
+      risk: 'medium',
+      requiresApproval: true,
+      source: 'runtime',
+      approvalResume: true
+    })).toMatchObject({
+      allow: true,
+      requiresApproval: false,
+      reason: 'allowed',
+      risk: 'medium'
+    });
+  });
+
   it('allows safe read-only tools when policy allows them', () => {
     const service = new AuthorizationService(policy({
       allow: true,

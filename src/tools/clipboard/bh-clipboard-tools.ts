@@ -29,6 +29,7 @@ export function bhClipboardReadWithApproval(): ToolSpec<z.infer<typeof clipboard
     resultSchema: toolResultSchema,
     readOnly: true,
     requiresApproval: true,
+    approvalBehavior: 'custom_flow',
     contextVisibility: 'summary',
     execute: () => Promise.resolve(approvalRequired('read'))
   };
@@ -52,6 +53,7 @@ export function bhClipboardWriteWithApproval(): ToolSpec<z.infer<typeof clipboar
     resultSchema: toolResultSchema,
     readOnly: false,
     requiresApproval: true,
+    approvalBehavior: 'custom_flow',
     contextVisibility: 'summary',
     execute: (args) => Promise.resolve(approvalRequired('write', args.text.length))
   };

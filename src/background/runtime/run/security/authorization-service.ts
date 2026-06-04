@@ -68,6 +68,7 @@ export class AuthorizationService {
     if (
       context.requiresApproval &&
       context.bypassPolicyApproval !== true &&
+      context.approvalResume !== true &&
       !isUserTriggeredNonMutatingExecution(context)
     ) {
       return {

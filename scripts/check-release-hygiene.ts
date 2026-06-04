@@ -7,6 +7,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { execSync } from 'node:child_process';
+import { listToolSpecs } from '../src/tools';
+import { providerContextConsentGateEnabled } from '../src/agent/loop/context-assembler';
+import { validateApprovalBehaviorContracts } from './release-hygiene-approval-behavior';
+import vitestConfig from '../vitest.config';
 
 const ROOT = process.cwd();
 const COMPLETION_MATRIX_PATH = 'docs/audits/v1-1-v1-6-completion-matrix.md';
@@ -136,6 +140,14 @@ if (existsSync(outputDir)) {
 }
 
 if (!hasError) {
+  const approvalBehaviorErrors = validateApprovalBehaviorContracts(listToolSpecs({} as never));
+  for (const error of approvalBehaviorErrors) {
+    console.error(`❌ ${error}`);
+    hasError = true;
+  }
+}
+
+if (!hasError) {
   const profileErrors = validateReleaseProfile(releaseProfile);
   for (const error of profileErrors) {
     console.error(`❌ ${error}`);
@@ -171,19 +183,14 @@ function validateReleaseProfile(profile: ReleaseProfile): string[] {
     if (process.env.BROWSER_HELM_REAL_MODEL_E2E_VERIFIED !== '1') {
       errors.push('Production profile requires real-model E2E verification.');
     }
-    if (!sourceContains('src/agent/loop/context-assembler.ts', 'requireExplicitDomainConsent: true')) {
+    if (!providerContextConsentGateEnabled()) {
       errors.push('Production profile requires provider-context domain consent gate.');
     }
-    if (!sourceContains('vitest.config.ts', 'branches: 80') || !sourceContains('vitest.config.ts', 'branches: 90')) {
+    if (!hasSecurityCriticalCoverageThresholds()) {
       errors.push('Production profile requires security-critical coverage thresholds.');
     }
   }
   return errors;
-}
-
-function sourceContains(file: string, needle: string): boolean {
-  const fullPath = resolve(ROOT, file);
-  return existsSync(fullPath) && readFileSync(fullPath, 'utf8').includes(needle);
 }
 
 function isForbiddenOutputPath(file: string): boolean {
@@ -195,6 +202,25 @@ function isForbiddenOutputPath(file: string): boolean {
     basename === '.env' ||
     basename.startsWith('.env.') ||
     basename.endsWith('.jsonl');
+}
+
+function hasSecurityCriticalCoverageThresholds(): boolean {
+  const thresholds = vitestConfig.test?.coverage?.thresholds;
+  if (!thresholds || typeof thresholds !== 'object') {
+    return false;
+  }
+  return Object.values(thresholds).some((value) =>
+    isCoverageThreshold(value) && value.branches >= 90
+  ) && Object.values(thresholds).some((value) =>
+    isCoverageThreshold(value) && value.branches >= 80
+  );
+}
+
+function isCoverageThreshold(value: unknown): value is { branches: number } {
+  return typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof (value as { branches?: unknown }).branches === 'number';
 }
 
 function hasOpenP0Marker(content: string): boolean {

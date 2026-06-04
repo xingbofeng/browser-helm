@@ -56,6 +56,7 @@ export function bhFormSubmitWithApproval(
     ...toolMeta('Submit Form (Approval Required)', 'Requests user approval before submitting a form.', 'tool.title.bh_form_submit_with_approval', 'tool.description.bh_form_submit_with_approval'),
     modes: ['form'],
     risk: 'high',
+    approvalBehavior: 'custom_flow',
     argsSchema,
     resultSchema: toolResultSchema,
     execute(args, ctx) {

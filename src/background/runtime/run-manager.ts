@@ -57,6 +57,7 @@ import { DomainPolicyService } from './domain-policy-service';
 import { MemoryWorkflowService } from './memory-workflow-service';
 import { ToolExecutionFacade } from './tool-execution-facade';
 import { probeRuntimeCapabilities } from './capability-probe';
+import { defaultDebuggerManager } from '../debugger/debugger-manager';
 
 export class RunManager {
   private readonly store: RunStore;
@@ -106,7 +107,12 @@ export class RunManager {
       initialMessages,
       errorMessage,
       probeRuntimeCapabilities: deps.probeRuntimeCapabilities ?? probeRuntimeCapabilities,
-      executeTool: async (input) => await this.executeTool(input)
+      executeTool: async (input) => await this.executeTool(input),
+      onRunEnded: ({ tabId }) => {
+        if (defaultDebuggerManager.isAttached(tabId)) {
+          void defaultDebuggerManager.detach(tabId);
+        }
+      }
     });
 
     this.tools = new ToolExecutionService({

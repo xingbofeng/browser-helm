@@ -42,6 +42,7 @@ export type LifecycleDeps = {
   initialMessages: (runId: string, task: string, locale: Locale, options: { includeUserTask?: boolean; includeObserveStatus?: boolean }) => NonNullable<RunSnapshot['messages']>;
   errorMessage: (runId: string, title: string, content: string) => NonNullable<RunSnapshot['messages']>[number];
   executeTool: (input: ExecuteToolInput) => Promise<unknown>;
+  onRunEnded?: ((input: { runId: string; tabId: number; reason: 'finished' | 'cancelled' }) => void) | undefined;
   probeRuntimeCapabilities?: ((input: { tabId: number }) => Promise<RuntimeCapabilityProbeResult>) | undefined;
   settingsStore?: SettingsStore | undefined;
   createProviderModelClient?: ((settings: {
@@ -324,7 +325,8 @@ export class RunLifecycleService {
       };
       this.deps.store.setSnapshot(runId, fallback);
       if (record.runKind !== 'observe_only' && this.agentLoop) {
-        await this.agentLoop.run({ runId, record, maxSteps: 8 });
+        const finalSnapshot = await this.agentLoop.run({ runId, record, maxSteps: 8 });
+        this.cleanupTerminalRun(finalSnapshot, record);
         return;
       }
     } catch {
@@ -362,7 +364,8 @@ export class RunLifecycleService {
       this.agentLoop
     ) {
       this.deps.store.setSnapshot(runId, this.deps.withRunMessages(nextSnapshot, record));
-      await this.agentLoop.run({ runId, record, maxSteps: 8 });
+      const finalSnapshot = await this.agentLoop.run({ runId, record, maxSteps: 8 });
+      this.cleanupTerminalRun(finalSnapshot, record);
       return;
     }
     nextSnapshot = this.deps.withRunMessages(nextSnapshot, record);
@@ -393,11 +396,28 @@ export class RunLifecycleService {
       trace: record?.trace ?? current.trace
     };
     this.deps.store.setSnapshot(runId, snapshot);
+    if (record?.tabId) {
+      this.deps.onRunEnded?.({ runId, tabId: record.tabId, reason: 'cancelled' });
+    }
     return { runId, status: 'cancelled' };
   }
 
   async reviseGoal(input: ReviseGoalInput): Promise<RunSnapshot> {
     return this.goalRevision.reviseGoal(input);
+  }
+
+  private cleanupTerminalRun(
+    snapshot: RunSnapshot,
+    record: RunRecord & { tabId: number }
+  ): void {
+    if (snapshot.status !== 'finished') {
+      return;
+    }
+    this.deps.onRunEnded?.({
+      runId: snapshot.runId,
+      tabId: record.tabId,
+      reason: 'finished'
+    });
   }
 }
 

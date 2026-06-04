@@ -42,63 +42,54 @@ describe('selection context menu task builder', () => {
 
 describe('selection context menu registration', () => {
   const create = vi.fn();
-  const remove = vi.fn((_id: string, callback?: () => void) => callback?.());
+  const removeAll = vi.fn((callback?: () => void) => callback?.());
   const addListener = vi.fn();
 
   beforeEach(() => {
     create.mockClear();
-    remove.mockClear();
+    removeAll.mockClear();
     addListener.mockClear();
   });
 
-  it('registers BrowserHelm parent and child menu items with the expected contexts', () => {
+  it('clears stale extension menu items and registers flat BrowserHelm menu items', () => {
     const onClick = vi.fn();
 
     registerSelectionContextMenus({
       contextMenus: {
         create,
-        remove,
+        removeAll,
         onClicked: { addListener }
       },
       onClick
     });
 
-    expect(remove).toHaveBeenCalledWith(SELECTION_CONTEXT_MENU_IDS.root, expect.any(Function));
-    expect(remove).toHaveBeenCalledWith(SELECTION_MARKDOWN_MENU_ID, expect.any(Function));
-    expect(remove).toHaveBeenCalledWith(SELECTION_CONTEXT_MENU_IDS.explain, expect.any(Function));
-    expect(remove).toHaveBeenCalledWith(SELECTION_CONTEXT_MENU_IDS.translate, expect.any(Function));
-    expect(remove).toHaveBeenCalledWith(CAPTURE_VIEWPORT_MENU_ID, expect.any(Function));
-    expect(remove).toHaveBeenCalledWith(CAPTURE_FULL_PAGE_MENU_ID, expect.any(Function));
-    expect(remove).toHaveBeenCalledWith(COLLECT_IMAGES_MENU_ID, expect.any(Function));
-    expect(create).toHaveBeenCalledWith({
-      id: SELECTION_CONTEXT_MENU_IDS.root,
-      title: 'BrowserHelm',
-      contexts: ['page', 'selection', 'link', 'image']
-    });
+    expect(removeAll).toHaveBeenCalledTimes(1);
+    expect(create).not.toHaveBeenCalledWith(expect.objectContaining({
+      id: SELECTION_CONTEXT_MENU_IDS.root
+    }));
     expect(create).toHaveBeenCalledWith({
       id: SELECTION_MARKDOWN_MENU_ID,
       title: '下载选区为 Markdown',
-      contexts: ['selection'],
-      parentId: SELECTION_CONTEXT_MENU_IDS.root
+      contexts: ['selection']
     });
     expect(create).toHaveBeenCalledWith({
       id: SELECTION_CONTEXT_MENU_IDS.explain,
       title: '解释选中文字',
-      contexts: ['selection'],
-      parentId: SELECTION_CONTEXT_MENU_IDS.root
+      contexts: ['selection']
     });
     expect(create).toHaveBeenCalledWith({
       id: SELECTION_CONTEXT_MENU_IDS.translate,
       title: '翻译选中文字',
-      contexts: ['selection'],
-      parentId: SELECTION_CONTEXT_MENU_IDS.root
+      contexts: ['selection']
     });
     for (const id of [CAPTURE_VIEWPORT_MENU_ID, CAPTURE_FULL_PAGE_MENU_ID, COLLECT_IMAGES_MENU_ID]) {
       expect(create).toHaveBeenCalledWith(expect.objectContaining({
         id,
-        contexts: ['page', 'selection', 'link', 'image'],
-        parentId: SELECTION_CONTEXT_MENU_IDS.root
+        contexts: ['page', 'selection', 'link', 'image']
       }));
+    }
+    for (const call of create.mock.calls) {
+      expect(call[0]).not.toHaveProperty('parentId');
     }
     expect(addListener).toHaveBeenCalledWith(onClick);
   });

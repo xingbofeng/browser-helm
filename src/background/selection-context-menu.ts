@@ -31,7 +31,7 @@ type MenuContexts = NonNullable<chrome.contextMenus.CreateProperties['contexts']
 
 type ContextMenusApi = {
   create: (properties: chrome.contextMenus.CreateProperties) => void;
-    remove: (menuItemId: string, callback?: () => void) => void;
+  removeAll: (callback?: () => void) => void;
   onClicked: {
     addListener: (
       callback: (
@@ -143,22 +143,12 @@ export function registerSelectionContextMenus(input: {
   if (!contextMenus) {
     return;
   }
-  const ids = [
-    SELECTION_CONTEXT_MENU_IDS.root,
-    ...CONTEXT_MENU_DEFINITIONS.map((definition) => definition.id)
-  ];
-  removeContextMenuIds(contextMenus, ids, () => {
-    contextMenus.create({
-      id: SELECTION_CONTEXT_MENU_IDS.root,
-      title: 'BrowserHelm',
-      contexts: BROWSERHELM_MENU_CONTEXTS
-    });
+  contextMenus.removeAll(() => {
     for (const definition of CONTEXT_MENU_DEFINITIONS) {
       contextMenus.create({
         id: definition.id,
         title: definition.title,
-        contexts: definition.contexts,
-        parentId: SELECTION_CONTEXT_MENU_IDS.root
+        contexts: definition.contexts
       });
     }
   });
@@ -242,22 +232,6 @@ function actionFromMenuId(menuItemId: string | number): SelectionContextAction |
     return 'collectImages';
   }
   return undefined;
-}
-
-function removeContextMenuIds(
-  contextMenus: ContextMenusApi,
-  ids: string[],
-  done: () => void
-): void {
-  const [nextId, ...rest] = ids;
-  if (!nextId) {
-    done();
-    return;
-  }
-  contextMenus.remove(nextId, () => {
-    void globalThis.chrome?.runtime?.lastError;
-    removeContextMenuIds(contextMenus, rest, done);
-  });
 }
 
 function isVisionAction(action: SelectionContextAction): action is VisionContextAction {

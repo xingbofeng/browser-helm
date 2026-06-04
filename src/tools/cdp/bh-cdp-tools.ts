@@ -43,6 +43,7 @@ export function bhCdpAttach(_rpc: ContentRpcClient): ToolSpec<z.infer<typeof att
     risk: 'medium',
     readOnly: false,
     requiresApproval: true,
+    approvalBehavior: 'execute_pending_action',
     execute: async (args, ctx) => {
       const tabId = await resolveTabId(args.tabId, ctx);
       if (!tabId) return unavailable('No active tab is available for CDP attach');
@@ -287,6 +288,7 @@ function cdpTool<TArgs>(input: {
   risk?: 'safe' | 'low' | 'medium' | 'high' | undefined;
   readOnly: boolean;
   requiresApproval?: boolean | undefined;
+  approvalBehavior?: ToolSpec<TArgs, ToolResult>['approvalBehavior'];
   contextVisibility?: 'summary' | 'hidden' | 'full' | undefined;
   execute: (args: TArgs, ctx: ToolContext) => Promise<ToolResult>;
 }): ToolSpec<TArgs, ToolResult> {
@@ -300,6 +302,7 @@ function cdpTool<TArgs>(input: {
     resultSchema: toolResultSchema,
     readOnly: input.readOnly,
     requiresApproval: input.requiresApproval ?? false,
+    ...(input.approvalBehavior ? { approvalBehavior: input.approvalBehavior } : {}),
     contextVisibility: input.contextVisibility ?? 'summary',
     execute: input.execute
   };

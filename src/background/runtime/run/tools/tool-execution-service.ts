@@ -373,6 +373,7 @@ export class ToolExecutionService {
         : {}),
       ...(changedPageExpected ? { changedPageExpected } : {}),
       source,
+      ...(input.approvalResume === true ? { approvalResume: true } : {}),
       userTask: record.task,
       ...(snapshot.observation?.currentDomain
         ? { pageDomain: snapshot.observation.currentDomain }

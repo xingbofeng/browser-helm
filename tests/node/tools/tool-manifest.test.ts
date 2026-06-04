@@ -35,6 +35,18 @@ describe('tool manifest allowlist', () => {
     expect(specs.length).toBeGreaterThan(60);
     expect(new Set(specs.map((tool) => tool.name)).size).toBe(specs.length);
   });
+
+  it('requires explicit approval behavior for every approval-gated tool', () => {
+    const specs = listToolSpecs({} as never);
+    const approvalGatedTools = specs.filter((tool) => tool.requiresApproval ?? tool.risk === 'high');
+
+    expect(approvalGatedTools.map((tool) => tool.name).sort()).toEqual(
+      approvalGatedTools
+        .filter((tool) => tool.approvalBehavior)
+        .map((tool) => tool.name)
+        .sort()
+    );
+  });
 });
 
 function discoverToolModules(): string[] {

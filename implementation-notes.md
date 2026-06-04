@@ -18,54 +18,17 @@
 
 已从主文件移出 2026-06-03 的 Task 8.1-8.3 明细，包括 RunManager 服务拆分、AgentLoop pipeline 拆分和 PromptBuilder responsibility 拆分；完整记录迁入 `implementation-notes-archive.md`。
 
+## 2026-06-04 主文件第十次瘦身归档摘要
+
+已从主文件移出 2026-06-03 的 Task 9.1/9.2 明细，包括 security regression suite 和 coverage gate 渐进提升；完整记录迁入 `implementation-notes-archive.md`。
+
+## 2026-06-04 主文件第十一次瘦身归档摘要
+
+已从主文件移出 2026-06-03 的 Task 9.3 最终 release verification 和 v1.6 production hardening 收口完整记录；主文件继续保留真实模型诊断、右键菜单、流式 UI 和最近问题修复记录。
+
 ## 历史条目归档索引 - 2026-06-01
 
 v1.4 Vision/Screenshot、v1.5 Advanced Browser Tools、Floating Panel 稳定性、Review P0/P1、v1.6 Domain Adapters、v1.2-v1.6 验收补齐、早期真实站点/真实模型 E2E 扩展，以及 2026-06-01/02 的 P0 执行层授权、approval coordinator、tool manifest allowlist、completion matrix 记录已迁入 `implementation-notes-archive.md`，主文件保留当前任务要点。
-
-## 2026-06-04 主文件第六次瘦身归档摘要
-
-已从主文件移出 2026-06-02 的 v1.1 Task 2.1 至 v1.5 Task 6.1 明细，包括复杂表单填写、submit verification、page-health、trace replay、session recovery、CDP lifecycle/detail/UI、Vision lifecycle/grounding/panel，以及 Tab/Frame/Shadow 可靠性。完整历史仍以 `implementation-notes-archive.md` 和 git 历史为准，主文件保留 2026-06-03 后仍高频参考的 hardening 与真实模型收口记录。
-
-## 2026-06-04 主文件第七次瘦身归档摘要
-
-已从主文件移出 2026-06-03 的 v1.5 Task 6.2 至 v1.6 Task 7.4 明细，包括高级可变动作边界、File/Download/Doc/PDF 边界、Clipboard/Storage approval UX、DomainAdapter 范围、version/drift metadata、per-adapter fixture tests 和 adapter UI failure visibility。完整历史已迁入 `implementation-notes-archive.md`。
-
-## Task 9.1 Security regression suite - 2026-06-03
-
-**目标**：把分散的 P0/security 回归集中到一个可执行入口，并补齐 extension security spec 目录，避免 release 前漏跑关键安全场景。
-
-**设计决策**：新增 `tests/node/security/security-suite-config.test.ts` 作为 suite 清单守门员，要求 `npm run test:security` 覆盖 prompt injection mutation、full mode approval、form token forgery、approval race/capability unavailable、XSS markdown、page-health nonce、memory redaction、workflow precondition mismatch 和 adapter disabled prompt exclusion。新增 `tests/e2e/specs/extension/security/prompt-injection-security.spec.ts` 复用现有 flow 验证真实扩展宿主中的提示注入不触发点击、填写或提交。
-
-**验证结果**：TDD RED 先确认 `npm run test:security` 缺失，再确认脚本缺少 E2E security 入口；GREEN 后 `npm run test:security` 通过：node 11 files / 82 tests，extension security E2E 2 passed，并包含一次 `npm run build`。
-
-## Task 9.2 Coverage gate 渐进提升 - 2026-06-03
-
-**目标**：先把安全关键模块纳入文件级 coverage gate，不一次性抬高全局阈值导致虚假阻塞。
-
-**设计决策**：全局阈值维持 statements 30、branches 20、functions 25、lines 30；新增 authorization、approval coordinator、form action token handler、tool registry、workflow replay approval flow 和 shared redaction 的文件级阈值。`docs/roadmap/readme.md` 明确 release readiness 需要 `test:security` 与 `test:coverage`。
-
-**验证结果**：TDD RED 覆盖缺少文件级 thresholds；GREEN 后 `npx vitest run tests/node/config/coverage-thresholds.test.ts --reporter=verbose`、`npm run typecheck`、`npm run lint -- --max-warnings=0` 和 `npm run test:coverage -- --reporter=dot` 通过。
-
-## Task 9.3 Final v1.1-v1.6 verification - 2026-06-03
-
-**目标**：完成最终 release verification，并把 completion matrix 从 partial/missing 状态清零。
-
-**设计决策**：`docs/audits/v1-1-v1-6-completion-matrix.md` 现在将 48 个 roadmap AC 标为 done，P0 gate 保持 closed；real-sites/real-model E2E 保持 opt-in，不在未配置 `BROWSER_HELM_REAL_SITE_E2E`、`BROWSER_HELM_REAL_MODEL_E2E` 和 provider credentials 时作为默认 gate。
-
-**验证结果**：`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm test`、`npm run test:coverage -- --reporter=dot`、`npm run build`、`npm run test:e2e`、`npm run check:release` 均通过。`npm run test:e2e` 结果为 60 passed / 37 skipped；skipped 均为 real-sites/real-model opt-in 用例。
-
-## v1.6 Production hardening 收口 - 2026-06-03
-
-**目标**：按 `docs/superpowers/plans/2026-06-03-v1-6-production-hardening.md` 收口语义完成验证、运行时能力、source trust、密钥持久化、权限、domain consent、安全覆盖、adapter 真实性、截图 fallback、workflow/postcondition 和 release profile gate。
-
-**设计决策**：完成 verifier family 与 `TerminationEvaluator` 集成，finish 需要 answer/form/submit/navigation/click/workflow/debug 的语义证据；Chrome 能力来自 real probe，缺失能力 fail closed；公开 runtime 消息不再信任 caller-provided source，background/agent/approval/replay 路径显式标注 source；provider key 默认 session-only，持久化需显式 opt-in；默认 manifest 只保留基础权限，高风险能力进 optional，E2E profile 才提升 required；未知域名 provider context 需显式 consent；adapter 仅声明 non-executing hints；release check 报告 controlled-beta profile。
-
-**偏差说明**：真实模型 opt-in E2E 仍被外部 provider 阻塞，trace 显示 `model_stream_failed: Model stream request failed with status 402`，fallback 后 run 停在 `observed`，不能作为 production real-model gate 通过证据。
-
-**验证结果**：`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm test -- --reporter=dot --silent`、`npm run test:security`、`npm run test:coverage -- --reporter=dot --silent`、`npm run build`、`npm run test:e2e`、`npm run check:release` 均通过；`npm run test:e2e` 为 60 passed / 37 skipped；coverage summary 为 statements 87.7%、branches 77.61%、functions 94.47%、lines 88.54%；真实模型定向用例未通过，原因是 provider HTTP 402。
-
-**待确认**：
-- [ ] 修复 provider 402/额度后重跑 `BROWSER_HELM_REAL_MODEL_E2E=1` 的真实模型套件，作为 production release gate。
 
 ## 真实模型 provider 402 诊断可见性 - 2026-06-03
 
@@ -298,3 +261,37 @@ v1.4 Vision/Screenshot、v1.5 Advanced Browser Tools、Floating Panel 稳定性�
 **偏差说明**：本轮先修复 UI 可见流式进度和右键侧栏打开时序，未做真实 Chrome 原生 side panel 手工验收。
 
 **验证结果**：TDD RED/GREEN 覆盖侧栏打开顺序、DeepSeek reasoning delta、streaming preview state 和 UI 可见预览；相关 5 files / 134 tests、`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm run build`、`git diff --check` 通过。
+
+## 右键菜单 stale remove 噪声与 README 同步 - 2026-06-04
+
+**目标**：修复 context menu 注册时删除不存在的 `browserhelm-selection-to-markdown` 导致的 runtime.lastError 噪声，并 review README 是否与当前行为一致。
+
+**设计决策**：右键菜单注册改为 `contextMenus.removeAll()` 后创建平铺菜单项，避免父菜单级联删除子项后再逐个删除 stale id；同时去掉 `parentId`，让 Markdown、解释、翻译、截图、长图和图片 ZIP 菜单按用户预期平铺。README/README_EN 同步说明右键导出直接下载、API Key 默认 session-only、工具数量改为 90+ 并补齐视觉/Storage 工具摘要。
+
+**验证结果**：TDD RED/GREEN 覆盖 removeAll 清理和平铺菜单；`npx vitest run tests/node/background/selection-context-menu.test.ts --reporter=verbose` 通过。
+
+## 右键解释/翻译 sidebar 用户手势修复 - 2026-06-04
+
+**目标**：修复右键选择解释/翻译时 run 会启动但原生 side panel 不自动弹出的问题。
+
+**设计决策**：新增 `openSidePanelForUserGesture()`，在右键菜单用户手势链路内 fire-and-forget 绑定 side panel path，并立即调用 `chrome.sidePanel.open({ tabId })`；避免先 `await bindSidePanelToTab()` 导致 Chrome 判定用户手势丢失。
+
+**验证结果**：相关 side panel/context menu 单测通过；`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm run build` 通过。未做真实 Chrome 原生右键菜单手工验收。
+
+## API Key 本地持久化显式选择修复 - 2026-06-04
+
+**目标**：解释并修复刷新扩展后需要重新配置 API Key 的问题。
+
+**设计决策**：默认仍使用 `chrome.storage.session` 保存 API Key，避免无提示写入磁盘；当用户在模型配置中显式选择“受信任本地存储”时，`ChromeSettingsStore` 现在真正把 API Key 写入 `chrome.storage.local`，刷新扩展后可继续使用。同步更新中英文 UI 错误提示、安全文档和 README。
+
+**验证结果**：TDD RED/GREEN 覆盖显式 local persistence；相关 storage/UI/runtime 测试 3 files / 93 tests 通过。
+
+## v1.6 审核意见硬化收口 - 2026-06-04
+
+**目标**：按审核意见补齐 CDP attach 审批执行链路、approval behavior 显式契约、CDP session 生命周期、权限 UX、release hygiene 和 verifier 边界。
+
+**设计决策**：`bh_cdp_attach` 接入 `ExecutePendingActionApprovalFlow`，审批批准后以 `approvalResume` 身份恢复执行，避免二次 metadata approval；所有 approval-gated tool 显式声明 `approvalBehavior` 并进入 release hygiene gate。`debugger`/`downloads` 保持 required permission，Broker 不再尝试 optional request，而是给出可解释能力状态；CDP session 增加 TTL、tab close、run finish/cancel cleanup。release gate 改为导入式断言，verifier 补 URL/state 证据和否定成功文案。
+
+**偏差说明**：真实站点/真实模型 E2E 仍保持 opt-in，默认 gate 只证明本地扩展宿主和 mock provider 路径。
+
+**验证结果**：目标 Vitest 11 files / 81 tests 通过；`npm run typecheck`、`npm run lint -- --max-warnings=0`、`npm run build`、`npm run check:release` 通过；CDP debug E2E 4 passed；`npm run test:e2e` 62 passed / 37 skipped。

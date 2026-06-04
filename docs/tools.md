@@ -132,7 +132,7 @@ bh_cdp_get_event_listeners
 bh_cdp_capture_dom_snapshot
 ```
 
-Debug 工具分两层：`bh_cdp_*` 通过 `debugger` 权限连接当前 tab，采集 Network、Runtime、Performance 和 DOM 诊断数据；`bh_debug_collect_page_health` 是浅层 fallback，只在 Debug mode 调用时按需启用临时 `page-health-hook.js`，不能替代完整 DevTools/CDP 诊断。临时 hook 消息必须带 content bridge 生成的 session nonce；CDP 与 page-health 输出都会在进入模型上下文前做敏感 header、cookie、token、URL query/path/fragment 和明显 provider secret 脱敏。
+Debug 工具分两层：`bh_cdp_*` 通过 `debugger` 权限连接当前 tab，采集 Network、Runtime、Performance 和 DOM 诊断数据；`bh_cdp_attach` 必须先通过 BrowserHelm approval，批准后才执行 pending attach，权限被撤销、审批过期或 run 取消时都 fail closed。CDP session 带 owner/tab/protocol 审计字段，tab close、TTL 和 run 结束 cleanup 会自动 detach。`bh_debug_collect_page_health` 是浅层 fallback，只在 Debug mode 调用时按需启用临时 `page-health-hook.js`，不能替代完整 DevTools/CDP 诊断。临时 hook 消息必须带 content bridge 生成的 session nonce；CDP 与 page-health 输出都会在进入模型上下文前做敏感 header、cookie、token、URL query/path/fragment 和明显 provider secret 脱敏。
 
 ### Vision / screenshot
 

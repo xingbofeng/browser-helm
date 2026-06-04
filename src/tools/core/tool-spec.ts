@@ -22,6 +22,8 @@ export type ToolSpec<TArgs, TResult = unknown> = {
   readOnly?: boolean;
   /** Whether the tool always requires user approval before execution. Default: derived from risk. */
   requiresApproval?: boolean;
+  /** What should happen after the user approves this approval-gated tool. */
+  approvalBehavior?: 'record_only' | 'execute_pending_action' | 'custom_flow';
   /** How tool results should be presented in the model context. Default 'summary'. */
   contextVisibility?: 'summary' | 'hidden' | 'full';
 };

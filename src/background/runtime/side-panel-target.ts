@@ -65,6 +65,15 @@ export async function bindSidePanelToRun(tabId: number, runId: string): Promise<
   });
 }
 
+export async function openSidePanelForUserGesture(tabId: number): Promise<void> {
+  if (!globalThis.chrome?.sidePanel?.open) {
+    return;
+  }
+
+  void bindSidePanelToTab(tabId).catch(() => undefined);
+  await chrome.sidePanel.open({ tabId });
+}
+
 export async function bindSidePanelToActiveTab(): Promise<void> {
   if (!globalThis.chrome?.tabs?.query) {
     return;

@@ -40,6 +40,7 @@ export class ToolApprovalFlowRegistry {
     this.flows.set(TOOL_NAMES.STORAGE_SET_WITH_APPROVAL, new StorageApprovalFlow(deps));
     this.flows.set(TOOL_NAMES.STORAGE_DELETE_WITH_APPROVAL, new StorageApprovalFlow(deps));
     this.flows.set(TOOL_NAMES.STORAGE_CLEAR_WITH_APPROVAL, new StorageApprovalFlow(deps));
+    this.flows.set(TOOL_NAMES.CDP_ATTACH, new ExecutePendingActionApprovalFlow(deps));
     this.flows.set(TOOL_NAMES.ACTION_CLICK, new ExecutePendingActionApprovalFlow(deps));
     this.flows.set(TOOL_NAMES.POINTER_CLICK, new ExecutePendingActionApprovalFlow(deps));
   }

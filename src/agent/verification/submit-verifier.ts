@@ -58,5 +58,5 @@ function hasSuccessEvidence(value: string): boolean {
 }
 
 function hasErrorEvidence(value: string): boolean {
-  return /(?:error|failed|invalid|required|try again|失败|错误|无效|必填|请重试)/iu.test(value);
+  return /(?:not\s+successful|unsuccessful|not\s+submitted|not\s+saved|error|failed|invalid|required|try again|失败|未成功|未提交|错误|无效|必填|请重试)/iu.test(value);
 }

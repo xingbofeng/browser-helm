@@ -721,7 +721,7 @@ describe('agent side panel components', () => {
     expect(container.textContent).toContain('API Key 存储');
     expect(container.textContent).toContain('当前浏览器会话');
     expect(container.textContent).toContain('受信任本地存储');
-    expect(container.textContent).toContain('生产构建默认只使用会话存储保存密钥');
+    expect(container.textContent).toContain('扩展刷新后仍可使用');
 
     await act(async () => {
       button('保存配置', container).click();

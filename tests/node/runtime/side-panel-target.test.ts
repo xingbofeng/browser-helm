@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   bindSidePanelToTab,
   bindSidePanelToRun,
+  openSidePanelForUserGesture,
   bindSidePanelToActiveTab,
   floatingPanelPathForTab,
   sidePanelPathForRun,
@@ -138,6 +139,30 @@ describe('bindSidePanelToRun', () => {
       path: 'sidepanel.html?target=active&tabId=42&runId=run_1',
       enabled: true
     });
+  });
+});
+
+describe('openSidePanelForUserGesture', () => {
+  it('does not wait for setOptions before calling sidePanel.open', async () => {
+    let resolveSetOptions: (() => void) | undefined;
+    const setOptions = vi.fn(() => new Promise<void>((resolve) => {
+      resolveSetOptions = resolve;
+    }));
+    const open = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('chrome', {
+      sidePanel: { setOptions, open }
+    });
+
+    const opened = openSidePanelForUserGesture(42);
+
+    expect(setOptions).toHaveBeenCalledWith({
+      tabId: 42,
+      path: 'sidepanel.html?target=active&tabId=42',
+      enabled: true
+    });
+    expect(open).toHaveBeenCalledWith({ tabId: 42 });
+    resolveSetOptions?.();
+    await expect(opened).resolves.toBeUndefined();
   });
 });
 

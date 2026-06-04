@@ -19,13 +19,7 @@ import {
 const PROVIDER_SETTINGS_KEY = 'providerSettings';
 const PROVIDER_API_KEY_SESSION_KEY = 'providerApiKey';
 
-type ChromeSettingsStoreOptions = {
-  allowLocalApiKeyPersistence?: boolean | undefined;
-};
-
 export class ChromeSettingsStore implements SettingsStore {
-  constructor(private readonly options: ChromeSettingsStoreOptions = {}) {}
-
   async getProviderSettings(): Promise<ProviderSettings | undefined> {
     if (!globalThis.chrome?.storage?.local) {
       return undefined;
@@ -35,7 +29,7 @@ export class ChromeSettingsStore implements SettingsStore {
     if (!settings) {
       return undefined;
     }
-    if (this.localApiKeyPersistenceAllowed() && settings.apiKeyPersistence === 'local' && settings.apiKey) {
+    if (settings.apiKeyPersistence === 'local' && settings.apiKey) {
       return settings;
     }
     const sessionApiKey = await this.getSessionProviderApiKey();
@@ -50,9 +44,7 @@ export class ChromeSettingsStore implements SettingsStore {
     if (!globalThis.chrome?.storage?.local) {
       return;
     }
-    const persistence = settings.apiKeyPersistence === 'local' && this.localApiKeyPersistenceAllowed()
-      ? 'local'
-      : 'session';
+    const persistence = settings.apiKeyPersistence === 'local' ? 'local' : 'session';
     if (persistence === 'session') {
       await this.setSessionProviderApiKey(settings.apiKey);
     } else {
@@ -134,9 +126,6 @@ export class ChromeSettingsStore implements SettingsStore {
     await chrome.storage.session.remove(PROVIDER_API_KEY_SESSION_KEY);
   }
 
-  private localApiKeyPersistenceAllowed(): boolean {
-    return this.options.allowLocalApiKeyPersistence === true;
-  }
 }
 
 function withoutApiKey(settings: ProviderSettings): Omit<ProviderSettings, 'apiKey'> {

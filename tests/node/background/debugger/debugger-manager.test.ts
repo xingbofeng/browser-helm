@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DebuggerManager } from '../../../../src/background/debugger/debugger-manager';
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -163,5 +164,67 @@ describe('DebuggerManager', () => {
     expect(manager.sessionState(44)?.lastEventAt).toBeTypeOf('number');
     expect(manager.networkEvents(44)).toEqual([]);
     expect(manager.isAttached(44)).toBe(false);
+  });
+
+  it('marks a debugger session detached when the tab closes', async () => {
+    let tabRemovedListener: ((tabId: number) => void) | undefined;
+    vi.stubGlobal('chrome', {
+      debugger: {
+        attach: vi.fn(async () => undefined),
+        detach: vi.fn(async () => undefined),
+        sendCommand: vi.fn(async () => ({})),
+        onEvent: { addListener: vi.fn() },
+        onDetach: { addListener: vi.fn() }
+      },
+      tabs: {
+        onRemoved: {
+          addListener: vi.fn((listener: typeof tabRemovedListener) => {
+            tabRemovedListener = listener;
+          })
+        }
+      }
+    });
+    const manager = new DebuggerManager();
+
+    await manager.attach(55);
+    tabRemovedListener?.(55);
+
+    expect(manager.isAttached(55)).toBe(false);
+    expect(manager.sessionState(55)).toMatchObject({
+      tabId: 55,
+      attached: false,
+      detachReason: 'tab_closed'
+    });
+  });
+
+  it('automatically detaches debugger sessions after the configured TTL', async () => {
+    vi.useFakeTimers();
+    const detach = vi.fn(async () => undefined);
+    vi.stubGlobal('chrome', {
+      debugger: {
+        attach: vi.fn(async () => undefined),
+        detach,
+        sendCommand: vi.fn(async () => ({})),
+        onEvent: { addListener: vi.fn() },
+        onDetach: { addListener: vi.fn() }
+      },
+      tabs: {
+        onRemoved: { addListener: vi.fn() }
+      }
+    });
+    const manager = new DebuggerManager({ sessionTtlMs: 1_000 });
+
+    await manager.attach(66);
+    expect(manager.isAttached(66)).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1_001);
+
+    expect(detach).toHaveBeenCalledWith({ tabId: 66 });
+    expect(manager.isAttached(66)).toBe(false);
+    expect(manager.sessionState(66)).toMatchObject({
+      tabId: 66,
+      attached: false,
+      detachReason: 'ttl_expired'
+    });
   });
 });
